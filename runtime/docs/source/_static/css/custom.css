@@ -1,0 +1,20 @@
+table.compact-table td {
+  white-space: normal !important;
+}
+
+td ul {
+  margin: 0 !important;
+}
+
+td ul li {
+  margin: 4px 0;
+}
+
+td ul li p {
+  font-size: 14.4px !important;
+  line-height: 16px !important;
+}
+
+dd > p, dd > ul, dd > ol {
+  margin-bottom: 0.5rem !important;
+}
