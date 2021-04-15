@@ -35,6 +35,8 @@ typedef uint16_t device_id_t;
 #define NO_PARAMETERS     ((param_map_t) 0)
 #define NO_SUBSCRIPTION   ((interval_t) 0)
 
+#define PARAMETER(x) (Parameter { &(x), sizeof(x) })
+
 /* Must fit into one byte. */
 enum MessageType {
     PING        = 0x10,
@@ -52,7 +54,7 @@ enum MessageType {
 /* Must fit into one byte. */
 enum ErrorCode {
     BACKOFF              = 0xFA,  /* Receiver is overwhelmed. Sender should transmit less data. */
-    ILLEGAL_TYPE         = 0xFB,  /* Receiver received a message type it does not handle. */
+    INVALID_TYPE         = 0xFB,  /* Receiver received a message type it does not handle. */
     BUFFER_OVERFLOW      = 0xFC,  /* Message was too large for receiver to COBS encode/decode. */
     UNEXPECTED_DELIMETER = 0xFD,  /* Message was incomplete or unable to be COBS-decoded by receiver. */
     BAD_CHECKSUM         = 0xFE,  /* Checksum computed by receiver did not match sender's claim. */
@@ -67,7 +69,6 @@ public:
     device_id_t device_id;
     uint8_t year;
     uint64_t random;
-    DeviceUID(device_id_t, uint8_t, uint64_t);
 };
 
 /* Helper structure for referencing to variable-size parameters. */

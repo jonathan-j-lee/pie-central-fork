@@ -1,11 +1,18 @@
 #ifndef SMART_DEVICE_H_
 #define SMART_DEVICE_H_
 
-#include <Arduino.h>
 #include "cobs.h"
-#include "message.h"
+#include "message.hpp"
 
 #define ms_to_us(x) (((uint64_t) x)*1000)
+
+#define ADD_ARDUINO_SETUP_AND_LOOP(x)   \
+    void setup(void) {                  \
+        (x).setup();                    \
+    }                                   \
+    void loop(void) {                   \
+        (x).loop();                     \
+    }                                   \
 
 /**
  *  A wrapper around Arduino's `Serial` to implement COBS encoding and error
@@ -64,11 +71,34 @@ public:
     static unsigned long select(size_t, Task **);
 };
 
+/* Consumers of the `SmartDevice` library should extend the `SmartDevice`
+   class. Each function should execute fairly quickly, since reading/writing a
+   parameter most likely involves reading/writing a voltage or memory. Slow
+   reads/writes may block the Smart Device's main loop and make the device seem
+   unresponsive. */
+class SmartDevice {
+public:
+    /* Set up hardware used by this Smart Device. */
+    virtual void setup(void);
+    /* Get the addresses and sizes of the parameters. Return the number of
+       parameters. */
+    virtual size_t get_parameters(Parameter *) = 0;
+    /* Read the device parameters specified by the given map. Return the actual
+       parameters read. */
+    virtual param_map_t read(param_map_t) = 0;
+    /* Write the device parameters specified by the given map. Return the actual
+       parameters written. */
+    virtual param_map_t write(param_map_t);
+    /* Disable all parameters. */
+    virtual void disable(void);
+};
+
 /**
  *  A Smart Device is a sensor or actuator that has readable and writeable
  *  parameters.
  */
-class SmartDevice {
+class SmartDeviceLoop {
+    SmartDevice *sd;
     SerialHandler serial;
     DeviceUID uid;
     Message msg;
@@ -84,6 +114,9 @@ class SmartDevice {
        will instead just delay, since it's not worth waiting for such a short
        amount of time. */
     static const interval_t MIN_TIMEOUT = 10;
+    /* Minimum duration (in ms) spent serving packets. This prevents a slow
+       read from completely blocking the main loop. */
+    static const interval_t MIN_SERVE_INTERVAL = 40;
     /* Bounds on the subscription interval (in ms). A special subscription
        interval of zero will disable subscriptions entirely. */
     static const interval_t MIN_SUB_INTERVAL = 40;
@@ -114,26 +147,11 @@ class SmartDevice {
 public:
     /* Required constructor. Parameters are a one-byte device ID, the number of
        parameters, and the array of parameters. */
-    SmartDevice(device_id_t, size_t, Parameter *);
+    SmartDeviceLoop(device_id_t, SmartDevice *);
     /* A drop-in replacement for Arduino's required `setup` function. */
     void setup(void);
     /* A drop-in replacement for Arduino's required `loop` function. */
     void loop(void);
 };
-
-/* Consumers of the `SmartDevice` library should implement the `device_*`
-   family of functions. Each function should execute fairly quickly, since
-   reading/writing a parameter most likely involves reading/writing a voltage
-   or memory. Slow reads/writes may block the Smart Device's main loop and make
-   the device seem unresponsive. */
-
-/* Read the device parameters specified by the given map. Return the actual
-   parameters read. */
-extern param_map_t device_read(param_map_t);
-/* Write the device parameters specified by the given map. Return the actual
-   parameters written. */
-extern param_map_t device_write(param_map_t);
-/* Disable all parameters. */
-extern void device_disable(void);
 
 #endif
