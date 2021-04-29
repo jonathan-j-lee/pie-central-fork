@@ -5,6 +5,17 @@
 #include "message.hpp"
 #include "SmartDevice.hpp"
 
+using namespace message;
+
+const interval_t Task::MAX_INTERVAL = 1000;
+const uint64_t SmartDeviceLoop::BAUD_RATE = 115200;
+const interval_t SmartDeviceLoop::MIN_TIMEOUT = 10;
+const interval_t SmartDeviceLoop::MIN_SERVE_INTERVAL = 40;
+const interval_t SmartDeviceLoop::MIN_SUB_INTERVAL = 40;
+const interval_t SmartDeviceLoop::MAX_SUB_INTERVAL = 250;
+const interval_t SmartDeviceLoop::DISABLE_INTERVAL = 1000;
+const interval_t SmartDeviceLoop::HB_INTERVAL = 1000;
+
 /* If any operation fails, all subsequent operations will not run because of
    the short-circuit. */
 #define check_ok(ok, status) ((ok) = (ok) && (status))
@@ -13,54 +24,36 @@
 SmartDevice *sd_isr = nullptr;
 volatile bool active = true;
 
-void SerialHandler::setup(void) {
-    Serial.begin(SerialHandler::BAUD_RATE);
-    while (!Serial);
-}
-
-bool SerialHandler::recv(Message *msg) {
-    size_t bytes_read = Serial.readBytesUntil(
-        MESSAGE_DELIMETER, this->serial_buf, sizeof(this->serial_buf));
-    if (bytes_read == 0) {
+bool SmartDeviceLoop::recv(unsigned long timeout) {
+    if (timeout < SmartDeviceLoop::MIN_TIMEOUT) {
+        delay(timeout);
         return false;
     }
-    this->decode_result = msg->from_cobs(this->serial_buf, bytes_read);
-    ErrorCode error;
-    switch (this->decode_result.status) {
-    case COBS_DECODE_OK:
-        if (this->decode_result.out_len < MESSAGE_MIN_SIZE) {
-            error = UNEXPECTED_DELIMETER;
-        } else if (!msg->verify_checksum()) {
-            error = BAD_CHECKSUM;
-        } else {
+    Serial.setTimeout(timeout);
+    size_t bytes_read = Serial.readBytesUntil(
+        Message::DELIMETER, this->serial_buf, sizeof(this->serial_buf));
+    if (bytes_read > 0) {
+        ErrorCode error = this->msg.decode(this->serial_buf, bytes_read);
+        if (error == ErrorCode::OK) {
             active = true;
             return true;
         }
-        break;
-    case COBS_DECODE_OUT_BUFFER_OVERFLOW:
-        error = BUFFER_OVERFLOW;
-        break;
-    case COBS_DECODE_INPUT_TOO_SHORT:
-        error = UNEXPECTED_DELIMETER;
-        break;
-    default:
-        error = GENERIC_ERROR;
+        if (this->msg.make_error(error)) {
+            this->send();
+        }
     }
-    this->send(msg->make_error(error) ? msg : nullptr);
     return false;
 }
 
-bool SerialHandler::send(Message *msg) {
-    if (msg) {
-        this->encode_result = msg->to_cobs(this->serial_buf, sizeof(serial_buf));
-        if (this->encode_result.status == COBS_ENCODE_OK) {
-            Serial.write(this->serial_buf, this->encode_result.out_len);
-            Serial.write(MESSAGE_DELIMETER);
-            return true;
-        }
+bool SmartDeviceLoop::send(void) {
+    size_t out_len;
+    if (this->msg.encode(this->serial_buf, sizeof(this->serial_buf), &out_len) == ErrorCode::OK) {
+        Serial.write(this->serial_buf, out_len);
+        Serial.write(Message::DELIMETER);
+        return true;
     }
     Serial.write(GENERIC_ERROR_MESSAGE);
-    Serial.write(MESSAGE_DELIMETER);
+    Serial.write(Message::DELIMETER);
     return false;
 }
 
@@ -103,21 +96,21 @@ unsigned long Task::select(size_t ntasks, Task **tasks) {
 }
 
 SmartDeviceLoop::SmartDeviceLoop(device_id_t device_id, SmartDevice *sd):
-        msg(PING), update(NO_SUBSCRIPTION), hb(SmartDeviceLoop::HB_INTERVAL) {
+        update(Message::NO_SUBSCRIPTION), hb(SmartDeviceLoop::HB_INTERVAL) {
     this->uid = { device_id, YEAR, RANDOM };
     this->sd = sd;
     memset(this->params, 0, sizeof(this->params));
     this->sd->get_parameters(this->params);
-    this->subscription = NO_PARAMETERS;
+    this->subscription = Message::NO_PARAMETERS;
 }
 
 bool SmartDeviceLoop::is_subscribed(void) {
-    return this->update.get_interval() != NO_SUBSCRIPTION;
+    return this->update.get_interval() != Message::NO_SUBSCRIPTION;
 }
 
 void SmartDeviceLoop::set_subscription(param_map_t subscription, interval_t interval) {
     this->subscription = this->sd->read(subscription);
-    if (interval != NO_SUBSCRIPTION) {
+    if (interval != Message::NO_SUBSCRIPTION) {
         interval = constrain(interval, SmartDeviceLoop::MIN_SUB_INTERVAL, SmartDeviceLoop::MAX_SUB_INTERVAL);
     }
     this->update.set_interval(interval);
@@ -126,28 +119,23 @@ void SmartDeviceLoop::set_subscription(param_map_t subscription, interval_t inte
 bool SmartDeviceLoop::send_data(param_map_t present) {
     present = this->sd->read(present);
     if (this->msg.make_dev_data(present, this->params)) {
-        return this->serial.send(&this->msg);
+        return this->send();
     }
     /* The device parameters were too large to fit into one message. Split them
        across multiple messages. */
     bool success = true;
     for (size_t i = 0; i < MAX_PARAMETERS; i++) {
         if (get_bit(present, i)) {
-            param_map_t params = NO_PARAMETERS;
+            param_map_t params = Message::NO_PARAMETERS;
             set_bit(params, i);
-            check_ok(success, this->msg.make_dev_data(present, this->params)
-                && this->serial.send(&this->msg));
+            check_ok(success, this->msg.make_dev_data(present, this->params) && this->send());
         }
     }
     return success;
 }
 
 void SmartDeviceLoop::serve_once(unsigned long timeout) {
-    if (timeout < SmartDeviceLoop::MIN_TIMEOUT) {
-        return delay(timeout);
-    }
-    Serial.setTimeout(timeout);
-    if (!this->serial.recv(&this->msg)) {
+    if (!this->recv(timeout)) {
         return;
     }
 
@@ -157,16 +145,16 @@ void SmartDeviceLoop::serve_once(unsigned long timeout) {
     bool msg_ok = true;
 
     switch (this->msg.get_type()) {
-    case SUB_REQ:
+    case MessageType::SUB_REQ:
         check_ok(msg_ok, this->msg.read_sub_req(&present, &interval));
         if (msg_ok) {
             this->set_subscription(present, interval);
         }
-    case PING:
+    case MessageType::PING:
         check_ok(msg_ok, this->msg.make_sub_res(
             this->subscription, this->update.get_interval(), &this->uid));
         break;
-    case DEV_WRITE:
+    case MessageType::DEV_WRITE:
         check_ok(msg_ok, this->msg.read_dev_write(&present, this->params));
         check_ok(msg_ok, this->send_data(this->sd->write(present)));
         if (msg_ok) {
@@ -174,7 +162,7 @@ void SmartDeviceLoop::serve_once(unsigned long timeout) {
         } else {
             break;
         }
-    case DEV_READ:
+    case MessageType::DEV_READ:
         check_ok(msg_ok, this->msg.read_dev_read(&present));
         check_ok(msg_ok, this->send_data(present));
         if (msg_ok) {
@@ -182,19 +170,19 @@ void SmartDeviceLoop::serve_once(unsigned long timeout) {
         } else {
             break;
         }
-    case DEV_DISABLE:
+    case MessageType::DEV_DISABLE:
         return this->sd->disable();
-    case HB_REQ:
+    case MessageType::HB_REQ:
         check_ok(msg_ok, this->msg.read_hb_req(&hb_id));
         check_ok(msg_ok, this->msg.make_hb_res(hb_id));
         break;
-    case HB_RES:
+    case MessageType::HB_RES:
         check_ok(msg_ok, this->msg.read_hb_res(&hb_id));
         /* TODO: At the moment, this Smart Device implementation does not send
            heartbeat requests to the SBC, so this case remains unused. */
         return;
     default:
-        check_ok(msg_ok, this->msg.make_error(INVALID_TYPE));
+        check_ok(msg_ok, this->msg.make_error(ErrorCode::INVALID_TYPE));
     }
 
     /* Send a single reply packet, which is possibly a generic error. `DEV_READ`
@@ -202,7 +190,9 @@ void SmartDeviceLoop::serve_once(unsigned long timeout) {
 
        `DEV_DISABLE` does not send a reply at all, so the `DEV_DISABLE` case
        returns immediately like `DEV_READ` and `DEV_WRITE` do normally. */
-    this->serial.send(msg_ok ? &this->msg : nullptr);
+    if (msg_ok) {
+        this->send();
+    }
 }
 
 void SmartDeviceLoop::maybe_disable(void) {
@@ -213,7 +203,8 @@ void SmartDeviceLoop::maybe_disable(void) {
 }
 
 void SmartDeviceLoop::setup(void) {
-    this->serial.setup();
+    Serial.begin(SmartDeviceLoop::BAUD_RATE);
+    while (!Serial);
     this->sd->setup();
     this->sd->disable();
     sd_isr = this->sd;
@@ -227,12 +218,12 @@ void SmartDeviceLoop::loop(void) {
     unsigned long stop = Task::select(this->is_subscribed() ? 2 : 1, tasks);
     if (this->hb.clear_ready()) {
         heartbeat_id_t hb_id = 0xff;  // FIXME
-        this->serial.send(this->msg.make_hb_req(hb_id) ? &this->msg : nullptr);
+        if (this->msg.make_hb_req(hb_id)) {
+            this->send();
+        }
     }
     if (this->update.clear_ready()) {
-        if (!this->send_data(this->subscription)) {
-            this->serial.send(nullptr);
-        }
+        this->send_data(this->subscription);
     }
     stop = max(stop, millis() + SmartDeviceLoop::MIN_SERVE_INTERVAL);
     unsigned long now;
@@ -246,7 +237,7 @@ void SmartDevice::setup(void) {
 }
 
 param_map_t SmartDevice::write(param_map_t) {
-    return NO_PARAMETERS;  /* No writeable parameters. */
+    return Message::NO_PARAMETERS;  /* No writeable parameters. */
 }
 
 void SmartDevice::disable(void) {

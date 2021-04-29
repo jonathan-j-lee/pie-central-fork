@@ -2,7 +2,8 @@
 #define HUB_H_
 
 #include <stdint.h>
-#include <SmartDevice.hpp>
+#include "message.hpp"
+#include "SmartDevice.hpp"
 
 typedef uint8_t pin_t;
 
@@ -18,7 +19,7 @@ public:
     void setup(void) {
         pinMode(this->pin, INPUT);
     }
-    void get_parameter(Parameter *param) {
+    void get_parameter(message::Parameter *param) {
         param->base = &this->value;
         param->size = sizeof(this->value);
     }
@@ -52,14 +53,14 @@ public:
             this->spokes[i].setup();
         }
     }
-    size_t get_parameters(Parameter *params) override {
+    size_t get_parameters(message::Parameter *params) override {
         for (size_t i = 0; i < N; i++) {
             this->spokes[i].get_parameter(&params[i]);
         }
         return N;
     }
-    param_map_t read(param_map_t params) override {
-        param_map_t params_read = NO_PARAMETERS;
+    message::param_map_t read(message::param_map_t params) override {
+        message::param_map_t params_read = message::Message::NO_PARAMETERS;
         for (size_t i = 0; i < min(N, MAX_PARAMETERS); i++) {
             if (get_bit(params, i) && this->spokes[i].read()) {
                 set_bit(params_read, i);
@@ -67,8 +68,8 @@ public:
         }
         return params_read;
     }
-    param_map_t write(param_map_t params) override {
-        param_map_t params_written = NO_PARAMETERS;
+    message::param_map_t write(message::param_map_t params) override {
+        message::param_map_t params_written = message::Message::NO_PARAMETERS;
         for (size_t i = 0; i < min(N, MAX_PARAMETERS); i++) {
             if (get_bit(params, i) && this->spokes[i].write()) {
                 set_bit(params_written, i);

@@ -1,10 +1,11 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
-#include "cobs.h"
 #include "message.hpp"
 
+using namespace message;
+
 TEST_CASE("messages are constructed", "[message]") {
-    Message msg(PING);
+    Message msg;
     float param0 = 1.2345;
     int64_t param1 = -0xffff;
     bool param2 = true;
@@ -12,12 +13,12 @@ TEST_CASE("messages are constructed", "[message]") {
 
     SECTION("make PING") {
         REQUIRE(msg.make_ping());
-        REQUIRE(msg.get_type() == PING);
+        REQUIRE(msg.get_type() == MessageType::PING);
         REQUIRE(msg.get_payload_length() == 0);
     }
     SECTION("make SUB_REQ") {
         REQUIRE(msg.make_sub_req(0xffff, 0xeeee));
-        REQUIRE(msg.get_type() == SUB_REQ);
+        REQUIRE(msg.get_type() == MessageType::SUB_REQ);
         REQUIRE(msg.get_payload_length() == 2 + 2);
         param_map_t params = 0;
         interval_t interval = 0;
@@ -28,7 +29,7 @@ TEST_CASE("messages are constructed", "[message]") {
     SECTION("make SUB_RES") {
         DeviceUID uid = { 0xaaaa, 0xbb, 0x123456789abcdef0L };
         REQUIRE(msg.make_sub_res(0xffff, 0xeeee, &uid));
-        REQUIRE(msg.get_type() == SUB_RES);
+        REQUIRE(msg.get_type() == MessageType::SUB_RES);
         REQUIRE(msg.get_payload_length() == 2 + 2 + 2 + 1 + 8);
         param_map_t params = 0;
         interval_t interval = 0;
@@ -42,7 +43,7 @@ TEST_CASE("messages are constructed", "[message]") {
     }
     SECTION("make DEV_READ") {
         REQUIRE(msg.make_dev_read(0xffff));
-        REQUIRE(msg.get_type() == DEV_READ);
+        REQUIRE(msg.get_type() == MessageType::DEV_READ);
         REQUIRE(msg.get_payload_length() == 2);
         param_map_t params = 0;
         REQUIRE(msg.read_dev_read(&params));
@@ -50,7 +51,7 @@ TEST_CASE("messages are constructed", "[message]") {
     }
     SECTION("make DEV_WRITE") {
         REQUIRE(msg.make_dev_write(0b101, param_addrs));
-        REQUIRE(msg.get_type() == DEV_WRITE);
+        REQUIRE(msg.get_type() == MessageType::DEV_WRITE);
         REQUIRE(msg.get_payload_length() == 2 + 4 + 1);
         param_map_t params = 0;
         param0 = 0;
@@ -62,24 +63,24 @@ TEST_CASE("messages are constructed", "[message]") {
     }
     SECTION("make DEV_DATA") {
         REQUIRE(msg.make_dev_data(0b11, param_addrs));
-        REQUIRE(msg.get_type() == DEV_DATA);
+        REQUIRE(msg.get_type() == MessageType::DEV_DATA);
         REQUIRE(msg.get_payload_length() == 2 + 4 + 8);
         param_map_t params = 0;
         param0 = 0;
         param1 = 0;
-        REQUIRE(msg.read_dev_write(&params, param_addrs));
+        REQUIRE(msg.read_dev_data(&params, param_addrs));
         REQUIRE(params == 0b11);
         REQUIRE(param0 == Approx(1.2345));
         REQUIRE(param1 == -0xffff);
     }
     SECTION("make DEV_DISABLE") {
         REQUIRE(msg.make_dev_disable());
-        REQUIRE(msg.get_type() == DEV_DISABLE);
+        REQUIRE(msg.get_type() == MessageType::DEV_DISABLE);
         REQUIRE(msg.get_payload_length() == 0);
     };
     SECTION("make HB_REQ") {
         REQUIRE(msg.make_hb_req(0xdd));
-        REQUIRE(msg.get_type() == HB_REQ);
+        REQUIRE(msg.get_type() == MessageType::HB_REQ);
         REQUIRE(msg.get_payload_length() == 1);
         heartbeat_id_t hb_id = 0;
         REQUIRE(msg.read_hb_req(&hb_id));
@@ -87,19 +88,19 @@ TEST_CASE("messages are constructed", "[message]") {
     }
     SECTION("make HB_RES") {
         REQUIRE(msg.make_hb_res(0xdd));
-        REQUIRE(msg.get_type() == HB_RES);
+        REQUIRE(msg.get_type() == MessageType::HB_RES);
         REQUIRE(msg.get_payload_length() == 1);
         heartbeat_id_t hb_id = 0;
         REQUIRE(msg.read_hb_res(&hb_id));
         REQUIRE(hb_id == 0xdd);
     }
     SECTION("make ERROR") {
-        REQUIRE(msg.make_error(BAD_CHECKSUM));
-        REQUIRE(msg.get_type() == ERROR);
+        REQUIRE(msg.make_error(ErrorCode::BAD_CHECKSUM));
+        REQUIRE(msg.get_type() == MessageType::ERROR);
         REQUIRE(msg.get_payload_length() == 1);
-        ErrorCode error = GENERIC_ERROR;
+        ErrorCode error = ErrorCode::GENERIC_ERROR;
         REQUIRE(msg.read_error(&error));
-        REQUIRE(error == BAD_CHECKSUM);
+        REQUIRE(error == ErrorCode::BAD_CHECKSUM);
     }
     REQUIRE(msg.verify_checksum());
 };
@@ -108,7 +109,7 @@ TEST_CASE("messages fail to be constructed", "[message]") {
     uint64_t param1;
     byte param2[255 - 2 - sizeof(param1) + 1];
     Parameter params[] = { PARAMETER(param1), { param2, sizeof(param2) } };
-    Message msg(PING);
+    Message msg;
 
     SECTION("too much data appended to DEV_WRITE") {
         REQUIRE_FALSE(msg.make_dev_write(0b11, params));
@@ -123,7 +124,7 @@ TEST_CASE("messages fail to be constructed", "[message]") {
 };
 
 TEST_CASE("messages fail to be read", "[message]") {
-    Message msg(PING);
+    Message msg;
     param_map_t present;
     interval_t interval;
     DeviceUID uid = { 0, 0, 0 };
@@ -158,33 +159,30 @@ struct MessageEncoding {
 
 TEST_CASE("messages are COBS-encoded", "[message]") {
     auto encoding = GENERATE(
-        MessageEncoding { "\x02\x10\x02\x10", PING, 0 },
-        MessageEncoding { "\x06\x11\x04\xff\xff\x80\x02\x95", SUB_REQ, 2 + 2 },
+        MessageEncoding { "\x02\x10\x02\x10", MessageType::PING, 0 },
+        MessageEncoding { "\x06\x11\x04\xff\xff\x80\x02\x95", MessageType::SUB_REQ, 2 + 2 },
         MessageEncoding { "\x06\x12\x0f\xff\xff\x80\x01\x01\x01\x01\x01"
-                          "\x01\x01\x01\x01\x01\x01\x02\x9d", SUB_RES, 2 + 2 + 2 + 1 + 8 },
-        MessageEncoding { "\x04\x13\x02\x07\x02\x16", DEV_READ, 2 },
-        MessageEncoding { "\x04\x14\x03\x01\x03\x01\x17", DEV_WRITE, 2 + 1 },
-        MessageEncoding { "\x04\x15\x03\x01\x01\x02\x17", DEV_DATA, 2 + 1 },
-        MessageEncoding { "\x02\x16\x02\x16", DEV_DISABLE, 0 },
-        MessageEncoding { "\x05\x17\x01\xff\xe9", HB_REQ, 1 },
-        MessageEncoding { "\x05\x18\x01\xff\xe6", HB_RES, 1 },
-        MessageEncoding { "\x05\xff\x01\xfd\x03", ERROR, 1 }
+                          "\x01\x01\x01\x01\x01\x01\x02\x9d", MessageType::SUB_RES, 2 + 2 + 2 + 1 + 8 },
+        MessageEncoding { "\x04\x13\x02\x07\x02\x16", MessageType::DEV_READ, 2 },
+        MessageEncoding { "\x04\x14\x03\x01\x03\x01\x17", MessageType::DEV_WRITE, 2 + 1 },
+        MessageEncoding { "\x04\x15\x03\x01\x01\x02\x17", MessageType::DEV_DATA, 2 + 1 },
+        MessageEncoding { "\x02\x16\x02\x16", MessageType::DEV_DISABLE, 0 },
+        MessageEncoding { "\x05\x17\x01\xff\xe9", MessageType::HB_REQ, 1 },
+        MessageEncoding { "\x05\x18\x01\xff\xe6", MessageType::HB_RES, 1 },
+        MessageEncoding { "\x05\xff\x01\xfd\x03", MessageType::ERROR, 1 }
     );
 
-    Message msg(PING);
+    Message msg;
     byte buf[ENCODING_MAX_SIZE];
+    size_t out_len;
     size_t encoding_length = strlen(encoding.buf);
 
-    cobs_decode_result decode_result = msg.from_cobs((byte *) encoding.buf, encoding_length);
-    REQUIRE(decode_result.status == COBS_DECODE_OK);
-    REQUIRE(decode_result.out_len == 1 + 1 + encoding.payload_length + 1);
-
+    REQUIRE(msg.decode((byte *) encoding.buf, encoding_length) == ErrorCode::OK);
     REQUIRE(msg.get_type() == encoding.type);
     REQUIRE(msg.get_payload_length() == encoding.payload_length);
     REQUIRE(msg.verify_checksum());
 
-    cobs_encode_result encode_result = msg.to_cobs(buf, sizeof(buf));
-    REQUIRE(encode_result.status == COBS_ENCODE_OK);
-    REQUIRE(encode_result.out_len == encoding_length);
+    REQUIRE(msg.encode(buf, sizeof(buf), &out_len) == ErrorCode::OK);
+    REQUIRE(out_len == encoding_length);
     REQUIRE(strncmp(encoding.buf, (const char *) buf, encoding_length) == 0);
 };

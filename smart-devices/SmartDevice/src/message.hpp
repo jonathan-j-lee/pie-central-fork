@@ -4,12 +4,6 @@
 #include <stdint.h>
 #include "cobs.h"
 
-typedef uint8_t byte;
-typedef uint16_t param_map_t;
-typedef uint16_t interval_t;
-typedef uint8_t heartbeat_id_t;
-typedef uint16_t device_id_t;
-
 /* Get the maximum value of an unsigned integral type of the given width in bytes. */
 #define max_value_unsigned(bytes) ((1L << 8*(bytes)) - 1)
 
@@ -18,8 +12,7 @@ typedef uint16_t device_id_t;
 #define set_bit(x, i) ((x) = (x) | (1 << (i)))
 #define clear_bit(x, i) ((x) = (x) ^ ((x) & (1 << (i))))
 
-#define MESSAGE_DELIMETER '\0'
-#define MAX_PARAMETERS    (8*sizeof(param_map_t))
+#define MAX_PARAMETERS    (8*sizeof(message::param_map_t))
 
 /* Sizes (in bytes) of different message fields. */
 #define MESSAGE_TYPE_SIZE sizeof(uint8_t)
@@ -32,13 +25,17 @@ typedef uint16_t device_id_t;
 /* COBS-encoding an n-byte message adds an overhead of ceil(n/254) bytes, at most. */
 #define ENCODING_MAX_SIZE COBS_ENCODE_DST_BUF_LEN_MAX(MESSAGE_MAX_SIZE)
 
-#define NO_PARAMETERS     ((param_map_t) 0)
-#define NO_SUBSCRIPTION   ((interval_t) 0)
-
 #define PARAMETER(x) (Parameter { &(x), sizeof(x) })
 
-/* Must fit into one byte. */
-enum MessageType {
+namespace message {
+
+typedef uint8_t byte;
+typedef uint16_t param_map_t;
+typedef uint16_t interval_t;
+typedef uint8_t heartbeat_id_t;
+typedef uint16_t device_id_t;
+
+enum class MessageType: uint8_t {
     PING        = 0x10,
     SUB_REQ     = 0x11,
     SUB_RES     = 0x12,
@@ -51,8 +48,8 @@ enum MessageType {
     ERROR       = 0xFF,
 };
 
-/* Must fit into one byte. */
-enum ErrorCode {
+enum class ErrorCode: uint8_t {
+    OK                   = 0x00,  /* No error. */
     BACKOFF              = 0xFA,  /* Receiver is overwhelmed. Sender should transmit less data. */
     INVALID_TYPE         = 0xFB,  /* Receiver received a message type it does not handle. */
     BUFFER_OVERFLOW      = 0xFC,  /* Message was too large for receiver to COBS encode/decode. */
@@ -116,10 +113,16 @@ class Message {
     size_t read(size_t, void *, size_t);
 
     bool append_params(param_map_t, Parameter *);
+    bool read_params(param_map_t *, Parameter *);
     bool finish_message(MessageType);
+    Message(MessageType);
 
 public:
-    Message(MessageType);
+    static const param_map_t NO_PARAMETERS;
+    static const interval_t NO_SUBSCRIPTION;
+    static const char DELIMETER;
+
+    Message(void);
     MessageType get_type(void);
     size_t get_payload_length(void);
     /* Return true iff the checksum field matches the computed checksum. */
@@ -127,10 +130,10 @@ public:
 
     /* Encode this message's buffer with COBS. The null byte delimeter is not
        appended to the provided buffer. */
-    cobs_encode_result to_cobs(byte *, size_t);
+    ErrorCode encode(byte *, size_t, size_t *);
     /* Decode a COBS-encoded buffer as a message. No null bytes should be
        included in the buffer. */
-    cobs_decode_result from_cobs(byte *, size_t);
+    ErrorCode decode(const byte *, size_t);
 
     /* Methods for building different types of messages. Return true iff the
        operation was successful. May fail if the caller attempts to append too
@@ -158,5 +161,7 @@ public:
     bool read_hb_res(heartbeat_id_t *);
     bool read_error(ErrorCode *);
 };
+
+}
 
 #endif

@@ -7,7 +7,7 @@ SKETCH_PATH = $(CURDIR)/sketches
 TESTS_PATH  = $(CURDIR)/tests
 
 CXX = c++
-CXXFLAGS = -Wall -Werror -pipe -I$(SD_LIB)/src -I$(TESTS_PATH)/mocks
+CXXFLAGS = -Wall -Werror -fPIC -pipe -I$(SD_LIB)/src -I$(TESTS_PATH)/mocks
 
 cobs_src = $(SD_LIB)/src/cobs.c $(SD_LIB)/src/cobs.h
 sd_lib_src := $(wildcard $(SD_LIB)/src/*.cpp)

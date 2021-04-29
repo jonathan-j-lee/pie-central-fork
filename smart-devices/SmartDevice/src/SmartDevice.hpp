@@ -1,7 +1,6 @@
 #ifndef SMART_DEVICE_H_
 #define SMART_DEVICE_H_
 
-#include "cobs.h"
 #include "message.hpp"
 
 #define ms_to_us(x) (((uint64_t) x)*1000)
@@ -13,31 +12,6 @@
     void loop(void) {                   \
         (x).loop();                     \
     }                                   \
-
-/**
- *  A wrapper around Arduino's `Serial` to implement COBS encoding and error
- *  handling for Smart Device messages.
- */
-class SerialHandler {
-    /* Buffer for storing COBS-encoded messages as received/transmitted on the
-       wire. The buffer should be large enough to never run into a overflow. */
-    byte serial_buf[ENCODING_MAX_SIZE];
-    cobs_encode_result encode_result;
-    cobs_decode_result decode_result;
-    static const uint64_t BAUD_RATE = 115200;
-
-public:
-    /* Set up the serial connection. */
-    void setup(void);
-    /* Read an incoming Smart Device message. Return true iff the handler
-       received a valid message. If decoding fails, the serial handler may
-       transmit an error message. */
-    bool recv(Message *);
-    /* Write an outgoing Smart Device message. Return true iff the handler
-       succeeded. If encoding fails, the handler will transmit a generic
-       error. */
-    bool send(Message *);
-};
 
 /**
  *  Because the Arduino is a single-threaded real-time platform, we have to use
@@ -53,16 +27,16 @@ class Task {
     /* The absolute timestamp (in ms) of when the task last ran. */
     unsigned long last;
     /* The time delta (in ms) between task executions. */
-    interval_t interval;
+    message::interval_t interval;
     /* The absolute timestamp (in ms) of when the task should next be run. */
     unsigned long next(void);
     /* The maximum interval duration (in ms). */
-    static const interval_t MAX_INTERVAL = 1000;
+    static const message::interval_t MAX_INTERVAL;
 
 public:
-    Task(interval_t);
-    interval_t get_interval(void);
-    void set_interval(interval_t);
+    Task(message::interval_t);
+    message::interval_t get_interval(void);
+    void set_interval(message::interval_t);
     /* Return whether the task is ready to execute, then clear the ready flag. */
     bool clear_ready(void);
     /* Set the ready flag of tasks ready to execute. Return the absolute
@@ -82,13 +56,13 @@ public:
     virtual void setup(void);
     /* Get the addresses and sizes of the parameters. Return the number of
        parameters. */
-    virtual size_t get_parameters(Parameter *) = 0;
+    virtual size_t get_parameters(message::Parameter *) = 0;
     /* Read the device parameters specified by the given map. Return the actual
        parameters read. */
-    virtual param_map_t read(param_map_t) = 0;
+    virtual message::param_map_t read(message::param_map_t) = 0;
     /* Write the device parameters specified by the given map. Return the actual
        parameters written. */
-    virtual param_map_t write(param_map_t);
+    virtual message::param_map_t write(message::param_map_t);
     /* Disable all parameters. */
     virtual void disable(void);
 };
@@ -99,42 +73,52 @@ public:
  */
 class SmartDeviceLoop {
     SmartDevice *sd;
-    SerialHandler serial;
-    DeviceUID uid;
-    Message msg;
-    Parameter params[MAX_PARAMETERS];
+    /* Buffer for storing COBS-encoded messages as received/transmitted on the
+       wire. The buffer should be large enough to never run into a overflow. */
+    byte serial_buf[ENCODING_MAX_SIZE];
+    message::DeviceUID uid;
+    message::Message msg;
+    message::Parameter params[MAX_PARAMETERS];
     /* A bitmap of subscribed parameters. Only valid iff the `update` task has
        a positive interval. */
-    param_map_t subscription;
+    message::param_map_t subscription;
     Task update;    /* Task for subscription updates. */
     Task hb;        /* Task for sending heartbeat requests. */
 
+    static const uint64_t BAUD_RATE;
     /* The minimum timeout (in ms) for `serve_once` to actually receive a
        packet. If the requested timeout is less than this minimum, the method
        will instead just delay, since it's not worth waiting for such a short
        amount of time. */
-    static const interval_t MIN_TIMEOUT = 10;
+    static const message::interval_t MIN_TIMEOUT;
     /* Minimum duration (in ms) spent serving packets. This prevents a slow
        read from completely blocking the main loop. */
-    static const interval_t MIN_SERVE_INTERVAL = 40;
+    static const message::interval_t MIN_SERVE_INTERVAL;
     /* Bounds on the subscription interval (in ms). A special subscription
        interval of zero will disable subscriptions entirely. */
-    static const interval_t MIN_SUB_INTERVAL = 40;
-    static const interval_t MAX_SUB_INTERVAL = 250;
+    static const message::interval_t MIN_SUB_INTERVAL;
+    static const message::interval_t MAX_SUB_INTERVAL;
     /* Disable check interval (in ms). */
-    static const interval_t DISABLE_INTERVAL = 1000;
+    static const message::interval_t DISABLE_INTERVAL;
     /* Heartbeat request interval (in ms). */
-    static const interval_t HB_INTERVAL = 1000;
+    static const message::interval_t HB_INTERVAL;
 
+    /* Read an incoming Smart Device message with the provided timeout (in ms).
+       Return true iff the loop received a valid message. If decoding fails,
+       the loop may transmit an error message. */
+    bool recv(unsigned long);
+    /* Write an outgoing Smart Device message. Return true iff the loop
+       succeeded. If encoding fails, the loop will transmit a generic error. */
+    bool send(void);
     /* True iff an active subscription exists. */
     bool is_subscribed(void);
     /* Handle a subscription request. The actual subscription may differ from
        the requested parameters if some parameters are not readable. */
-    void set_subscription(param_map_t, interval_t);
+    void set_subscription(message::param_map_t, message::interval_t);
     /* Helper method to read and transmit the requested parameters. The payload
        may overflow if too many wide parameters are requested. In that case,
        the Smart Device will break up the data across multiple packets. */
-    bool send_data(param_map_t);
+    bool send_data(message::param_map_t);
     /* Receive up to one Smart Device message and send zero or more messages in
        response. This method may block for up to as long as the timeout (in ms)
        given as the argument. */
@@ -145,9 +129,9 @@ class SmartDeviceLoop {
     static void maybe_disable(void);
 
 public:
-    /* Required constructor. Parameters are a one-byte device ID, the number of
+    /* Required constructor. message::Parameters are a one-byte device ID, the number of
        parameters, and the array of parameters. */
-    SmartDeviceLoop(device_id_t, SmartDevice *);
+    SmartDeviceLoop(message::device_id_t, SmartDevice *);
     /* A drop-in replacement for Arduino's required `setup` function. */
     void setup(void);
     /* A drop-in replacement for Arduino's required `loop` function. */

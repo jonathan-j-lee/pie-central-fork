@@ -6,6 +6,8 @@
 #define RST_PIN 9
 #define SS_PIN 10
 
+using namespace message;
+
 enum {
     TAG_DETECT = 0,
     ID = 1,
@@ -29,7 +31,7 @@ public:
         this->last_read = millis();
         this->reader.PCD_Init();
     }
-    size_t get_parameters(Parameter *params) {
+    size_t get_parameters(message::Parameter *params) {
         params[TAG_DETECT] = PARAMETER(this->tag_detect);
         params[ID] = PARAMETER(this->id);
         return 2;
@@ -39,7 +41,7 @@ public:
        the main loop and lead to unresponsiveness. */
     param_map_t read(param_map_t params) {
         bool refresh = millis() - this->last_read >= READ_CACHE_TIMEOUT;
-        param_map_t params_read = NO_PARAMETERS;
+        param_map_t params_read = Message::NO_PARAMETERS;
         if (get_bit(params, ID)) {
             set_bit(params, TAG_DETECT);
         }

@@ -7,6 +7,8 @@
 #include "SmartDevice.hpp"
 #include "test-device.hpp"
 
+using namespace message;
+
 #define MOCK_SERIAL_SEND(output, base)                                                  \
     memset((output), 0, sizeof(output));                                                \
     ALLOW_CALL(Serial, write(ANY(char)))                                                \
@@ -25,11 +27,11 @@
         .LR_RETURN(strlen((s)))                         \
 
 #define CHECK_COBS_DECODE(msg, s) \
-    ((msg).from_cobs((s), strnlen((const char *)(s), sizeof(s))).status == COBS_DECODE_OK)
+    ((msg).decode((s), strlen((const char *)(s))) == ErrorCode::OK)
 
 #define RUN_LOOP(sd_loop, base) \
-    base = 0;                   \
-    sd_loop.loop();             \
+    (base) = 0;                   \
+    (sd_loop).loop();             \
 
 #define GET_SECOND(output) ((output) + strlen((const char *) (output)) + 1)
 
@@ -61,66 +63,6 @@ using trompeloeil::lt;
 struct InvalidPacket {
     const char *buf;
     ErrorCode error;
-};
-
-TEST_CASE("serial handler begin", "[smartdevice]") {
-    SerialHandler serial;
-    REQUIRE_CALL(Serial, begin(eq(115200)));
-    serial.setup();
-}
-
-TEST_CASE("serial handler recv", "[smartdevice]") {
-    Message msg(PING);
-    SerialHandler serial;
-    SECTION("decode ok") {
-        FORBID_CALL(Serial, write(ANY(char)));
-        FORBID_CALL(Serial, write(ANY(std::string)));
-        FORBID_CALL(Serial, write(_, _));
-        SECTION("no data") {
-            MOCK_SERIAL_RECV("", 0);
-            REQUIRE_FALSE(serial.recv(&msg));
-        }
-        SECTION("recv PING") {
-            MOCK_SERIAL_RECV("\x02\x10\x02\x10", 0);
-            REQUIRE(serial.recv(&msg));
-            REQUIRE(msg.get_type() == PING);
-        }
-    }
-    SECTION("error handling") {
-        ALLOW_CALL(Serial, write(ANY(char)));
-        ALLOW_CALL(Serial, write(ANY(std::string)));
-        ALLOW_CALL(Serial, write(_, _));
-        auto packet = GENERATE(
-            InvalidPacket { "\x02\x10\x02\x11", BAD_CHECKSUM },
-            InvalidPacket { "\x02\x10\x01", UNEXPECTED_DELIMETER },
-            InvalidPacket { "\xff", UNEXPECTED_DELIMETER },
-            InvalidPacket { OVERFLOW_PACKET, BUFFER_OVERFLOW }
-        );
-        MOCK_SERIAL_RECV(packet.buf, 0);
-        REQUIRE_FALSE(serial.recv(&msg));
-        ErrorCode error;
-        REQUIRE(msg.read_error(&error));
-        REQUIRE(error == packet.error);
-    }
-};
-
-TEST_CASE("serial handler send", "[smartdevice]") {
-    Message msg(PING);
-    SerialHandler serial;
-    byte output[256];
-    size_t base = 0;
-    MOCK_SERIAL_SEND(output, base);
-    SECTION("send generic error") {
-        REQUIRE_FALSE(serial.send(nullptr));
-        REQUIRE(base == 6);
-        REQUIRE(memcmp("\x05\xff\x01\xff\x01\x00", output, base) == 0);
-    }
-    SECTION("send HB_REQ") {
-        msg.make_hb_req(0xff);
-        REQUIRE(serial.send(&msg));
-        REQUIRE(base == 6);
-        REQUIRE(memcmp("\x05\x17\x01\xff\xe9\x00", output, base) == 0);
-    }
 };
 
 TEST_CASE("task selection", "[smartdevice]") {
@@ -184,12 +126,12 @@ TEST_CASE("smart device loop", "[smartdevice]") {
     FORBID_CALL(sd, disable());                 /* Forbid spurious disables. */
     SmartDeviceLoop sd_loop(0x80, &sd);
 
-    Message msg(PING);
-    param_map_t present = NO_PARAMETERS;
-    interval_t interval = NO_SUBSCRIPTION;
+    Message msg;
+    param_map_t present = Message::NO_PARAMETERS;
+    interval_t interval = Message::NO_SUBSCRIPTION;
     DeviceUID uid = { 0, 0, 0 };
     heartbeat_id_t hb_id = 0;
-    ErrorCode error = GENERIC_ERROR;
+    ErrorCode error = ErrorCode::GENERIC_ERROR;
 
     byte output[256];
     size_t base = 0;
@@ -203,7 +145,7 @@ TEST_CASE("smart device loop", "[smartdevice]") {
         MOCK_SERIAL_RECV("\x06\x13\x02\x05\xff\xeb", 10000);
         RUN_LOOP(sd_loop, base);
         REQUIRE(CHECK_COBS_DECODE(msg, output));
-        REQUIRE(msg.get_type() == DEV_DATA);
+        REQUIRE(msg.get_type() == MessageType::DEV_DATA);
         param1 = true;
         param2 = 0;
         param3 = 0;
@@ -218,7 +160,7 @@ TEST_CASE("smart device loop", "[smartdevice]") {
         MOCK_SERIAL_RECV("\x0b\x14\x07\x05\xff\x01\xef\xbe\xad\xde\xca", 10000);
         RUN_LOOP(sd_loop, base);
         REQUIRE(CHECK_COBS_DECODE(msg, output));
-        REQUIRE(msg.get_type() == DEV_DATA);
+        REQUIRE(msg.get_type() == MessageType::DEV_DATA);
         REQUIRE(param1 == true);
         REQUIRE(param2 == Approx(1.234));
         REQUIRE(param3 == 0xdeadbeef);
@@ -243,8 +185,8 @@ TEST_CASE("smart device loop", "[smartdevice]") {
         MOCK_SERIAL_RECV("\x05\x17\x01\xff\xe9", 10000);
         RUN_LOOP(sd_loop, base);
         REQUIRE(CHECK_COBS_DECODE(msg, output));
-        REQUIRE(msg.get_type() == HB_RES);
-        REQUIRE(msg.read_hb_req(&hb_id));
+        REQUIRE(msg.get_type() == MessageType::HB_RES);
+        REQUIRE(msg.read_hb_res(&hb_id));
         REQUIRE(hb_id == 0xff);
     }
 
@@ -263,9 +205,25 @@ TEST_CASE("smart device loop", "[smartdevice]") {
         MOCK_SERIAL_RECV(message, 10000);
         RUN_LOOP(sd_loop, base);
         REQUIRE(CHECK_COBS_DECODE(msg, output));
-        REQUIRE(msg.get_type() == ERROR);
+        REQUIRE(msg.get_type() == MessageType::ERROR);
         REQUIRE(msg.read_error(&error));
-        REQUIRE(error == INVALID_TYPE);
+        REQUIRE(error == ErrorCode::INVALID_TYPE);
+    }
+
+    SECTION("reject bad messages") {
+        auto packet = GENERATE(
+            InvalidPacket { "\x02\x10\x02\x11", ErrorCode::BAD_CHECKSUM },
+            InvalidPacket { "\x02\x10\x01", ErrorCode::UNEXPECTED_DELIMETER },
+            InvalidPacket { "\xff", ErrorCode::UNEXPECTED_DELIMETER },
+            InvalidPacket { OVERFLOW_PACKET, ErrorCode::BUFFER_OVERFLOW }
+        );
+        MOCK_SERIAL_RECV(packet.buf, 10000);
+        RUN_LOOP(sd_loop, base);
+        REQUIRE(CHECK_COBS_DECODE(msg, output));
+        REQUIRE(msg.get_type() == MessageType::ERROR);
+        ErrorCode error;
+        REQUIRE(msg.read_error(&error));
+        REQUIRE(error == packet.error);
     }
 
     SECTION("loop sends subscription updates") {
@@ -274,7 +232,7 @@ TEST_CASE("smart device loop", "[smartdevice]") {
         MOCK_SERIAL_RECV(packet, delay);
         RUN_LOOP(sd_loop, base);
         REQUIRE(CHECK_COBS_DECODE(msg, output));
-        REQUIRE(msg.get_type() == SUB_RES);
+        REQUIRE(msg.get_type() == MessageType::SUB_RES);
         REQUIRE(msg.read_sub_res(&present, &interval, &uid));
         REQUIRE(present == 0b1);
         REQUIRE(interval == 40);
@@ -283,9 +241,9 @@ TEST_CASE("smart device loop", "[smartdevice]") {
         delay = 40;
         RUN_LOOP(sd_loop, base);
         REQUIRE(CHECK_COBS_DECODE(msg, output));
-        REQUIRE(msg.get_type() == HB_REQ);
+        REQUIRE(msg.get_type() == MessageType::HB_REQ);
         REQUIRE(CHECK_COBS_DECODE(msg, GET_SECOND(output)));
-        REQUIRE(msg.get_type() == DEV_DATA);
+        REQUIRE(msg.get_type() == MessageType::DEV_DATA);
         param1 = true;
         REQUIRE(msg.read_dev_data(&present, params));
         REQUIRE(present == 0b1);
@@ -295,7 +253,7 @@ TEST_CASE("smart device loop", "[smartdevice]") {
             param1 = true;
             RUN_LOOP(sd_loop, base);
             REQUIRE(CHECK_COBS_DECODE(msg, output));
-            REQUIRE(msg.get_type() == DEV_DATA);
+            REQUIRE(msg.get_type() == MessageType::DEV_DATA);
             param1 = false;
             REQUIRE(msg.read_dev_data(&present, params));
             REQUIRE(present == 0b1);
@@ -306,7 +264,7 @@ TEST_CASE("smart device loop", "[smartdevice]") {
             RUN_LOOP(sd_loop, base);
             REQUIRE(CHECK_COBS_DECODE(msg, GET_SECOND(output)));
             REQUIRE(msg.read_sub_res(&present, &interval, &uid));
-            REQUIRE(interval == NO_SUBSCRIPTION);
+            REQUIRE(interval == Message::NO_SUBSCRIPTION);
             packet = "";
             RUN_LOOP(sd_loop, base);
             REQUIRE(_millis > 2000 + 40 + 40 + 40);
@@ -327,13 +285,13 @@ TEST_CASE("smart device loop", "[smartdevice]") {
             packet = "\x02\x80\x02\x80";
             RUN_LOOP(sd_loop, base);
             REQUIRE(CHECK_COBS_DECODE(msg, GET_SECOND(output)));
-            REQUIRE(msg.get_type() == ERROR);
+            REQUIRE(msg.get_type() == MessageType::ERROR);
             REQUIRE(msg.read_error(&error));
-            REQUIRE(error == INVALID_TYPE);
+            REQUIRE(error == ErrorCode::INVALID_TYPE);
             packet = "";
             RUN_LOOP(sd_loop, base);
             REQUIRE(CHECK_COBS_DECODE(msg, output));
-            REQUIRE(msg.get_type() == DEV_DATA);
+            REQUIRE(msg.get_type() == MessageType::DEV_DATA);
             param1 = true;
             REQUIRE(msg.read_dev_data(&present, params));
             REQUIRE(present == 0b1);
@@ -343,7 +301,7 @@ TEST_CASE("smart device loop", "[smartdevice]") {
             packet = "\x02\x10\x02\x10";
             RUN_LOOP(sd_loop, base);
             REQUIRE(CHECK_COBS_DECODE(msg, GET_SECOND(output)));
-            REQUIRE(msg.get_type() == SUB_RES);
+            REQUIRE(msg.get_type() == MessageType::SUB_RES);
             REQUIRE(msg.read_sub_res(&present, &interval, &uid));
             REQUIRE(present == 0b1);
             REQUIRE(interval == 40);
