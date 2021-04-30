@@ -10,10 +10,19 @@ platform_system = 'Linux'
 [packages]
 
 [dev-packages]
+Cython = '~=3.0a'
+pytest = '~=6.2'
 sphinx = '~=3.5'
 sphinx-autobuild = '~=2020.9'
 sphinx-rtd-theme = '~=0.5'
 sphinxcontrib-tikz = '~=0.4'
 
 [scripts]
+clean = 'sh -c "rm -rf build runtime/*.cpython-*.so runtime/*.c runtime/*.cpp"'
+build = 'python setup.py build_ext --inplace'
+dev = 'python -m runtime'
 servedocs = 'make --directory=docs livehtml'
+test = 'pytest'
+
+[pipenv]
+allow_prereleases = true
