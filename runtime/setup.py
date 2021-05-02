@@ -2,6 +2,7 @@ from setuptools import setup, Extension
 from Cython.Build import cythonize
 
 extensions = [
+    Extension('runtime.sync', ['runtime/sync.pyx']),
     Extension('runtime.messaging', ['runtime/messaging.pyx'],
               include_dirs=['../smart-devices/SmartDevice/src'],
               extra_objects=['../smart-devices/cobs-c/cobs.o']),
