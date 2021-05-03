@@ -36,12 +36,12 @@ def locking_peer(shared_mutex):
             acquired.set()
             done.wait(3)
         shm.close()
-    child = multiprocessing.Process(target=target, args=(acquired, done), daemon=True)
-    child.start()
+    peer = multiprocessing.Process(target=target, args=(acquired, done), daemon=True)
+    peer.start()
     acquired.wait(3)
     yield
     done.set()
-    child.join()
+    peer.join()
 
 
 def test_try_acquire_release(mutex):
@@ -64,6 +64,7 @@ def test_double_release(mutex):
     assert excinfo.value.context['errno'] == errno.EPERM
 
 
+@pytest.mark.slow
 def test_timeout(shared_mutex, locking_peer):
     start = time.time()
     with pytest.raises(SyncError) as excinfo:
@@ -84,6 +85,7 @@ def test_nonowner_release(shared_mutex, locking_peer):
     assert excinfo.value.context['errno'] == errno.EPERM
 
 
+@pytest.mark.slow
 def test_contention(shared_mutex):
     increments, process_count, delay = 50, 4, 0.01
     def target(counter, barrier):

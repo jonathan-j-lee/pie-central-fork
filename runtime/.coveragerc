@@ -1,0 +1,10 @@
+[run]
+branch = True
+data_file = build/.coverage
+omit =
+  runtime/__init__.py
+plugins = Cython.Coverage
+
+[report]
+precision = 1
+show_missing = True

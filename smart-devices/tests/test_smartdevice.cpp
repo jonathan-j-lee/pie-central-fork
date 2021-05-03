@@ -157,7 +157,7 @@ TEST_CASE("smart device loop", "[smartdevice]") {
     }
 
     SECTION("recv DEV_WRITE") {
-        MOCK_SERIAL_RECV("\x0b\x14\x07\x05\xff\x01\xef\xbe\xad\xde\xca", 10000);
+        MOCK_SERIAL_RECV("\x04\x14\x07\x05\x07\x01\xef\xbe\xad\xde\x35", 10000);
         RUN_LOOP(sd_loop, base);
         REQUIRE(CHECK_COBS_DECODE(msg, output));
         REQUIRE(msg.get_type() == MessageType::DEV_DATA);

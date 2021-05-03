@@ -4,8 +4,8 @@ import ctypes
 import functools
 
 cimport cython
+from libcpp cimport bool
 from libc.stdint cimport uint64_t
-from .messaging cimport _Message, MessageType
 from .exception import RuntimeBaseException
 
 __all__ = [
@@ -13,42 +13,12 @@ __all__ = [
     'MessageType',
     'Message',
     'ErrorCode',
-    'DeviceUID',
     'ParameterMap',
 ]
 
 
 class MessageError(RuntimeBaseException):
     pass
-
-
-@cython.freelist(16)
-@cython.final
-cdef class DeviceUID:
-    cdef _DeviceUID uid
-
-    def __cinit__(self, device_id_t device_id = 0, uint8_t year = 0, uint64_t random = 0):
-        self.uid.device_id = device_id
-        self.uid.year = year
-        self.uid.random = random
-
-    def __int__(self) -> int:
-        uid = self.uid.device_id
-        uid = (uid << 8*sizeof(self.uid.year)) | self.uid.year
-        uid = (uid << 8*sizeof(self.uid.random)) | self.uid.random
-        return uid
-
-    @property
-    def device_id(self) -> int:
-        return self.uid.device_id
-
-    @property
-    def year(self) -> int:
-        return self.uid.year
-
-    @property
-    def random(self) -> int:
-        return self.uid.random
 
 
 def message_factory(wrapped, MessageType msg_type):
@@ -62,11 +32,6 @@ def message_factory(wrapped, MessageType msg_type):
     return wrapper
 
 
-def check_read(status, MessageType msg_type):
-    if not status:
-        raise MessageError('failed to read Smart Device message', type=MessageType(msg_type).name)
-
-
 @cython.freelist(16)
 @cython.final
 cdef class ParameterMap:
@@ -74,16 +39,21 @@ cdef class ParameterMap:
 
     def __cinit__(self):
         for index in range(MAX_PARAMETERS):
-            self.params[index].base = NULL
-            self.params[index].size = 0
+            self.clear_param(index)
 
-    def set_param(self, size_t index, structure, field_name: str):
+    cdef void check_index(self, size_t index):
         if index >= MAX_PARAMETERS:
             raise MessageError('parameter index out of bounds', index=index)
-        field = getattr(structure.__class__, field_name)
-        cdef uint64_t base = ctypes.addressof(structure) + field.offset
-        self.params[index].base = <void *>base
-        self.params[index].size = field.size
+
+    def set_param(self, size_t index, const unsigned char[::1] buf):
+        self.check_index(index)
+        self.params[index].base = <void *>&buf[0]
+        self.params[index].size = buf.shape[0]
+
+    def clear_param(self, size_t index):
+        self.check_index(index)
+        self.params[index].base = NULL
+        self.params[index].size = 0
 
 
 @cython.freelist(16)
@@ -96,6 +66,9 @@ cdef class Message:
 
         .. https://github.com/cython/cython/issues/1434
     """
+    MAX_PARAMS = MAX_PARAMETERS
+    MAX_SIZE = MESSAGE_MAX_SIZE
+    ENCODE_MAX_SIZE = ENCODING_MAX_SIZE
     cdef _Message buf
 
     @property
@@ -108,7 +81,7 @@ cdef class Message:
     def __len__(self) -> int:
         return self.buf.get_payload_length()
 
-    def verify_checksum(self) -> bool:
+    cpdef bool verify_checksum(self):
         return self.buf.verify_checksum()
 
     @staticmethod
@@ -119,12 +92,16 @@ cdef class Message:
             raise MessageError('failed to decode Smart Device message', status=ErrorCode(status).name)
         return msg
 
-    cpdef size_t encode(self, byte[::1] buf):
+    cpdef size_t encode_into_buf(self, byte[::1] buf):
         cdef size_t out_len
         cdef ErrorCode status = self.buf.encode(&buf[0], buf.shape[0], &out_len)
         if status is not ErrorCode.OK:
             raise MessageError('failed to encode Smart Device message', status=ErrorCode(status).name)
         return out_len
+
+    def encode(self) -> bytearray:
+        output = bytearray(ENCODING_MAX_SIZE)
+        return output[:self.encode_into_buf(output)]
 
     def make_ping(Message msg not None) -> bool:
         return msg.buf.make_ping()
@@ -135,8 +112,10 @@ cdef class Message:
     make_sub_req = staticmethod(message_factory(make_sub_req, MessageType.SUB_REQ))
 
     def make_sub_res(Message msg not None, param_map_t params, interval_t interval,
-                     DeviceUID uid not None) -> bool:
-        return msg.buf.make_sub_res(params, interval, &uid.uid)
+                     device_id_t device_id, uint8_t year, uint64_t random) -> bool:
+        cdef _DeviceUID _uid
+        _uid.device_id, _uid.year, _uid.random = device_id, year, random
+        return msg.buf.make_sub_res(params, interval, &_uid)
     make_sub_res = staticmethod(message_factory(make_sub_res, MessageType.SUB_RES))
 
     def make_dev_read(Message msg not None, param_map_t params) -> bool:
@@ -169,45 +148,53 @@ cdef class Message:
         return msg.buf.make_error(error)
     make_error = staticmethod(message_factory(make_error, MessageType.ERROR))
 
+    cdef void check_read(self, bool status, MessageType msg_type):
+        if not status:
+            raise MessageError('failed to read Smart Device message',
+                               type=MessageType(msg_type).name)
+
     def read_sub_req(self) -> tuple[int, int]:
         cdef param_map_t params = NO_PARAMETERS
         cdef interval_t interval = NO_SUBSCRIPTION
-        check_read(self.buf.read_sub_req(&params, &interval), MessageType.SUB_REQ)
+        self.check_read(self.buf.read_sub_req(&params, &interval), MessageType.SUB_REQ)
         return params, interval
 
-    def read_sub_res(self) -> tuple[int, int, DeviceUID]:
+    def read_sub_res(self) -> tuple[int, int, tuple[int, int, int]]:
         cdef param_map_t params = NO_PARAMETERS
         cdef interval_t interval = NO_SUBSCRIPTION
-        uid = DeviceUID()
-        check_read(self.buf.read_sub_res(&params, &interval, &uid.uid), MessageType.SUB_RES)
-        return params, interval, uid
+        cdef _DeviceUID _uid
+        _uid.device_id = 0
+        _uid.year = 0
+        _uid.random = 0
+        self.check_read(self.buf.read_sub_res(&params, &interval, &_uid), MessageType.SUB_RES)
+        return params, interval, (_uid.device_id, _uid.year, _uid.random)
 
     def read_dev_read(self) -> int:
         cdef param_map_t params = NO_PARAMETERS
-        check_read(self.buf.read_dev_read(&params), MessageType.DEV_READ)
+        self.check_read(self.buf.read_dev_read(&params), MessageType.DEV_READ)
         return params
 
     def read_dev_write(self, ParameterMap param_map not None) -> int:
         cdef param_map_t params = NO_PARAMETERS
-        check_read(self.buf.read_dev_write(&params, param_map.params), MessageType.DEV_WRITE)
+        self.check_read(self.buf.read_dev_write(&params, param_map.params), MessageType.DEV_WRITE)
         return params
 
     def read_dev_data(self, ParameterMap param_map not None) -> int:
         cdef param_map_t params = NO_PARAMETERS
-        check_read(self.buf.read_dev_data(&params, param_map.params), MessageType.DEV_DATA)
+        self.check_read(self.buf.read_dev_data(&params, param_map.params), MessageType.DEV_DATA)
         return params
 
     def read_hb_req(self) -> int:
         cdef heartbeat_id_t hb_id = 0
-        check_read(self.buf.read_hb_req(&hb_id), MessageType.HB_REQ)
+        self.check_read(self.buf.read_hb_req(&hb_id), MessageType.HB_REQ)
         return hb_id
 
     def read_hb_res(self) -> int:
         cdef heartbeat_id_t hb_id = 0
-        check_read(self.buf.read_hb_res(&hb_id), MessageType.HB_RES)
+        self.check_read(self.buf.read_hb_res(&hb_id), MessageType.HB_RES)
         return hb_id
 
     def read_error(self) -> ErrorCode:
         cdef ErrorCode error = ErrorCode.OK
-        check_read(self.buf.read_error(&error), MessageType.ERROR)
+        self.check_read(self.buf.read_error(&error), MessageType.ERROR)
         return error

@@ -18,7 +18,7 @@ const char Message::DELIMETER = '\0';
     }                                                       \
 
 #define read_check(offset, dst, size)                       \
-    if ((dst) && !this->read((offset), (dst), (size))) {    \
+    if (!(dst) || !this->read((offset), (dst), (size))) {   \
         return false;                                       \
     }                                                       \
     (offset) += (size)                                      \

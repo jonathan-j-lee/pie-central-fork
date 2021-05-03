@@ -1,5 +1,6 @@
 # distutils: language=c++
 
+import contextlib
 import math
 from numbers import Real
 import time
@@ -13,6 +14,14 @@ __all__ = ['SyncError', 'Mutex']
 class SyncError(RuntimeBaseException):
     def __init__(self, message: str, errno: int, **context):
         super().__init__(message, **context, errno=errno)
+
+    def suppress(*errnos: int):
+        try:
+            yield
+        except SyncError as exc:
+            if exc.context['errno'] not in errnos:
+                raise
+    suppress = staticmethod(contextlib.contextmanager(suppress))
 
 
 cdef class Mutex:
