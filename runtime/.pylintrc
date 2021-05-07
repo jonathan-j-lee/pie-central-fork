@@ -4,6 +4,9 @@
 # be loaded. Extensions are loading into the active Python interpreter and may
 # run arbitrary code.
 extension-pkg-allow-list=
+        orjson,
+        runtime.messaging,
+        runtime.sync,
 
 # A comma-separated list of package or module names from where C extensions may
 # be loaded. Extensions are loading into the active Python interpreter and may
@@ -215,6 +218,15 @@ contextmanager-decorators=contextlib.contextmanager
 # system, and so shouldn't trigger E1101 when accessed. Python regular
 # expressions are accepted.
 generated-members=
+        zmq.REQ,
+        zmq.REP,
+        zmq.ROUTER,
+        zmq.DEALER,
+        zmq.PUB,
+        zmq.SUB,
+        zmq.IDENTITY,
+        zmq.SNDTIMEO,
+        zmq.RCVTIMEO,
 
 # Tells whether missing members accessed in mixin class should be ignored. A
 # mixin class is detected if its name ends with "mixin" (case insensitive).

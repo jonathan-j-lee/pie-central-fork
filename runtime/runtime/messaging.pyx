@@ -6,7 +6,7 @@ import functools
 cimport cython
 from libcpp cimport bool
 from libc.stdint cimport uint64_t
-from .exception import RuntimeBaseException
+from .monitoring import RuntimeBaseException
 
 __all__ = [
     'MessageError',

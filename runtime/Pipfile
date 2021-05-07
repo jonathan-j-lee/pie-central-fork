@@ -8,13 +8,21 @@ python_version = '3.9'
 platform_system = 'Linux'
 
 [packages]
+click = '~=3.1'
+colorama = '~=0.4'
+msgpack = '~=1.0'
+orjson = '~=3.5'
 pylint = '~=2.8'
+pyzmq = '~=22.0'
+structlog = "~=21.1"
 
 [dev-packages]
 Cython = '~=3.0a'
 pytest = '~=6.2'
+pytest-asyncio = '~=0.15'
 pytest-cov = '~=2.11'
 pytest-mock = '~=3.6'
+pyenchant = '~=3.2'
 sphinx = '~=3.5'
 sphinx-autobuild = '~=2020.9'
 sphinx-rtd-theme = '~=0.5'
@@ -23,7 +31,7 @@ sphinxcontrib-tikz = '~=0.4'
 [scripts]
 build = 'python setup.py build_ext --inplace'
 clean = 'sh -c "rm -rf build runtime/*.cpython-*.so runtime/*.c runtime/*.cpp"'
-dev = 'python -m runtime'
+dev = 'python -m runtime serve'
 servedocs = 'make --directory=docs livehtml'
 lint = 'pylint runtime'
 test = 'pytest -m "not slow"'

@@ -8,7 +8,7 @@ from typing import Any, Callable, Iterable, NamedTuple, Optional
 import warnings
 from .sync import Mutex, SyncError
 from .messaging import Message, MessageError, ParameterMap
-from .exception import RuntimeBaseException
+from .monitoring import RuntimeBaseException
 
 __all__ = ['RuntimeBufferError', 'Parameter', 'DeviceUID', 'Buffer', 'DeviceBuffer']
 

@@ -6,7 +6,7 @@ from numbers import Real
 import time
 from typing import Optional
 from libcpp cimport bool
-from .exception import RuntimeBaseException
+from .monitoring import RuntimeBaseException
 
 __all__ = ['SyncError', 'Mutex']
 
