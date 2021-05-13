@@ -3,10 +3,11 @@ import dataclasses
 import decimal
 import functools
 import math
-from numbers import Real
 import random
+from numbers import Real
 from typing import Callable, Optional
 import pytest
+import structlog
 import zmq
 from runtime import rpc
 
@@ -57,9 +58,21 @@ FRONTEND, BACKEND = 'ipc:///tmp/router-frontend.ipc', 'ipc:///tmp/router-backend
 MULTICAST = 'ipc:///tmp/pub-sub.ipc'
 
 
+@pytest.fixture(autouse=True)
+def logger(mocker):
+    logger = structlog.get_logger()
+    for method in ('debug', 'info', 'warn', 'error', 'critical'):
+        patch = mocker.patch.object(logger, method)
+        patch.return_value = future = asyncio.Future()
+        future.set_result(None)
+    return logger
+
+
 @pytest.fixture
-async def router():
-    async with rpc.Router.bind(FRONTEND, BACKEND) as router:
+async def router(logger):
+    router = rpc.Router.bind(FRONTEND, BACKEND)
+    router.frontend.logger = router.backend.logger = logger
+    async with router:
         yield router
 
 
@@ -72,7 +85,7 @@ async def router():
     ((zmq.PUB, 3), (zmq.SUB, 5)),
     ((zmq.PUB, 5), (zmq.SUB, 3)),
 ])
-async def endpoints(request, router):
+async def endpoints(logger, request, router):
     (client_type, client_concurrency), (service_type, service_concurrency) = request.param
     common_options = {zmq.SNDTIMEO: 3000}
     client = rpc.Client(
@@ -80,12 +93,14 @@ async def endpoints(request, router):
         concurrency=client_concurrency,
         options={**common_options, zmq.IDENTITY: b'client'},
         connections=(MULTICAST if client_type == zmq.PUB else FRONTEND),
+        logger=logger,
     )
     options = {'bindings': MULTICAST} if service_type == zmq.SUB else {'connections': BACKEND}
     service = MockService(
         service_type,
         concurrency=service_concurrency,
         options={**common_options, zmq.IDENTITY: b'service'},
+        logger=logger,
         **options,
     )
     async def wait_for_connection():
@@ -341,14 +356,14 @@ async def test_loopback(endpoints):
 
 
 @pytest.mark.asyncio
-async def test_multiple_clients(endpoints):
+async def test_multiple_clients(logger, endpoints):
     client1, service = endpoints
     if client1.socket_type == zmq.PUB:
         pytest.skip()
     client2_options = client1.options | {zmq.IDENTITY: b'client-2'}
     client3_options = client1.options | {zmq.IDENTITY: b'client-3'}
-    client2 = rpc.Client(zmq.DEALER, options=client2_options, connections=FRONTEND)
-    client3 = rpc.Client(zmq.DEALER, options=client3_options, connections=FRONTEND)
+    client2 = rpc.Client(zmq.DEALER, options=client2_options, connections=FRONTEND, logger=logger)
+    client3 = rpc.Client(zmq.DEALER, options=client3_options, connections=FRONTEND, logger=logger)
     async with client2, client3:
         fn = lambda client, k: client.call['echo-id'](k, service_or_topic=service.identity)
         tasks, expected_results = set(), set()
@@ -361,7 +376,7 @@ async def test_multiple_clients(endpoints):
 
 
 @pytest.mark.asyncio
-async def test_multiple_services(endpoints):
+async def test_multiple_services(logger, endpoints):
     client, service1 = endpoints
     if client.socket_type == zmq.PUB:
         pytest.skip()
@@ -371,9 +386,9 @@ async def test_multiple_services(endpoints):
     service2_options = service1.options | {zmq.IDENTITY: b'service-2'}
     service3_options = service1.options | {zmq.IDENTITY: b'service-3'}
     service2 = MockService(zmq.DEALER, concurrency=service1.concurrency, options=service2_options,
-                           connections=BACKEND)
+                           connections=BACKEND, logger=logger)
     service3 = MockService(zmq.DEALER, concurrency=service1.concurrency, options=service3_options,
-                           connections=BACKEND)
+                           connections=BACKEND, logger=logger)
     async with service2, service3:
         fn = lambda service, k: client.call['echo-id'](k, service_or_topic=service.identity)
         tasks, expected_results = set(), set()

@@ -1,14 +1,15 @@
 import contextlib
 import ctypes
 import errno
+import time
+import warnings
 from multiprocessing.shared_memory import SharedMemory
 from numbers import Real
-import time
 from typing import Any, Callable, Iterable, NamedTuple, Optional
-import warnings
-from .sync import Mutex, SyncError
+
+from .exception import RuntimeBaseException
 from .messaging import Message, MessageError, ParameterMap
-from .monitoring import RuntimeBaseException
+from .sync import Mutex, SyncError
 
 __all__ = ['RuntimeBufferError', 'Parameter', 'DeviceUID', 'Buffer', 'DeviceBuffer']
 
@@ -50,10 +51,10 @@ class DeviceUID(BaseStructure):
     ]
 
     def __int__(self) -> int:
-        """ Serialize this UID as a 96-bit integer. """
+        """Serialize this UID as a 96-bit integer."""
         uid = self.device_id
-        uid = (uid << 8*self.__class__.year.size) | self.year
-        uid = (uid << 8*self.__class__.random.size) | self.random
+        uid = (uid << 8 * self.__class__.year.size) | self.year
+        uid = (uid << 8 * self.__class__.random.size) | self.random
         return uid
 
 
@@ -83,7 +84,7 @@ class Buffer(BaseStructure):
         read_block_type = cls._make_block_type(f'{name}ReadBlock', readable_params)
         writeable_params = [param for param in params if param.writeable]
         write_block_type = cls._make_block_type(f'{name}WriteBlock', writeable_params)
-        return type(name, (cls,), {
+        attrs = {
             '_fields_': [
                 ('valid', ctypes.c_bool),
                 ('read', read_block_type),
@@ -92,7 +93,8 @@ class Buffer(BaseStructure):
             ],
             '_params': params,
             '_param_indices': {param.name: i for i, param in enumerate(params)},
-        })
+        }
+        return type(name, (cls,), attrs)
 
     def _make_param_map(self, view: memoryview, param_block_name: str):
         param_block = getattr(self, param_block_name)
@@ -120,14 +122,18 @@ class Buffer(BaseStructure):
         try:
             shm, create_success = SharedMemory(name, create=create, size=size), True
         except FileNotFoundError as exc:
-            raise RuntimeBufferError('Cannot attach to nonexistent shared memory',
-                                     name=name, create=create, type=cls.__name__) from exc
+            raise RuntimeBufferError(
+                'Cannot attach to nonexistent shared memory',
+                name=name,
+                create=create,
+                type=cls.__name__,
+            ) from exc
         except FileExistsError:
             shm, create_success = SharedMemory(name), False
-        buffer = cls.from_buffer(shm.buf[Mutex.SIZE:])
-        buffer.mutex = Mutex(shm.buf[:Mutex.SIZE], shared=True)
-        buffer.read_param_map = buffer._make_param_map(shm.buf[Mutex.SIZE:], 'read')
-        buffer.write_param_map = buffer._make_param_map(shm.buf[Mutex.SIZE:], 'write')
+        buffer = cls.from_buffer(shm.buf[Mutex.SIZE :])
+        buffer.mutex = Mutex(shm.buf[: Mutex.SIZE], shared=True)
+        buffer.read_param_map = buffer._make_param_map(shm.buf[Mutex.SIZE :], 'read')
+        buffer.write_param_map = buffer._make_param_map(shm.buf[Mutex.SIZE :], 'write')
         if create_success:
             buffer.mutex.initialize()
         if create:
@@ -235,8 +241,8 @@ class DeviceBuffer(Buffer):
 
     def get_update(self) -> dict[str, Any]:
         with self.operation():
-            update = {param.name: self.get_value(param.name)
-                      for _, param in self.from_bitmap(self.control.update)}
+            params = self.from_bitmap(self.control.update)
+            update = {param.name: self.get_value(param.name) for _, param in params}
             self.control.update = DeviceControlBlock.RESET
             return update
 

@@ -1,5 +1,6 @@
-from libc.stdint cimport uint8_t, uint16_t, uint64_t
 from libc.stddef cimport size_t
+from libc.stdint cimport uint8_t, uint16_t, uint64_t
+
 
 cdef extern from "message.cpp" nogil:
     pass

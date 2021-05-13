@@ -11,24 +11,22 @@ import dataclasses
 import enum
 import functools
 import inspect
-from numbers import Real
 import random
+from numbers import Real
 from typing import Any, Callable, Optional, Union
 
 import msgpack
 import structlog
 import zmq
 import zmq.asyncio
-from .monitoring import RuntimeBaseException
+
+from .exception import RuntimeBaseException
 
 __all__ = ['RuntimeRPCError', 'Client', 'Service', 'Router', 'ServiceProtocol']
 
 
-LOGGER = structlog.get_logger(module=__name__)
-
-
 class RuntimeRPCError(RuntimeBaseException):
-    """ Errors during a RPC. """
+    """Errors during a RPC."""
 
 
 class MessageType(enum.IntEnum):
@@ -38,6 +36,7 @@ class MessageType(enum.IntEnum):
     .. _MessagePack-RPC Specification:
         https://github.com/msgpack-rpc/msgpack-rpc/blob/master/spec.md
     """
+
     REQUEST = 0
     RESPONSE = 1
     NOTIFICATION = 2
@@ -58,6 +57,7 @@ class BaseSocket:
     .. _ZMQ Socket Options:
         http://api.zeromq.org/4-1:zmq-setsockopt
     """
+
     socket_type: int
     ctx: zmq.asyncio.Context = dataclasses.field(default_factory=zmq.asyncio.Context.instance)
     options: dict[int, Union[int, bytes]] = dataclasses.field(default_factory=dict)
@@ -65,6 +65,7 @@ class BaseSocket:
     connections: frozenset[str] = dataclasses.field(default_factory=frozenset)
     subscriptions: set[str] = dataclasses.field(default_factory=set)
     socket: zmq.asyncio.Socket = dataclasses.field(init=False, repr=False)
+    logger: structlog.BoundLogger = dataclasses.field(default_factory=structlog.get_logger)
 
     def __post_init__(self):
         for attr in ('bindings', 'connections', 'subscriptions'):
@@ -85,13 +86,16 @@ class BaseSocket:
         self.close()
 
     def _check_type(self, *allowed_types: int):
-        """ Raise a :class:`RuntimeRPCError` if this socket type is not allowed. """
+        """Raise a :class:`RuntimeRPCError` if this socket type is not allowed."""
         if self.socket_type not in allowed_types:
-            raise RuntimeRPCError('socket type not allowed', socket_type=self.socket_type,
-                                  allowed_types=allowed_types)
+            raise RuntimeRPCError(
+                'socket type not allowed',
+                socket_type=self.socket_type,
+                allowed_types=allowed_types,
+            )
 
     def reset(self):
-        """ Reset the internal socket. """
+        """Reset the internal socket."""
         self.socket = self.ctx.socket(self.socket_type)
         for name, value in self.options.items():
             self.socket.set(name, value)
@@ -105,33 +109,33 @@ class BaseSocket:
 
     @property
     def closed(self) -> bool:
-        """ Whether this socket is closed (unusable). """
+        """Whether this socket is closed (unusable)."""
         return self.socket.closed
 
     def close(self):
-        """ Close the internal socket. """
+        """Close the internal socket."""
         self.socket.close(linger=0)
 
     def subscribe(self, topic: str = ''):
-        """ Subscribe to a topic (for ``SUB`` sockets only). """
+        """Subscribe to a topic (for ``SUB`` sockets only)."""
         if self.socket_type == zmq.SUB:
             self.socket.subscribe(topic)
             self.subscriptions.add(topic)
 
     def unsubscribe(self, topic: str = ''):
-        """ Unsubscribe from a topic (for ``SUB`` sockets only). """
+        """Unsubscribe from a topic (for ``SUB`` sockets only)."""
         if self.socket_type == zmq.SUB:
             self.socket.unsubscribe(topic)
             self.subscriptions.discard(topic)
 
     def set_option(self, option: int, value: Union[int, bytes]):
-        """ Set a socket option. """
+        """Set a socket option."""
         self.socket.set(option, value)
         self.options[option] = value
 
     @contextlib.asynccontextmanager
     async def _using_socket(self):
-        """ An async context manager for reconstructing the socket on timeout. """
+        """An async context manager for reconstructing the socket on timeout."""
         if self.closed:
             raise RuntimeRPCError('socket is closed')
         try:
@@ -182,15 +186,16 @@ class Endpoint(BaseSocket, abc.ABC):
         concurrency: The number of workers.
         workers: The set of workers, which the context manager automatically creates and destroys.
     """
+
     concurrency: int = 1
     workers: set[asyncio.Task] = dataclasses.field(default_factory=set, init=False, repr=False)
 
     def __post_init__(self):
-        super().__post_init__()
         if self.socket_type == zmq.PUB:  # PUB sockets cannot receive messages.
             self.concurrency = 0
         if self.concurrency < 0:
             raise ValueError('concurrency must be a positive integer')
+        super().__post_init__()
 
     def reset(self):
         super().reset()
@@ -203,22 +208,25 @@ class Endpoint(BaseSocket, abc.ABC):
         super().close()
 
     async def recv_forever(self):
-        """ Receive messages indefinitely and process them. """
+        """Receive messages indefinitely and process them."""
         while True:
             try:
                 sender_or_topic, payload = await self.recv()
                 message_type, *message = await self.deserialize(payload)
                 message_type = MessageType(message_type)
             except (ValueError, asyncio.TimeoutError, RuntimeRPCError) as exc:
-                LOGGER.error('Endpoint failed to receive message', exc_info=exc)
+                await self.logger.error('Endpoint failed to receive message', exc_info=exc)
                 continue
-            LOGGER.debug('Endpoint received message', message_type=message_type.name,
-                         sender_or_topic=sender_or_topic.hex())
+            await self.logger.debug(
+                'Endpoint received message',
+                message_type=message_type.name,
+                sender_or_topic=sender_or_topic.hex(),
+            )
             sender_id = sender_or_topic if self.socket_type != zmq.SUB else b''
             try:
                 await self.handle_message(sender_id, message_type, *message)
             except RuntimeRPCError as exc:
-                LOGGER.error('Endpoint failed to process message', exc_info=exc)
+                await self.logger.error('Endpoint failed to process message', exc_info=exc)
 
     @abc.abstractmethod
     async def handle_message(self, sender_id: bytes, message_type: MessageType, *message: Any):
@@ -272,6 +280,7 @@ class Client(Endpoint):
         requests: A mapping of in-flight message IDs to futures. Each future represents the outcome
             of a call.
     """
+
     requests: dict[int, asyncio.Future] = dataclasses.field(default_factory=dict)
 
     def __post_init__(self, *args, **kwargs):
@@ -299,8 +308,11 @@ class Client(Endpoint):
 
     async def handle_message(self, sender_id: bytes, message_type: MessageType, *message: Any):
         if message_type is not MessageType.RESPONSE:
-            raise RuntimeRPCError('client only receives RESPONSE messages',
-                                  message_type=message_type, message_parts=message)
+            raise RuntimeRPCError(
+                'client only receives RESPONSE messages',
+                message_type=message_type,
+                message_parts=message,
+            )
         message_id, error, result = message
         future = self.requests.get(message_id)
         if not future:
@@ -347,6 +359,12 @@ class Client(Endpoint):
             service_or_topic = service_or_topic or method.encode()
         elif not service_or_topic:
             raise ValueError('call requires service ID')
+        await self.logger.debug(
+            'Issuing remote procedure call',
+            method=method,
+            service_or_topic=service_or_topic.hex(),
+            notification=notification,
+        )
         if notification:
             message = [MessageType.NOTIFICATION.value, method, args]
             await self.send(service_or_topic, await self.serialize(message))
@@ -377,6 +395,7 @@ class Client(Endpoint):
         @functools.lru_cache(maxsize=64)
         def call_factory(method: str):
             return functools.partial(self.issue_call, method)
+
         class CallFactoryWrapper:
             """
             A wrapper class around the call factory.
@@ -384,10 +403,13 @@ class Client(Endpoint):
             This wrapper uses currying to partially complete the argument list to
             :meth:`Client.issue_call`.
             """
+
             def __getitem__(self, method: str):
                 return call_factory(method)
+
             def __getattr__(self, method: str):
                 return call_factory(method)
+
         return CallFactoryWrapper()
 
 
@@ -405,15 +427,27 @@ class Service(Endpoint):
         ...         ...
 
     Attributes:
-        ready: A flag for ensuring a ``DEALER`` socket sends its identity to the router.
         timeout: Maximum duration (in seconds) to execute methods for.
     """
-    ready: bool = dataclasses.field(default=False, init=False, repr=False)
+
     timeout: Real = 30
+    client: Optional[Client] = None
 
     def __post_init__(self, *args, **kwargs):
         self._check_type(zmq.SUB, zmq.DEALER)
         super().__post_init__(*args, **kwargs)
+        if self.socket_type == zmq.DEALER:
+            self.set_option(zmq.PROBE_ROUTER, 1)
+
+    async def __aenter__(self):
+        if self.client:
+            client = await self.client.__aenter__()
+        return await super().__aenter__()
+
+    async def __aexit__(self, exc_type, exc, traceback):
+        if self.client:
+            await self.client.__aexit__(exc_type, exc, traceback)
+        return await super().__aexit__(exc_type, exc, traceback)
 
     @classmethod
     def route(cls, name: str = ''):
@@ -424,35 +458,21 @@ class Service(Endpoint):
             name: The name exposed to the RPC dispatcher. Useful for names that are not valid
                 Python identifiers. Defaults to the method name.
         """
+
         def decorator(method: Callable) -> Callable:
             method.__rpc__ = name or method.__name__
             return method
+
         return decorator
 
     @functools.cached_property
     def method_table(self) -> dict[str, Callable]:
-        """ A mapping of method names to (possibly coroutine) bound methods. """
+        """A mapping of method names to (possibly coroutine) bound methods."""
         # Need to use the class to avoid calling `getattr(...)` on this property, which can lead
         # to infinite recursion.
         funcs = inspect.getmembers(self.__class__, inspect.isfunction)
-        return {func.__rpc__: getattr(self, attr)
-                for attr, func in funcs if hasattr(func, '__rpc__')}
-
-    @contextlib.asynccontextmanager
-    async def _using_socket(self):
-        """
-        Ensure that the service sends the first message and its identity to the router.
-        """
-        if not self.ready:
-            self.ready = True
-            if self.socket_type == zmq.DEALER:
-                await super().send(b'', b'')
-        try:
-            async with super()._using_socket():
-                yield
-        except RuntimeRPCError:
-            self.ready = False
-            raise
+        funcs = [(attr, func) for attr, func in funcs if hasattr(func, '__rpc__')]
+        return {func.__rpc__: getattr(self, attr) for attr, func in funcs}
 
     async def dispatch(self, method: str, *args: Any) -> Any:
         """
@@ -492,14 +512,17 @@ class Service(Endpoint):
                 result = await self.dispatch(method, *args)
             except RuntimeRPCError as exc:
                 error = {'message': str(exc), **exc.context}
-                LOGGER.error('Service was unable to execute call', exc_info=exc)
+                await self.logger.error('Service was unable to execute call', exc_info=exc)
             payload = await self.serialize([MessageType.RESPONSE.value, message_id, error, result])
             await self.send(sender_id, payload)
         elif message_type is MessageType.NOTIFICATION:
             method, args = message
             await self.dispatch(method, *args)
         else:
-            LOGGER.warn('Service does not support message', message_type=message_type.name)
+            await self.logger.warn(
+                'Service does not support message',
+                message_type=message_type.name,
+            )
 
 
 @dataclasses.dataclass
@@ -521,6 +544,7 @@ class Router:
         route_task: The background task performing the routing. :class:`Router` implements the
             async context manager protocol, which automatically schedules and cancels this task.
     """
+
     frontend: BaseSocket
     backend: BaseSocket
     route_task: Optional[asyncio.Task] = dataclasses.field(init=False, repr=False)
@@ -543,8 +567,8 @@ class Router:
         self.route_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await self.route_task
-        return (await self.frontend.__aexit__(exc_type, exc, traceback)
-                or await self.backend.__aexit__(exc_type, exc, traceback))
+        await self.frontend.__aexit__(exc_type, exc, traceback)
+        await self.backend.__aexit__(exc_type, exc, traceback)
 
     @classmethod
     def bind(
@@ -554,8 +578,7 @@ class Router:
         frontend_options: Optional[dict] = None,
         backend_options: Optional[dict] = None,
     ) -> 'Router':
-        """ Construct a :class:`Router` whose ends are bound to the provided addresses. """
-        LOGGER.debug('Router listening', frontend=frontend, backend=backend)
+        """Construct a :class:`Router` whose ends are bound to the provided addresses."""
         default = {'options': {zmq.ROUTER_HANDOVER: 1}}
         frontend_options = default | (frontend_options or {})
         backend_options = default | (backend_options or {})
@@ -580,24 +603,32 @@ class Router:
         """
         while True:
             try:
-                sender_id, recipient_id, payload = await recv_socket.recv()
-                if not recipient_id:
-                    LOGGER.debug('Router connected to service', sender_id=sender_id.hex())
+                sender_id, *frames = await recv_socket.recv()
+                if frames == (b'',):
+                    await recv_socket.logger.debug(
+                        'Router connected to service',
+                        sender_id=sender_id.hex(),
+                    )
                     continue
-                LOGGER.debug('Router received message', sender_id=sender_id.hex(),
-                             recipient_id=recipient_id.hex())
+                recipient_id, payload = frames
+                await recv_socket.logger.debug(
+                    'Router received message',
+                    sender_id=sender_id.hex(),
+                    recipient_id=recipient_id.hex(),
+                )
                 if sender_id == recipient_id:
-                    LOGGER.warn('Loopback not allowed', sender_id=sender_id.hex())
+                    await send_socket.logger.warn('Loopback not allowed', sender_id=sender_id.hex())
                     continue
                 await send_socket.send(recipient_id, sender_id, payload)
             except (ValueError, RuntimeRPCError) as exc:
-                LOGGER.error('Router failed to route message', exc_info=exc)
+                await send_socket.logger.error('Router failed to route message', exc_info=exc)
 
 
 class ServiceProtocol(asyncio.DatagramProtocol):
     """
     A bridge between asyncio's UDP support and Runtime's ZMQ-based RPC framework.
     """
+
     def __init__(self, service: Service):
         self.service, self.transport = service, None
 

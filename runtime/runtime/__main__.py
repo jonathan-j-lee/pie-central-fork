@@ -1,10 +1,13 @@
+import asyncio
 import collections
 import functools
-from numbers import Real
 import re
+from numbers import Real
 from typing import Any, Callable, NamedTuple, Optional, Union
+
 import click
-from . import __version__
+
+import runtime
 
 
 class OptionGroupCommand(click.Command):
@@ -41,12 +44,12 @@ class Option(click.Option):
         super().__init__(*args, **kwargs)
         self.group = group
 
-    def process_value(self, ctx: click.Context, value: Optional[Union[str, list[str]]]):
+    def process_value(self, ctx: click.Context, value):
         ctx.ensure_object(dict)
         if value:
             delim = self.type.envvar_list_splitter or ' '
             envvar = f'{ctx.auto_envvar_prefix}_{self.name.upper()}'
-            ctx.obj[envvar] = value if isinstance(value, str) else delim.join(value)
+            ctx.obj[envvar] = delim.join(value) if isinstance(value, (tuple, list)) else value
         return super().process_value(ctx, value)
 
 
@@ -243,12 +246,13 @@ check_positive_cb = lambda _ctx, _param, value: check_positive(value)
     help='ZMQ socket options for services.',
 )
 @click.option('--debug/--no-debug', help='Enable the event loop debugger.')
-@click.version_option(version=__version__, message='%(version)s')
+@click.version_option(version=runtime.__version__, message='%(version)s')
 @click.pass_context
 def cli(ctx, **options):
     """
     Start the Runtime daemon.
     """
+    asyncio.run(runtime.main(ctx, options))
 
 
 if __name__ == '__main__':

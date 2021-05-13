@@ -35,12 +35,15 @@ sphinxcontrib-tikz = '~=0.4'
 [scripts]
 build = 'python setup.py build_ext --inplace'
 clean = 'sh -c "rm -rf build runtime/*.cpython-*.so runtime/*.c runtime/*.cpp"'
-dev = 'python -m runtime'
+dev = 'python -m runtime --debug --log-level debug --log-format pretty'
 servedocs = 'make --directory=docs livehtml'
 lint = 'pylint runtime'
 test = 'pytest -m "not slow"'
 fulltest = 'pytest'
-format = 'black --color --target-version py39 --line-length 100 --skip-string-normalization runtime'
+format = """bash -c '
+black --color --target-version py39 --line-length 100 --skip-string-normalization runtime &&
+isort --profile black runtime
+'"""
 
 [pipenv]
 allow_prereleases = true

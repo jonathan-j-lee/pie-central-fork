@@ -4,9 +4,10 @@ import ctypes
 import functools
 
 cimport cython
-from libcpp cimport bool
 from libc.stdint cimport uint64_t
-from .monitoring import RuntimeBaseException
+from libcpp cimport bool
+
+from .exception import RuntimeBaseException
 
 __all__ = [
     'MessageError',

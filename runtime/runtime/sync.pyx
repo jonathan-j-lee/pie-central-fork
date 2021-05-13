@@ -2,11 +2,13 @@
 
 import contextlib
 import math
-from numbers import Real
 import time
+from numbers import Real
 from typing import Optional
+
 from libcpp cimport bool
-from .monitoring import RuntimeBaseException
+
+from .exception import RuntimeBaseException
 
 __all__ = ['SyncError', 'Mutex']
 
