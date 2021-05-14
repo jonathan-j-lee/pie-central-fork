@@ -8,9 +8,9 @@ python_version = '3.9'
 platform_system = 'Linux'
 
 [packages]
+cbor2 = '~=5.2'
 click = '~=8.0'
 colorama = '~=0.4'
-msgpack = '~=1.0'
 orjson = '~=3.5'
 pylint = '~=2.8'
 pyserial-asyncio = '~=0.5'

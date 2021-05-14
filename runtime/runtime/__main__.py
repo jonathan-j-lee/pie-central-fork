@@ -6,6 +6,8 @@ from numbers import Real
 from typing import Any, Callable, NamedTuple, Optional, Union
 
 import click
+import uvloop
+import zmq
 
 import runtime
 
@@ -65,6 +67,16 @@ class OptionGroupFactory:
         return click.option(*args, **kwargs, group=self.current)
 
 
+@functools.lru_cache(maxsize=16)
+def make_converter(convert):
+    def callback(_ctx, _param, value):
+        if isinstance(value, (tuple, list)):
+            return tuple(convert(element) for element in value)
+        return convert(value)
+
+    return callback
+
+
 def make_multipart_parser(*converters: Callable[[str], Any], delimeter: str = ':'):
     if not converters:
         raise ValueError('not enough converters')
@@ -76,15 +88,10 @@ def make_multipart_parser(*converters: Callable[[str], Any], delimeter: str = ':
         for i, (converter, component) in enumerate(zip(converters, components)):
             try:
                 yield converter(component)
-            except (TypeError, ValueError) as exc:
+            except (TypeError, ValueError, AttributeError) as exc:
                 raise click.BadParameter(f'failed to parse part {i+1}: {exc}')
 
-    def callback(_ctx, _param, value: Union[str, tuple[str]]):
-        if isinstance(value, str):
-            return tuple(convert(value))
-        return tuple(tuple(convert(element)) for element in value)
-
-    return callback
+    return make_converter(lambda value: tuple(convert(value)))
 
 
 def to_int_or_bytes(value: str) -> Union[int, bytes]:
@@ -102,7 +109,7 @@ def check_positive(value: Real):
 
 optgroup = OptionGroupFactory()
 click.option = functools.partial(click.option, cls=Option)
-check_positive_cb = lambda _ctx, _param, value: check_positive(value)
+get_zmq_option = lambda option: getattr(zmq, option.upper())
 
 
 @click.command(
@@ -138,7 +145,7 @@ check_positive_cb = lambda _ctx, _param, value: check_positive(value)
 )
 @optgroup.option(
     '--update-interval',
-    callback=check_positive_cb,
+    callback=make_converter(check_positive),
     type=float,
     default=0.1,
     help='Duration in seconds between Smart Device updates.',
@@ -153,7 +160,7 @@ check_positive_cb = lambda _ctx, _param, value: check_positive(value)
 )
 @optgroup.option(
     '--dev-baud-rate',
-    callback=check_positive_cb,
+    callback=make_converter(check_positive),
     type=int,
     default=115200,
     help=(
@@ -217,29 +224,36 @@ check_positive_cb = lambda _ctx, _param, value: check_positive(value)
 @optgroup.group('process')
 @optgroup.option(
     '--proc-timeout',
-    callback=check_positive_cb,
+    callback=make_converter(check_positive),
     type=float,
     default=2,
     help='Duration in seconds to wait for subprocesses to terminate before sending a kill signal.',
 )
 @optgroup.option(
     '--thread-pool-workers',
-    callback=check_positive_cb,
+    callback=make_converter(check_positive),
     type=int,
     default=1,
     help='Number of threads to spawn for executing blocking code.',
 )
 @optgroup.option(
+    '--service-workers',
+    callback=make_converter(check_positive),
+    type=int,
+    default=5,
+    help='Number of service per client.',
+)
+@optgroup.option(
     '--client-option',
-    callback=make_multipart_parser(str.upper, to_int_or_bytes),
+    callback=make_multipart_parser(get_zmq_option, to_int_or_bytes),
     metavar='OPTION:VALUE',
     multiple=True,
-    default=['RCVTIMEO:1000', 'SNDTIMEO:1000'],
+    default=['SNDTIMEO:1000'],
     help='ZMQ socket options for clients.',
 )
 @optgroup.option(
     '--service-option',
-    callback=make_multipart_parser(str.upper, to_int_or_bytes),
+    callback=make_multipart_parser(get_zmq_option, to_int_or_bytes),
     metavar='OPTION:VALUE',
     multiple=True,
     default=['SNDTIMEO:1000'],
@@ -252,8 +266,9 @@ def cli(ctx, **options):
     """
     Start the Runtime daemon.
     """
+    uvloop.install()
     asyncio.run(runtime.main(ctx, options))
 
 
 if __name__ == '__main__':
-    cli(prog_name='python -m runtime')  # pylint: disable=no-value-for-parameter
+    cli(prog_name=f'python -m {__package__}')  # pylint: disable=no-value-for-parameter

@@ -118,8 +118,8 @@ All bound sockets are shown in the following table:
   | Transport | Port/Path            | Binding Process | ZMQ Type   | Description                 |
   +===========+======================+=================+============+=============================+
   | TCP       | 6000                 | ``server``      | ``ROUTER`` | Clients issue synchronous   |
-  |           +----------------------+                 |            | RPC requests to the TCP     |
-  |           | ``/tmp/rt-rpc.sock`` |                 |            | frontend, which the backend |
+  +-----------+----------------------+                 |            | RPC requests to the TCP     |
+  | UNIX      | ``/tmp/rt-rpc.sock`` |                 |            | frontend, which the backend |
   +-----------+----------------------+-----------------+------------+ routes. Sockets connecting  |
   | UNIX      | ``/tmp/rt-srv.sock`` | ``server``      | ``ROUTER`` | to either end should have   |
   |           |                      |                 |            | the ``REQ`` type.           |

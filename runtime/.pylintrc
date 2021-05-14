@@ -228,6 +228,7 @@ generated-members=
         zmq.SNDTIMEO,
         zmq.RCVTIMEO,
         zmq.PROBE_ROUTER,
+        zmq.FORWARDER,
 
 # Tells whether missing members accessed in mixin class should be ignored. A
 # mixin class is detected if its name ends with "mixin" (case insensitive).

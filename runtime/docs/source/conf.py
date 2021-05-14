@@ -30,6 +30,8 @@ author = 'Pioneers in Engineering'
 extensions = [
     'sphinx_rtd_theme',
     'sphinxcontrib.tikz',
+    'sphinx.ext.autodoc',
+    'sphinx.ext.intersphinx',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -63,3 +65,7 @@ html_css_files = [
 
 tikz_latex_preamble = r"""
 """
+
+# -- Intersphinx Options ------------------------------------------------------
+
+intersphinx_mapping = {'python': ('https://docs.python.org/3', None)}

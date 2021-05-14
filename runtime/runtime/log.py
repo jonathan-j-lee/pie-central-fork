@@ -1,39 +1,50 @@
 import asyncio
+import contextlib
 import dataclasses
 import functools
 import logging
-from typing import Union
+from typing import NoReturn, Optional
 
 import orjson as json
 import structlog
 import structlog.processors
 import structlog.stdlib
-import zmq.asyncio
 
 from . import rpc
 from .exception import RuntimeBaseException
 
+__all__ = ['null_logger', 'LogPublisher', 'configure']
+
+
+def drop(_logger: structlog.BoundLogger, _method: str, _event: dict):
+    raise structlog.DropEvent
+
+
+null_logger = structlog.get_logger(processors=[drop])
+
 
 @dataclasses.dataclass
-class LogRelay(rpc.Client):
-    queue: asyncio.Queue[tuple[str, dict]] = dataclasses.field(
+class LogPublisher(rpc.Client):
+    send_queue: asyncio.Queue[tuple[str, dict]] = dataclasses.field(
         default_factory=lambda: asyncio.Queue(512)
     )
     loop: asyncio.AbstractEventLoop = dataclasses.field(default_factory=asyncio.get_running_loop)
 
     def __call__(self, logger: structlog.BoundLogger, method: str, event: dict):
-        self.loop.call_soon_threadsafe(self.queue.put_nowait, (method, event))
+        self.loop.call_soon_threadsafe(self.send_queue.put_nowait, (method, dict(event)))
         return event
 
-    def reset(self):
-        super().reset()
-        self.workers.add(asyncio.create_task(self.forward(), name='forward'))
+    async def __aenter__(self):
+        result = await super().__aenter__()
+        worker = asyncio.create_task(self._send_forever(), name='send')
+        self.stack.callback(worker.cancel)
+        return result
 
-    async def forward(self):
+    async def _send_forever(self) -> NoReturn:
         while True:
-            method, event = await self.queue.get()
+            method, event = await self.send_queue.get()
             with contextlib.suppress(asyncio.TimeoutError):
-                await self.call[method](event, service_or_topic=method.encode(), notification=True)
+                await self.call[method](event, address=method.encode(), notification=True)
 
 
 @functools.lru_cache(maxsize=16)
@@ -53,18 +64,24 @@ def filter_by_level(level: str):
     return processor
 
 
-def configure(relay: LogRelay, fmt: str = 'json', level: str = 'INFO'):
+def add_exception_context(_logger: structlog.BoundLogger, _method: str, event: dict):
+    exception = event.get('exc_info')
+    if isinstance(exception, RuntimeBaseException):
+        event = exception.context | event
+    return event
+
+
+def configure(publisher: Optional[LogPublisher] = None, fmt: str = 'json', level: str = 'INFO'):
     logging.captureWarnings(True)
+    renderers = [publisher] if publisher else []
     if fmt == 'pretty':
-        renderers = [
-            structlog.processors.ExceptionPrettyPrinter(),
-            structlog.dev.ConsoleRenderer(pad_event=40),
-        ]
+        renderers.append(structlog.processors.ExceptionPrettyPrinter())
+        renderers.append(structlog.dev.ConsoleRenderer(pad_event=40))
         logger_factory = structlog.PrintLoggerFactory()
     else:
-        renderers = [
+        renderers.append(
             structlog.processors.JSONRenderer(serializer=json.dumps),
-        ]
+        )
         logger_factory = structlog.BytesLoggerFactory()
 
     structlog.configure(
@@ -73,10 +90,10 @@ def configure(relay: LogRelay, fmt: str = 'json', level: str = 'INFO'):
         processors=[
             structlog.threadlocal.merge_threadlocal_context,
             structlog.processors.add_log_level,
+            add_exception_context,
             filter_by_level(level),
             structlog.processors.format_exc_info,
             structlog.processors.TimeStamper(fmt='iso'),
-            relay,
             *renderers,
         ],
         logger_factory=logger_factory,

@@ -20,7 +20,7 @@ class RuntimeBufferError(RuntimeBaseException):
 
 class Parameter(NamedTuple):
     name: str
-    type: type
+    ctype: type
     lower: Real = float('-inf')
     upper: Real = float('inf')
     readable: bool = True
@@ -29,7 +29,7 @@ class Parameter(NamedTuple):
 
     @property
     def platform_type(self) -> type:
-        return ctypes.c_float if self.type is ctypes.c_double else self.type
+        return ctypes.c_float if self.ctype is ctypes.c_double else self.ctype
 
 
 class BaseStructure(ctypes.LittleEndianStructure):
@@ -183,7 +183,7 @@ class Buffer(BaseStructure):
             if not hasattr(self.write, name):
                 raise RuntimeBufferError('parameter is not writeable', param=name)
             param = self._params[self._param_indices[name]]
-            if param.type in (ctypes.c_float, ctypes.c_double):
+            if param.platform_type in (ctypes.c_float, ctypes.c_double):
                 value = self._clamp_within_limits(param, value)
             setattr(self.write, name, value)
             self.write._timestamp = time.time()
