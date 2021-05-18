@@ -1,17 +1,32 @@
+import collections.abc
 import contextlib
 import ctypes
+import dataclasses
 import errno
+import functools
+import io
+import re
 import time
 import warnings
 from multiprocessing.shared_memory import SharedMemory
 from numbers import Real
-from typing import Any, Callable, Iterable, NamedTuple, Optional
+from pathlib import Path
+from typing import Any, Callable, Iterable, NamedTuple, Optional, Union
+
+import yaml
 
 from .exception import RuntimeBaseException
 from .messaging import Message, MessageError, ParameterMap
 from .sync import Mutex, SyncError
 
-__all__ = ['RuntimeBufferError', 'Parameter', 'DeviceUID', 'Buffer', 'DeviceBuffer']
+__all__ = [
+    'RuntimeBufferError',
+    'Parameter',
+    'DeviceUID',
+    'Buffer',
+    'DeviceBuffer',
+    'BufferManager',
+]
 
 
 class RuntimeBufferError(RuntimeBaseException):
@@ -25,17 +40,29 @@ class Parameter(NamedTuple):
     upper: Real = float('inf')
     readable: bool = True
     writeable: bool = False
-    subscribed: bool = False
+    subscribed: bool = True
 
     @property
     def platform_type(self) -> type:
         return ctypes.c_float if self.ctype is ctypes.c_double else self.ctype
 
+    @classmethod
+    def get_ctype(self, type_specifier: str) -> type:
+        pattern, dimensions = re.compile(r'(\[(\d+)\])$'), []
+        while match := pattern.search(type_specifier):
+            suffix, dimension = match.groups()
+            type_specifier = type_specifier.removesuffix(suffix)
+            dimensions.append(int(dimension))
+        ctype = getattr(ctypes, f'c_{type_specifier}')
+        for dim in dimensions[::-1]:
+            ctype *= dim
+        return ctype
+
 
 class BaseStructure(ctypes.LittleEndianStructure):
     def __repr__(self) -> str:
         fields = ', '.join(f'{name}={getattr(self, name)!r}' for name, _ in self._fields_)
-        return f'{self.__class__.__name__}({fields})'
+        return f'{type(self).__name__}({fields})'
 
     @classmethod
     def get_field_view(cls, base_view: memoryview, field_name: str) -> memoryview:
@@ -43,7 +70,40 @@ class BaseStructure(ctypes.LittleEndianStructure):
         return base_view[field.offset : field.offset + field.size]
 
 
+@functools.lru_cache(maxsize=64)
+def make_bitmask(bits: int) -> int:
+    """Construct a bitmask with the specified bitlength.
+
+    Example:
+        >>> make_bitmask(0)
+        Traceback (most recent call last):
+          ...
+        ValueError: must provide a positive number of bits
+        >>> bin(make_bitmask(1))
+        '0b1'
+        >>> bin(make_bitmask(5))
+        '0b11111'
+    """
+    if bits <= 0:
+        raise ValueError('must provide a positive number of bits')
+    return (1 << bits) - 1
+
+
 class DeviceUID(BaseStructure):
+    """A unique device identifier.
+
+    Examples:
+        >>> int(DeviceUID(0xffff, 0xee, 0xc0debeef_deadbeef)) == 0xffff_ee_c0debeef_deadbeef
+        True
+        >>> uid = DeviceUID.from_int(0xffff_ee_c0debeef_deadbeef)
+        >>> hex(uid.device_id)
+        '0xffff'
+        >>> hex(uid.year)
+        '0xee'
+        >>> hex(uid.random)
+        '0xc0debeefdeadbeef'
+    """
+
     _fields_ = [
         ('device_id', ctypes.c_uint16),
         ('year', ctypes.c_uint8),
@@ -53,9 +113,17 @@ class DeviceUID(BaseStructure):
     def __int__(self) -> int:
         """Serialize this UID as a 96-bit integer."""
         uid = self.device_id
-        uid = (uid << 8 * self.__class__.year.size) | self.year
-        uid = (uid << 8 * self.__class__.random.size) | self.random
+        uid = (uid << 8 * type(self).year.size) | self.year
+        uid = (uid << 8 * type(self).random.size) | self.random
         return uid
+
+    @classmethod
+    def from_int(cls, uid: int) -> 'DeviceUID':
+        """Parse a device UID in integer format into its constituent fields."""
+        random, uid = uid & make_bitmask(8 * cls.random.size), uid >> 8 * cls.random.size
+        year, uid = uid & make_bitmask(8 * cls.year.size), uid >> 8 * cls.year.size
+        device_id = uid & make_bitmask(8 * cls.device_id.size)
+        return DeviceUID(device_id, year, random)
 
 
 class DeviceControlBlock(BaseStructure):
@@ -79,7 +147,7 @@ class Buffer(BaseStructure):
         return type(name, (BaseStructure,), {'_fields_': fields})
 
     @classmethod
-    def make_type(cls, name: str, params: list[Parameter], *extra_fields) -> type:
+    def make_type(cls, name: str, params: list[Parameter], *extra_fields, **options) -> type:
         readable_params = [param for param in params if param.readable]
         read_block_type = cls._make_block_type(f'{name}ReadBlock', readable_params)
         writeable_params = [param for param in params if param.writeable]
@@ -91,17 +159,17 @@ class Buffer(BaseStructure):
                 ('write', write_block_type),
                 *extra_fields,
             ],
-            '_params': params,
-            '_param_indices': {param.name: i for i, param in enumerate(params)},
+            'params': params,
+            'param_indices': {param.name: i for i, param in enumerate(params)},
         }
-        return type(name, (cls,), attrs)
+        return type(name.title().replace('-', ''), (cls,), options | attrs)
 
     def _make_param_map(self, view: memoryview, param_block_name: str):
         param_block = getattr(self, param_block_name)
         param_block_view = self.get_field_view(view, param_block_name)
         param_map = ParameterMap()
         for name, _ in param_block._fields_:
-            index = self._param_indices.get(name)
+            index = self.param_indices.get(name)
             if index is not None:
                 field_view = param_block.get_field_view(param_block_view, name)
                 param_map.set_param(index, field_view)
@@ -152,6 +220,11 @@ class Buffer(BaseStructure):
             shm.unlink()
             shm.close()
 
+    @classmethod
+    def unlink_all(cls, shm_path: Path = Path('/dev/shm')):
+        for path in shm_path.iterdir():
+            cls.unlink(path.name)
+
     @contextlib.contextmanager
     def operation(self):
         try:
@@ -171,7 +244,8 @@ class Buffer(BaseStructure):
             except AttributeError as exc:
                 raise RuntimeBufferError('parameter is not readable', param=param) from exc
 
-    def _clamp_within_limits(self, param: Parameter, value: Real) -> Real:
+    @staticmethod
+    def _clamp_within_limits(param: Parameter, value: Real) -> Real:
         if value < param.lower:
             warnings.warn(f'{param.name} value exceeded lowerbound ({value} < {param.lower})')
         if value > param.upper:
@@ -182,7 +256,7 @@ class Buffer(BaseStructure):
         with self.operation():
             if not hasattr(self.write, name):
                 raise RuntimeBufferError('parameter is not writeable', param=name)
-            param = self._params[self._param_indices[name]]
+            param = self.params[self.param_indices[name]]
             if param.platform_type in (ctypes.c_float, ctypes.c_double):
                 value = self._clamp_within_limits(param, value)
             setattr(self.write, name, value)
@@ -194,29 +268,39 @@ class Buffer(BaseStructure):
 
 
 class DeviceBuffer(Buffer):
+    subscription_interval: Real = 0.08
+    write_interval: Real = 0.08
+    heartbeat_interval: Real = 1
+
     @classmethod
-    def make_type(cls, name: str, params: list[Parameter], *extra_fields) -> type:
-        return super().make_type(name, params, ('control', DeviceControlBlock), *extra_fields)
+    def make_type(cls, name: str, params: list[Parameter], *extra_fields, **options) -> type:
+        return super().make_type(
+            name,
+            params,
+            ('control', DeviceControlBlock),
+            *extra_fields,
+            **options,
+        )
 
     @classmethod
     def from_bitmap(cls, bitmap: int) -> Iterable[tuple[int, Parameter]]:
         for i in range(Message.MAX_PARAMS):
             if (bitmap >> i) & 0b1:
-                yield i, cls._params[i]
+                yield i, cls.params[i]
 
     @classmethod
     def to_bitmap(cls, params: list[str], predicate: Callable[[Parameter], bool] = None) -> int:
         bitmap = DeviceControlBlock.RESET
         for param in params:
-            index = cls._param_indices[param]
-            if predicate is None or predicate(cls._params[index]):
+            index = cls.param_indices[param]
+            if predicate is None or predicate(cls.params[index]):
                 bitmap |= 1 << index
         return bitmap
 
     def set_value(self, param: str, value):
         with self.operation():
             super().set_value(param, value)
-            self.control.write |= 1 << self._param_indices[param]
+            self.control.write |= 1 << self.param_indices[param]
 
     def set_read(self, params: list[str]):
         with self.operation():
@@ -276,3 +360,78 @@ class DeviceBuffer(Buffer):
     def subscription(self) -> list[str]:
         with self.operation():
             return [param.name for _, param in self.from_bitmap(self.control.subscription)]
+
+
+BufferKey = Union[tuple[str, int], int, DeviceUID]
+
+
+@dataclasses.dataclass
+class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
+    buffers: dict[BufferKey, Buffer] = dataclasses.field(default_factory=dict)
+    catalog: dict[str, type] = dataclasses.field(default_factory=dict)
+    stack: contextlib.ExitStack = dataclasses.field(default_factory=contextlib.ExitStack)
+
+    def __enter__(self):
+        self.stack.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return self.stack.__exit__(exc_type, exc, traceback)
+
+    def __getitem__(self, key: BufferKey) -> Buffer:
+        return self.open(key, create=False)
+
+    def __iter__(self):
+        return iter(self.buffers)
+
+    def __len__(self):
+        return len(self.buffers)
+
+    def _normalize_key(self, key: BufferKey) -> tuple[str, int]:
+        if isinstance(key, int):
+            key = DeviceUID.from_int(key)
+        if isinstance(key, DeviceUID):
+            key = self.find_device(key.device_id), int(key)
+        return key
+
+    def open(self, key: BufferKey, create: bool = True) -> Buffer:
+        type_name, uid = key = self._normalize_key(key)
+        buffer = self.buffers.get(key)
+        if not buffer:
+            buffer_type = self.catalog[type_name]
+            buffer = buffer_type.open(f'{type_name}-{uid}', create=create)
+            buffer = self.buffers[key] = self.stack.enter_context(buffer)
+            self.stack.callback(self.buffers.pop, key)
+        return buffer
+
+    def create(self, key: BufferKey) -> Buffer:
+        return self.open(key, create=True)
+
+    def find_device(self, device_id: int) -> str:
+        for type_name, buffer_type in self.catalog.items():
+            if getattr(buffer_type, 'device_id', None) == device_id:
+                return type_name
+        raise RuntimeBufferError('device not found', device_id=device_id)
+
+    def register_type(self, type_name: str, params: list[Parameter], **options):
+        device_id = options.get('device_id')
+        if device_id is None:
+            buffer_type_factory = Buffer.make_type
+        else:
+            try:
+                self.find_device(device_id)
+            except RuntimeBufferError:
+                pass
+            else:
+                raise RuntimeBufferError('duplicate Smart Device ID', device_id=device_id)
+            buffer_type_factory = DeviceBuffer.make_type
+        self.catalog[type_name] = buffer_type_factory(type_name, params, **options)
+
+    def load_catalog(self, stream: io.TextIOBase):
+        catalog = yaml.load(stream, Loader=yaml.SafeLoader)
+        for type_name, options in catalog.items():
+            params = []
+            for param in options.pop('params', None) or []:
+                param['ctype'] = Parameter.get_ctype(param.pop('type'))
+                params.append(Parameter(**param))
+            self.register_type(type_name, params, **options)

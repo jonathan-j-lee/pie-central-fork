@@ -3,6 +3,7 @@ import collections
 import functools
 import re
 from numbers import Real
+from pathlib import Path
 from typing import Any, Callable, NamedTuple, Optional, Union
 
 import click
@@ -151,6 +152,13 @@ get_zmq_option = lambda option: getattr(zmq, option.upper())
     help='Duration in seconds between Smart Device updates.',
 )
 @optgroup.group('device')
+@optgroup.option(
+    '--dev-catalog',
+    type=click.Path(dir_okay=False, exists=True),
+    default=(Path(__file__).parent / 'catalog.yaml').resolve(),
+    show_default=True,
+    help='Device catalog file.',
+)
 @optgroup.option(
     '--dev-name',
     callback=make_multipart_parser(str, lambda value: check_positive(int(value))),

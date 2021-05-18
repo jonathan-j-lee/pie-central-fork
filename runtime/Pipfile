@@ -18,6 +18,7 @@ pyudev = '~=0.22'
 pyzmq = '~=22.0'
 structlog = '~=21.1'
 uvloop = '~=0.15'
+PyYAML = '~=5.4'
 
 [dev-packages]
 black = '~=21.5b'

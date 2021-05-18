@@ -1,9 +1,21 @@
 import ctypes
 import multiprocessing
+import io
 import time
 import warnings
+from pathlib import Path
+
 import pytest
-from runtime.buffer import Parameter, DeviceBuffer, DeviceUID, RuntimeBufferError
+import yaml
+
+from runtime.buffer import (
+    RuntimeBufferError,
+    Parameter,
+    DeviceUID,
+    Buffer,
+    DeviceBuffer,
+    BufferManager,
+)
 from runtime.messaging import Message
 
 
@@ -49,16 +61,52 @@ def device_uid():
     yield DeviceUID(0xffff, 0xee, 0xc0debeef_deadbeef)
 
 
+@pytest.fixture
+def buffer_manager():
+    catalog = {
+        'example-device': {
+            'device_id': 0x80,
+            'subscription_interval': 0.04,
+            'heartbeat_interval': 2,
+            'params': [
+                {
+                    'name': 'duty_cycle',
+                    'type': 'float',
+                    'writeable': True,
+                    'lower': -1,
+                    'upper': 1,
+                },
+                {
+                    'name': 'enabled',
+                    'type': 'bool',
+                    'readable': False,
+                    'writeable': True,
+                    'subscribed': False,
+                },
+            ],
+        },
+        'camera': {
+            'params': [
+                {
+                    'name': 'rgb',
+                    'type': 'uint8[128][128][3]',
+                },
+            ]
+        },
+    }
+    catalog_file = io.StringIO(yaml.dump(catalog))
+    with BufferManager() as manager:
+        manager.load_catalog(catalog_file)
+        yield manager
+    Buffer.unlink_all()
+
+
 def test_repr(device_buffer):
     uid1 = device_buffer.control.uid
     uid2 = eval(repr(uid1))
     assert uid1.device_id == uid2.device_id
     assert uid1.year == uid2.year
     assert uid1.random == uid2.random
-
-
-def test_uid_to_int(device_uid):
-    assert int(device_uid) == 0xffff_ee_c0debeef_deadbeef
 
 
 def test_update(mocker, device_buffer):
@@ -206,3 +254,56 @@ def test_upperbound_exceeded(device_buffer):
         device_buffer.set_value('pos', 1.01)
     assert device_buffer.write.pos == pytest.approx(1)
     assert len(capture) == 1
+
+
+def test_type_registration(buffer_manager):
+    ExampleDevice = buffer_manager.catalog['example-device']
+    assert issubclass(ExampleDevice, DeviceBuffer)
+    assert ExampleDevice.device_id == 0x80
+    assert ExampleDevice.subscription_interval == pytest.approx(0.04)
+    assert ExampleDevice.write_interval == pytest.approx(0.08)
+    assert ExampleDevice.heartbeat_interval == pytest.approx(2)
+    assert ExampleDevice.params == [
+        Parameter('duty_cycle', ctypes.c_float, writeable=True, lower=-1, upper=1),
+        Parameter('enabled', ctypes.c_bool, readable=False, writeable=True, subscribed=False),
+    ]
+    Camera = buffer_manager.catalog['camera']
+    assert issubclass(Camera, Buffer) and not issubclass(Camera, DeviceBuffer)
+    assert Camera.params == [Parameter('rgb', ctypes.c_uint8 * 128 * 128 * 3)]
+
+
+def test_duplicate_registration(buffer_manager):
+    with pytest.raises(RuntimeBufferError):
+        buffer_manager.register_type('duplicate-device', [], device_id=0x80)
+
+
+def test_key_equivalence(buffer_manager):
+    buf1 = buffer_manager.create(0x80_00_00000000_00000000)
+    buf2 = buffer_manager[DeviceUID(0x80, 0, 0)]
+    buf3 = buffer_manager['example-device', 0x80_00_00000000_00000000]
+    assert buf1 is buf2 is buf3
+
+
+def test_buffer_access_error(buffer_manager):
+    with pytest.raises(RuntimeBufferError):
+        _ = buffer_manager[0x80_00_00000000_00000000]
+    with pytest.raises(RuntimeBufferError):
+        buffer_manager.create(0x81_00_00000000_00000000)
+    assert len(buffer_manager) == 0
+
+
+def test_shm_open_close(buffer_manager):
+    buf = buffer_manager.create(0x80_00_00000000_00000000)
+    assert len(buffer_manager) == 1
+    assert list(buffer_manager.items()) == [(('example-device', 0x80_00_00000000_00000000), buf)]
+    path = Path('/dev/shm/example-device-604462909807314587353088')
+    assert path.exists()
+    assert buf.valid
+    buffer_manager.stack.close()
+    assert len(buffer_manager) == 0
+    assert path.exists()
+    buf2 = buffer_manager[0x80_00_00000000_00000000]
+    buf3 = buffer_manager.create(0x80_00_00000000_00000000)
+    assert buf2 is buf3
+    assert buf2.valid
+    assert buf is not buf2
