@@ -2,6 +2,7 @@ import asyncio
 import dataclasses
 import functools
 import multiprocessing
+import random
 import signal
 import threading
 import time
@@ -14,32 +15,28 @@ import zmq.asyncio
 from runtime import log, process, rpc
 from runtime.exception import EmergencyStopException
 
-
-@pytest.fixture(autouse=True)
-def logger():
-    log.configure(fmt='pretty')
-    process.logger = structlog.get_logger()
+from test_rpc import logger
 
 
 @pytest.fixture
 async def endpoints():
+    get_random_port = lambda: random.randrange(3000, 10000)
     options = {
         'debug': True,
         'thread_pool_workers': 3,
-        'log_frontend': ['tcp://*:4042'],
-        'log_backend': ['tcp://*:4043'],
+        'log_frontend': [f'tcp://*:{get_random_port()}'],
+        'log_backend': [f'tcp://*:{get_random_port()}'],
         'log_format': 'json',
         'log_level': 'info',
         'client_option': [(zmq.SNDTIMEO, 1000)],
         'service_option': [],
         'service_workers': 4,
-        'router_frontend': ['tcp://*:4040'],
-        'router_backend': ['tcp://*:4041'],
-        'update_addr': 'udp://localhost:4043',
-        'control_addr': 'udp://localhost:4044',
+        'router_frontend': [f'tcp://*:{get_random_port()}'],
+        'router_backend': [f'tcp://*:{get_random_port()}'],
+        'update_addr': f'udp://localhost:{get_random_port()}',
+        'control_addr': f'udp://localhost:{get_random_port()}',
     }
     async with process.EndpointManager('test', options) as endpoints:
-        await endpoints.make_log_publisher()
         proxy = await endpoints.make_log_proxy()
         await endpoints.make_router()
         yield endpoints
@@ -76,7 +73,8 @@ async def test_process_run():
         ready.set()
         done.wait()
     ready, done = multiprocessing.Event(), multiprocessing.Event()
-    proc = asyncio.create_task(process.run_process(target=target, args=(ready, done)))
+    proc = process.AsyncProcess(target=target, args=(ready, done))
+    proc = asyncio.create_task(process.run_process(proc))
     await asyncio.to_thread(ready.wait)
     assert len(multiprocessing.active_children()) == 1
     done.set()
@@ -93,8 +91,8 @@ def indefinite_target(handle_terminate):
 @pytest.mark.slow
 @pytest.mark.asyncio
 async def test_process_terminate():
-    proc = process.run_process(target=indefinite_target, args=(lambda *_: exit(0xf),))
-    proc = asyncio.create_task(proc)
+    proc = process.AsyncProcess(target=indefinite_target, args=(lambda *_: exit(0xf),))
+    proc = asyncio.create_task(process.run_process(proc))
     with pytest.raises(asyncio.TimeoutError):
         await asyncio.wait_for(proc, 0.3)
     await asyncio.sleep(0.1)
@@ -105,8 +103,8 @@ async def test_process_terminate():
 @pytest.mark.slow
 @pytest.mark.asyncio
 async def test_process_kill():
-    proc = process.run_process(target=indefinite_target, args=(lambda *_: None,), timeout=0.3)
-    proc = asyncio.create_task(proc)
+    proc = process.AsyncProcess(target=indefinite_target, args=(lambda *_: None,))
+    proc = asyncio.create_task(process.run_process(proc, terminate_timeout=0.3))
     with pytest.raises(asyncio.TimeoutError):
         await asyncio.wait_for(proc, 0.3)
     await asyncio.sleep(0.1)
@@ -117,8 +115,10 @@ async def test_process_kill():
 async def test_process_estop():
     def target():
         raise EmergencyStopException
+    proc = process.AsyncProcess(target=target)
+    proc.start()
     with pytest.raises(EmergencyStopException):
-        await process.run_process(target=target)
+        await process.run_process(proc)
 
 
 def test_loop_cleanup():
@@ -166,7 +166,7 @@ async def test_process_cleanup():
         process.clean_up()
 
     counter = multiprocessing.Value('i', 0)
-    await process.run_process(target=target, args=(counter,))
+    await process.run_process(process.AsyncProcess(target=target, args=(counter,)))
     assert counter.value == 4
 
 
@@ -187,11 +187,12 @@ async def test_routing(endpoints):
     assert await client.call.add(1, 2, address=b'test-service') == 3
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_log_proxy(endpoints):
     handler = LogHandler()
     subscriber = await endpoints.make_log_subscriber(handler)
-    subscriber.logger = log.null_logger
+    subscriber.logger = log.get_null_logger()
     await asyncio.sleep(0.3)
     logger = structlog.get_logger()
     await logger.debug('debug msg')

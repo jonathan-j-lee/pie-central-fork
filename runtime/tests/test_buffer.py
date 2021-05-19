@@ -98,7 +98,7 @@ def buffer_manager():
     with BufferManager() as manager:
         manager.load_catalog(catalog_file)
         yield manager
-    Buffer.unlink_all()
+    BufferManager.unlink_all()
 
 
 def test_repr(device_buffer):
@@ -278,8 +278,8 @@ def test_duplicate_registration(buffer_manager):
 
 
 def test_key_equivalence(buffer_manager):
-    buf1 = buffer_manager.create(0x80_00_00000000_00000000)
-    buf2 = buffer_manager[DeviceUID(0x80, 0, 0)]
+    buf1 = buffer_manager.get_or_create(0x80_00_00000000_00000000)
+    buf2 = buffer_manager.get_or_create(DeviceUID(0x80, 0, 0))
     buf3 = buffer_manager['example-device', 0x80_00_00000000_00000000]
     assert buf1 is buf2 is buf3
 
@@ -288,12 +288,12 @@ def test_buffer_access_error(buffer_manager):
     with pytest.raises(RuntimeBufferError):
         _ = buffer_manager[0x80_00_00000000_00000000]
     with pytest.raises(RuntimeBufferError):
-        buffer_manager.create(0x81_00_00000000_00000000)
+        buffer_manager.get_or_create(0x81_00_00000000_00000000)
     assert len(buffer_manager) == 0
 
 
 def test_shm_open_close(buffer_manager):
-    buf = buffer_manager.create(0x80_00_00000000_00000000)
+    buf = buffer_manager.get_or_create(0x80_00_00000000_00000000)
     assert len(buffer_manager) == 1
     assert list(buffer_manager.items()) == [(('example-device', 0x80_00_00000000_00000000), buf)]
     path = Path('/dev/shm/example-device-604462909807314587353088')
@@ -303,7 +303,7 @@ def test_shm_open_close(buffer_manager):
     assert len(buffer_manager) == 0
     assert path.exists()
     buf2 = buffer_manager[0x80_00_00000000_00000000]
-    buf3 = buffer_manager.create(0x80_00_00000000_00000000)
+    buf3 = buffer_manager.get_or_create(0x80_00_00000000_00000000)
     assert buf2 is buf3
     assert buf2.valid
     assert buf is not buf2

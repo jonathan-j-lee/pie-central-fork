@@ -59,7 +59,14 @@ UDP_ADDR = 'udp://127.0.0.1:6060'
 
 @pytest.fixture(autouse=True)
 def logger():
-    log.configure()
+    # Each test opens and closes a new async event loop. Since these loggers cache the first loop
+    # that they use (with ``asyncio.get_running_loop``), we need to reconstruct these loggers to
+    # prevent them from interacting with a closed event loop.
+    log.configure(fmt='pretty')
+    log.LogPublisher.logger = log.get_null_logger()
+    rpc.Endpoint.logger = rpc.Router.logger = structlog.get_logger(
+        wrapper_class=structlog.stdlib.AsyncBoundLogger,
+    )
 
 
 @pytest.fixture

@@ -69,7 +69,8 @@ cdef class Message:
     """
     MAX_PARAMS = MAX_PARAMETERS
     MAX_SIZE = MESSAGE_MAX_SIZE
-    ENCODE_MAX_SIZE = ENCODING_MAX_SIZE
+    MAX_ENCODING_SIZE = ENCODING_MAX_SIZE
+    DELIM = bytes([DELIMETER])
     cdef _Message buf
 
     @property

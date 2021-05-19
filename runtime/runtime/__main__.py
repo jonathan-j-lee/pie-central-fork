@@ -50,9 +50,7 @@ class Option(click.Option):
     def process_value(self, ctx: click.Context, value):
         ctx.ensure_object(dict)
         if value:
-            delim = self.type.envvar_list_splitter or ' '
-            envvar = f'{ctx.auto_envvar_prefix}_{self.name.upper()}'
-            ctx.obj[envvar] = delim.join(value) if isinstance(value, (tuple, list)) else value
+            ctx.obj[f'{ctx.auto_envvar_prefix}_{self.name}'.upper()] = value
         return super().process_value(ctx, value)
 
 
@@ -155,7 +153,7 @@ get_zmq_option = lambda option: getattr(zmq, option.upper())
 @optgroup.option(
     '--dev-catalog',
     type=click.Path(dir_okay=False, exists=True),
-    default=(Path(__file__).parent / 'catalog.yaml').resolve(),
+    default=(Path(__file__).parent / 'catalog.yaml'),
     show_default=True,
     help='Device catalog file.',
 )

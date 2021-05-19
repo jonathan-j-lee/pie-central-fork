@@ -11,7 +11,7 @@ import warnings
 from multiprocessing.shared_memory import SharedMemory
 from numbers import Real
 from pathlib import Path
-from typing import Any, Callable, Iterable, NamedTuple, Optional, Union
+from typing import Any, Callable, ClassVar, Iterable, NamedTuple, Optional, Union
 
 import yaml
 
@@ -164,20 +164,9 @@ class Buffer(BaseStructure):
         }
         return type(name.title().replace('-', ''), (cls,), options | attrs)
 
-    def _make_param_map(self, view: memoryview, param_block_name: str):
-        param_block = getattr(self, param_block_name)
-        param_block_view = self.get_field_view(view, param_block_name)
-        param_map = ParameterMap()
-        for name, _ in param_block._fields_:
-            index = self.param_indices.get(name)
-            if index is not None:
-                field_view = param_block.get_field_view(param_block_view, name)
-                param_map.set_param(index, field_view)
-        return param_map
-
     @classmethod
     @contextlib.contextmanager
-    def open(cls, name: str, create: bool = True):
+    def open(cls, name: str, *, create: bool = True):
         """
         Note::
             When two processes attempt to create this buffer simultaneously,
@@ -199,9 +188,8 @@ class Buffer(BaseStructure):
         except FileExistsError:
             shm, create_success = SharedMemory(name), False
         buffer = cls.from_buffer(shm.buf[Mutex.SIZE :])
+        buffer.shm = shm
         buffer.mutex = Mutex(shm.buf[: Mutex.SIZE], shared=True)
-        buffer.read_param_map = buffer._make_param_map(shm.buf[Mutex.SIZE :], 'read')
-        buffer.write_param_map = buffer._make_param_map(shm.buf[Mutex.SIZE :], 'write')
         if create_success:
             buffer.mutex.initialize()
         if create:
@@ -220,11 +208,6 @@ class Buffer(BaseStructure):
             shm.unlink()
             shm.close()
 
-    @classmethod
-    def unlink_all(cls, shm_path: Path = Path('/dev/shm')):
-        for path in shm_path.iterdir():
-            cls.unlink(path.name)
-
     @contextlib.contextmanager
     def operation(self):
         try:
@@ -237,10 +220,11 @@ class Buffer(BaseStructure):
             with SyncError.suppress(errno.EPERM):
                 self.mutex.release()
 
-    def get_value(self, param: str):
+    def get_value(self, param: str, *, read_block: bool = True):
         with self.operation():
             try:
-                return getattr(self.read, param)
+                block = self.read if read_block else self.write
+                return getattr(block, param)
             except AttributeError as exc:
                 raise RuntimeBufferError('parameter is not readable', param=param) from exc
 
@@ -252,15 +236,16 @@ class Buffer(BaseStructure):
             warnings.warn(f'{param.name} value exceeded upperbound ({value} > {param.upper})')
         return max(param.lower, min(param.upper, value))
 
-    def set_value(self, name: str, value):
+    def set_value(self, name: str, value, *, write_block: bool = True):
         with self.operation():
-            if not hasattr(self.write, name):
+            block = self.write if write_block else self.read
+            if not hasattr(block, name):
                 raise RuntimeBufferError('parameter is not writeable', param=name)
             param = self.params[self.param_indices[name]]
             if param.platform_type in (ctypes.c_float, ctypes.c_double):
                 value = self._clamp_within_limits(param, value)
-            setattr(self.write, name, value)
-            self.write._timestamp = time.time()
+            setattr(block, name, value)
+            block._timestamp = time.time()
 
     def set_valid(self, valid: bool = True):
         with self.mutex:
@@ -271,6 +256,25 @@ class DeviceBuffer(Buffer):
     subscription_interval: Real = 0.08
     write_interval: Real = 0.08
     heartbeat_interval: Real = 1
+
+    def _make_param_map(self, view: memoryview, param_block_name: str):
+        param_block = getattr(self, param_block_name)
+        param_block_view = self.get_field_view(view, param_block_name)
+        param_map = ParameterMap()
+        for name, _ in param_block._fields_:
+            index = self.param_indices.get(name)
+            if index is not None:
+                field_view = param_block.get_field_view(param_block_view, name)
+                param_map.set_param(index, field_view)
+        return param_map
+
+    @classmethod
+    @contextlib.contextmanager
+    def open(cls, name: str, *, create: bool = True):
+        with super().open(name, create=create) as buffer:
+            buffer.read_param_map = buffer._make_param_map(buffer.shm.buf[Mutex.SIZE :], 'read')
+            buffer.write_param_map = buffer._make_param_map(buffer.shm.buf[Mutex.SIZE :], 'write')
+            yield buffer
 
     @classmethod
     def make_type(cls, name: str, params: list[Parameter], *extra_fields, **options) -> type:
@@ -297,10 +301,14 @@ class DeviceBuffer(Buffer):
                 bitmap |= 1 << index
         return bitmap
 
-    def set_value(self, param: str, value):
+    def set_value(self, param: str, value, *, write_block: bool = True):
         with self.operation():
-            super().set_value(param, value)
-            self.control.write |= 1 << self.param_indices[param]
+            super().set_value(param, value, write_block=write_block)
+            mask = 1 << self.param_indices[param]
+            if write_block:
+                self.control.write |= mask
+            else:
+                self.control.update |= mask
 
     def set_read(self, params: list[str]):
         with self.operation():
@@ -367,9 +375,11 @@ BufferKey = Union[tuple[str, int], int, DeviceUID]
 
 @dataclasses.dataclass
 class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
-    buffers: dict[BufferKey, Buffer] = dataclasses.field(default_factory=dict)
+    buffers: dict[tuple[str, int], Buffer] = dataclasses.field(default_factory=dict)
     catalog: dict[str, type] = dataclasses.field(default_factory=dict)
     stack: contextlib.ExitStack = dataclasses.field(default_factory=contextlib.ExitStack)
+
+    SHM_PATH: ClassVar[Path] = Path('/dev/shm')
 
     def __enter__(self):
         self.stack.__enter__()
@@ -391,7 +401,7 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
         if isinstance(key, int):
             key = DeviceUID.from_int(key)
         if isinstance(key, DeviceUID):
-            key = self.find_device(key.device_id), int(key)
+            key = self.find_device_type(key.device_id), int(key)
         return key
 
     def open(self, key: BufferKey, create: bool = True) -> Buffer:
@@ -404,10 +414,13 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
             self.stack.callback(self.buffers.pop, key)
         return buffer
 
-    def create(self, key: BufferKey) -> Buffer:
-        return self.open(key, create=True)
+    def get_or_create(self, key: BufferKey) -> Buffer:
+        try:
+            return self[key]
+        except RuntimeBufferError:
+            return self.open(key, create=True)
 
-    def find_device(self, device_id: int) -> str:
+    def find_device_type(self, device_id: int) -> str:
         for type_name, buffer_type in self.catalog.items():
             if getattr(buffer_type, 'device_id', None) == device_id:
                 return type_name
@@ -419,7 +432,7 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
             buffer_type_factory = Buffer.make_type
         else:
             try:
-                self.find_device(device_id)
+                self.find_device_type(device_id)
             except RuntimeBufferError:
                 pass
             else:
@@ -427,7 +440,10 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
             buffer_type_factory = DeviceBuffer.make_type
         self.catalog[type_name] = buffer_type_factory(type_name, params, **options)
 
-    def load_catalog(self, stream: io.TextIOBase):
+    def load_catalog(self, stream: Union[Path, io.TextIOBase]):
+        if isinstance(stream, Path):
+            with open(stream) as file_handle:
+                return self.load_catalog(file_handle)
         catalog = yaml.load(stream, Loader=yaml.SafeLoader)
         for type_name, options in catalog.items():
             params = []
@@ -435,3 +451,8 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
                 param['ctype'] = Parameter.get_ctype(param.pop('type'))
                 params.append(Parameter(**param))
             self.register_type(type_name, params, **options)
+
+    @classmethod
+    def unlink_all(cls):
+        for path in cls.SHM_PATH.iterdir():
+            Buffer.unlink(path.name)

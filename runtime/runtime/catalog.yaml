@@ -364,4 +364,4 @@ gamepad:
 radio:
   params:
     - name: buffer
-      type: uint8[1024]
+      type: char[1024]

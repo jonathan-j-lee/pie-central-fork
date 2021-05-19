@@ -10,7 +10,7 @@ import multiprocessing
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from numbers import Real
-from typing import Any, Container, Optional
+from typing import Any, Container, Optional, Union
 from urllib.parse import urlsplit, urlunsplit
 
 import structlog
@@ -20,8 +20,7 @@ import zmq.devices
 from . import log, rpc
 from .exception import EmergencyStopException
 
-__all__ = ['run_process', 'EndpointManager']
-logger = structlog.get_logger()
+__all__ = ['run_process', 'spin', 'EndpointManager']
 
 
 def cancel_loop(loop: Optional[asyncio.AbstractEventLoop] = None, timeout: Real = 3):
@@ -64,25 +63,44 @@ def clean_up(timeout: Real = 3):
 def configure_loop(debug: bool = False, workers: int = 1):
     threading.current_thread().async_loop = loop = asyncio.get_running_loop()
     loop.set_debug(debug)
-    loop.set_default_executor(
-        ThreadPoolExecutor(max_workers=workers, thread_name_prefix='aioworker')
-    )
+    executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix='aioworker')
+    loop.set_default_executor(executor)
+    # Currently, we have no default exception handler.
 
 
-def handle_process_exit(process: multiprocessing.Process, exited: asyncio.Event):
-    """Callback invoked when the process has exited."""
-    asyncio.get_running_loop().remove_reader(process.sentinel)
-    exited.set()
+class AsyncProcess(multiprocessing.Process):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('daemon', True)
+        super().__init__(*args, **kwargs)
+        self.exited = asyncio.Event()
+
+    async def wait(self):
+        await self.exited.wait()
+
+    def handle_exit(self):
+        """Callback invoked when the process has exited."""
+        asyncio.get_running_loop().remove_reader(self.sentinel)
+        self.exited.set()
+
+    def start(self):
+        super().start()
+        asyncio.get_running_loop().add_reader(self.sentinel, self.handle_exit)
+
+    @property
+    def returncode(self) -> Optional[int]:
+        return self.exitcode
 
 
-async def run_process(*args, timeout: Real = 2, **kwargs) -> Optional[int]:
+AsyncProcessType = Union[AsyncProcess, asyncio.subprocess.Process]
+
+
+async def run_process(process: AsyncProcessType, *, terminate_timeout: Real = 2) -> Optional[int]:
     """
     Start and stop a subprocess.
 
     Arguments:
-        *args: Passed to :class:`multiprocessing.Process`.
-        **kwargs: Passed to :class:`multiprocessing.Process`.
-        timeout: Maximum duration (in seconds) to wait for termination before sending ``SIGKILL``.
+        terminate_timeout: Maximum duration (in seconds) to wait for termination before killing the
+            process.
 
     Returns:
         The process exit code.
@@ -90,27 +108,29 @@ async def run_process(*args, timeout: Real = 2, **kwargs) -> Optional[int]:
     Raises:
         EmergencyStopException: If the subprocess raised an emergency stop.
     """
-    kwargs.setdefault('daemon', True)
-    process = multiprocessing.Process(*args, **kwargs)
-    process.start()
-    context = dict(proc_name=process.name, pid=process.pid)
-    exited = asyncio.Event()
-    asyncio.get_running_loop().add_reader(process.sentinel, handle_process_exit, process, exited)
+    if isinstance(process, AsyncProcess) and not process.is_alive():
+        process.start()
+    proc_name = getattr(process, 'name', '(anonymous)')
+    logger = structlog.get_logger(
+        wrapper_class=structlog.stdlib.AsyncBoundLogger,
+        proc_name=proc_name,
+        pid=process.pid,
+    )
     try:
-        await exited.wait()
-        await logger.info('Process exited normally', **context, exit_code=process.exitcode)
+        await process.wait()
+        await logger.info('Process exited normally', exit_code=process.returncode)
     except asyncio.CancelledError:
         try:
             process.terminate()
-            await asyncio.wait_for(exited.wait(), timeout)
-            await logger.info('Terminated process cleanly', **context, exit_code=process.exitcode)
+            await asyncio.wait_for(process.wait(), terminate_timeout)
+            await logger.info('Terminated process cleanly', exit_code=process.returncode)
         except asyncio.TimeoutError:
             process.kill()
-            await logger.error('Killed process', **context)
-    if process.exitcode == EmergencyStopException.EXIT_CODE:
-        await logger.critical('Received emergency stop', **context, exit_code=process.exitcode)
+            await logger.error('Killed process')
+    if process.returncode == EmergencyStopException.EXIT_CODE:
+        await logger.critical('Received emergency stop', exit_code=process.returncode)
         raise EmergencyStopException
-    return process.exitcode
+    return process.returncode
 
 
 def resolve_address(address: str, peer: str = '127.0.0.1') -> str:
@@ -156,15 +176,20 @@ def get_connection(bindings: Container[str]) -> str:
     return address
 
 
+async def spin(func, /, *args, interval: Real = 1, **kwargs):
+    while True:
+        await asyncio.gather(asyncio.sleep(interval), func(*args, **kwargs))
+
+
 @dataclasses.dataclass
 class EndpointManager:
     name: str
     options: dict[str, Any]
-    logger: structlog.BoundLogger = dataclasses.field(default_factory=structlog.get_logger)
     stack: contextlib.AsyncExitStack = dataclasses.field(default_factory=contextlib.AsyncExitStack)
 
     async def __aenter__(self):
         configure_loop(debug=self.options['debug'], workers=self.options['thread_pool_workers'])
+        await self.make_log_publisher()
         await self.stack.__aenter__()
         return self
 
@@ -184,14 +209,8 @@ class EndpointManager:
     async def make_log_publisher(self, node: Optional[rpc.Node] = None) -> log.LogPublisher:
         if not node:  # pragma: no cover
             node = rpc.SocketNode(zmq.PUB, connections=get_connection(self.options['log_backend']))
-        publisher = log.LogPublisher(node, logger=log.null_logger)
-        publisher = await self.stack.enter_async_context(publisher)
+        publisher = await self.stack.enter_async_context(log.LogPublisher(node))
         log.configure(publisher, fmt=self.options['log_format'], level=self.options['log_level'])
-        await logger.debug(
-            'Logging configured',
-            format=self.options['log_format'],
-            min_level=self.options['log_level'],
-        )
         return publisher
 
     async def make_log_subscriber(self, handler: rpc.Handler) -> rpc.Service:
@@ -207,8 +226,7 @@ class EndpointManager:
                 connections=get_connection(self.options['router_frontend']),
                 options=options,
             )
-        client = rpc.Client(node, logger=self.logger.bind(endpoint=f'{self.name}-client'))
-        return await self.stack.enter_async_context(client)
+        return await self.stack.enter_async_context(rpc.Client(node))
 
     async def make_service(
         self,
@@ -223,12 +241,7 @@ class EndpointManager:
                 connections=get_connection(self.options['router_backend']),
                 options=options,
             )
-        service = rpc.Service(
-            handler,
-            node,
-            concurrency=self.options['service_workers'],
-            logger=self.logger.bind(endpoint=f'{self.name}-service'),
-        )
+        service = rpc.Service(handler, node, concurrency=self.options['service_workers'])
         return await self.stack.enter_async_context(service)
 
     async def make_update_client(self, **options) -> rpc.Client:

@@ -21,7 +21,7 @@ import inspect
 import random
 import types
 from numbers import Real
-from typing import Any, Container, NoReturn, Optional, Union
+from typing import Any, ClassVar, Container, NoReturn, Optional, Union
 from urllib.parse import urlsplit
 
 import cbor2
@@ -395,8 +395,10 @@ class Endpoint(abc.ABC):
 
     node: Node
     concurrency: int = 1
-    logger: structlog.BoundLogger = dataclasses.field(default_factory=structlog.get_logger)
     stack: contextlib.AsyncExitStack = dataclasses.field(default_factory=contextlib.AsyncExitStack)
+    logger: ClassVar[structlog.stdlib.AsyncBoundLogger] = structlog.get_logger(
+        wrapper_class=structlog.stdlib.AsyncBoundLogger,
+    )
 
     def __post_init__(self):
         if self.concurrency < 0:
@@ -415,18 +417,16 @@ class Endpoint(abc.ABC):
 
     async def process_messages_forever(self, cooldown: Real = 0.01):
         """Receive messages indefinitely and process them."""
+        logger = self.logger.bind()
         while True:
             try:
                 (payload, *_), address = await self.node.recv()
                 message_type, *message = await decode(payload)
                 message_type = MessageType(message_type)
-                await self.logger.debug(
-                    'Endpoint received message',
-                    message_type=message_type.name,
-                )
+                await logger.debug('Endpoint received message', message_type=message_type.name)
                 await self.handle_message(address, message_type, *message)
             except (ValueError, cbor2.CBORDecodeError, RuntimeRPCError) as exc:
-                await self.logger.error('Endpoint failed to process message', exc_info=exc)
+                await logger.error('Endpoint failed to process message', exc_info=exc)
                 await asyncio.sleep(cooldown)
 
     @abc.abstractmethod
@@ -708,7 +708,9 @@ class Router:
     frontend: SocketNode
     backend: SocketNode
     route_task: Optional[asyncio.Task] = dataclasses.field(init=False, repr=False)
-    logger: structlog.BoundLogger = dataclasses.field(default_factory=structlog.get_logger)
+    logger: ClassVar[structlog.stdlib.AsyncBoundLogger] = structlog.get_logger(
+        wrapper_class=structlog.stdlib.AsyncBoundLogger,
+    )
 
     def __post_init__(self):
         _check_type(self.frontend, zmq.ROUTER)
@@ -757,24 +759,25 @@ class Router:
                 with empty delimeter frames sandwiched between them.
             send_socket: The sending socket, which simply transposes the sender/recipient ID frames.
         """
+        logger = self.logger.bind(recv_addr=recv_socket.bindings, send_addr=send_socket.bindings)
         while True:
             try:
                 frames, sender_id = await recv_socket.recv()
                 if frames == [b'']:
-                    await self.logger.debug(
+                    await logger.debug(
                         'Router connected to endpoint',
                         sender_id=_render_id(sender_id),
                     )
                     continue
                 recipient_id, payload = frames
-                await self.logger.debug(
+                await logger.debug(
                     'Router received message',
                     sender_id=_render_id(sender_id),
                     recipient_id=_render_id(recipient_id),
                 )
                 if sender_id == recipient_id:
-                    await self.logger.warn('Loopback not allowed', sender_id=_render_id(sender_id))
+                    await logger.warn('Loopback not allowed', sender_id=_render_id(sender_id))
                     continue
                 await send_socket.send([sender_id, payload], address=recipient_id)
             except (ValueError, RuntimeRPCError) as exc:
-                await self.logger.error('Router failed to route message', exc_info=exc)
+                await logger.error('Router failed to route message', exc_info=exc)

@@ -11,7 +11,7 @@ cdef extern from "message.hpp":
 
 cdef extern from "message.hpp" namespace "message::Message":
     cpdef enum:
-        NO_PARAMETERS, NO_SUBSCRIPTION
+        NO_PARAMETERS, NO_SUBSCRIPTION, DELIMETER
 
 cdef extern from "message.hpp" namespace "message" nogil:
     ctypedef uint8_t bool

@@ -3,6 +3,7 @@ branch = True
 data_file = build/.coverage
 omit =
   runtime/__init__.py
+  runtime/service/__init__.py
 plugins = Cython.Coverage
 
 [report]
