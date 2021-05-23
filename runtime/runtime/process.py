@@ -8,7 +8,7 @@ import contextlib
 import dataclasses
 import multiprocessing
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Executor, ThreadPoolExecutor
 from numbers import Real
 from typing import Any, Container, Optional, Union
 from urllib.parse import urlsplit, urlunsplit
@@ -60,11 +60,11 @@ def clean_up(timeout: Real = 3):
         thread.join(timeout)
 
 
-def configure_loop(debug: bool = False, workers: int = 1):
+def configure_loop(debug: bool = False, executor: Optional[Executor] = None):
     threading.current_thread().async_loop = loop = asyncio.get_running_loop()
     loop.set_debug(debug)
-    executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix='aioworker')
-    loop.set_default_executor(executor)
+    if executor:
+        loop.set_default_executor(executor)
     # Currently, we have no default exception handler.
 
 
@@ -185,12 +185,23 @@ async def spin(func, /, *args, interval: Real = 1, **kwargs):
 class EndpointManager:
     name: str
     options: dict[str, Any]
+    executor: Executor = None
     stack: contextlib.AsyncExitStack = dataclasses.field(default_factory=contextlib.AsyncExitStack)
 
+    def __post_init__(self):
+        if self.executor is None:
+            # pylint: disable=consider-using-with
+            # See ``__aenter__`` where this executor is placed on the exit stack.
+            self.executor = ThreadPoolExecutor(
+                max_workers=self.options['thread_pool_workers'],
+                thread_name_prefix='aioworker',
+            )
+
     async def __aenter__(self):
-        configure_loop(debug=self.options['debug'], workers=self.options['thread_pool_workers'])
-        await self.make_log_publisher()
         await self.stack.__aenter__()
+        self.executor = self.stack.enter_context(self.executor)
+        configure_loop(self.options['debug'], self.executor)
+        await self.make_log_publisher()
         return self
 
     async def __aexit__(self, exc_type, exc, traceback):

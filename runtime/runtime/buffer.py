@@ -30,7 +30,7 @@ __all__ = [
 
 
 class RuntimeBufferError(RuntimeBaseException):
-    pass
+    """General buffer error."""
 
 
 class Parameter(NamedTuple):

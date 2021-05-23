@@ -41,7 +41,8 @@ async def endpoints():
         await endpoints.make_router()
         yield endpoints
     zmq.asyncio.Context.instance().term()
-    await asyncio.to_thread(proxy.join, 1)
+    # We cannot join ``proxy`` to ensure the ports are freed and the thread exits. However, because
+    # the ports are randomized, tests should not clash. The thread exits eventually.
 
 
 class MathHandler(rpc.Handler):

@@ -361,7 +361,13 @@ gamepad:
       lower: -1.0
       upper: 1.0
 
-radio:
+field:
   params:
-    - name: buffer
-      type: char[1024]
+    - name: mode
+      type: uint8
+    - name: alliance
+      type: uint8
+    - name: send_buf
+      type: uint8[4096]
+    - name: recv_buf
+      type: uint8[4096]

@@ -167,12 +167,11 @@ class Broker(rpc.Handler):
 async def main(ctx, **options):
     async with process.EndpointManager('broker', options) as manager:
         await manager.make_log_proxy()
-        buffers = manager.stack.enter_context(BufferManager())
         broker = Broker(
             ctx,
             await manager.make_update_client(),
             await manager.make_client(),
-            buffers,
+            manager.stack.enter_context(BufferManager()),
         )
         await asyncio.to_thread(broker.buffers.load_catalog, options['dev_catalog'])
         await manager.make_service(broker)

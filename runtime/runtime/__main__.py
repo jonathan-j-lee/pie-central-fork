@@ -191,7 +191,7 @@ get_zmq_option = lambda option: getattr(zmq, option.upper())
         'Set an execution timeout for student code functions. '
         'The left-hand side is a regular expression pattern matching a function name. '
         'The right-hand side is the number of seconds. '
-        'When multiple patterns match the same function, the first timeout applies.'
+        'When multiple patterns match the same function, the timeout is undefined.'
     ),
 )
 @optgroup.option(

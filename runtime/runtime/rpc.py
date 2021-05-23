@@ -760,6 +760,7 @@ class Router:
             send_socket: The sending socket, which simply transposes the sender/recipient ID frames.
         """
         logger = self.logger.bind(recv_addr=recv_socket.bindings, send_addr=send_socket.bindings)
+        await logger.debug('Router started')
         while True:
             try:
                 frames, sender_id = await recv_socket.recv()
