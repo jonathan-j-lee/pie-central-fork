@@ -50,11 +50,12 @@ async def broker(update_publisher, client, buffers):
     ]
     with cli.make_context('cli', args) as ctx:
         broker = Broker(ctx, update_publisher, client, buffers=buffers)
-        limit_switch = broker.buffers.get_or_create(0x0_00_ffffffff_ffffffff)
+        limit_switch = broker.buffers.get_or_create(0x0000_00_ffffffff_ffffffff)
         limit_switch.set_value('switch0', True, write_block=False)
         limit_switch.set_value('switch1', False, write_block=False)
         limit_switch.set_value('switch2', True, write_block=False)
         broker.buffers.stack.close()
+        broker.buffers[0x0000_00_ffffffff_ffffffff].set_valid()
         yield broker
 
 
@@ -135,18 +136,18 @@ async def test_send_update(broker):
     await broker.update_uids()
     await broker.send_update()
     broker.update_publisher.call.update.assert_called_with(
-        {str(0x0_00_ffffffff_ffffffff): {'switch0': True, 'switch1': False, 'switch2': True}},
+        {str(0x0000_00_ffffffff_ffffffff): {'switch0': True, 'switch1': False, 'switch2': True}},
         notification=True,
     )
     broker.client.call.list_uids.return_value = future = asyncio.Future()
     future.set_result([
-        0x0_00_ffffffff_ffffffff,
-        0x0_ff_ffffffff_ffffffff,
+        0x0000_00_ffffffff_ffffffff,
+        0x0000_ff_ffffffff_ffffffff,
         0xffff_ff_ffffffff_ffffffff,
     ])
     await broker.update_uids()
     await broker.send_update()
     broker.update_publisher.call.update.assert_called_with(
-        {str(0x0_00_ffffffff_ffffffff): {}},
+        {str(0x0000_00_ffffffff_ffffffff): {}},
         notification=True,
     )

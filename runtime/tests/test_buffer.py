@@ -101,14 +101,6 @@ def buffer_manager():
     BufferManager.unlink_all()
 
 
-def test_repr(device_buffer):
-    uid1 = device_buffer.control.uid
-    uid2 = eval(repr(uid1))
-    assert uid1.device_id == uid2.device_id
-    assert uid1.year == uid2.year
-    assert uid1.random == uid2.random
-
-
 def test_update(mocker, device_buffer):
     mocker.patch('time.time')
     device_buffer.read._timestamp = 0
@@ -188,13 +180,22 @@ def test_write_deny(mocker, device_buffer):
 
 
 def test_subscription(device_uid, device_buffer):
-    device_buffer.set_subscription(device_uid, ['duty_cycle', 'flag'])
+    sub_res = Message.make_sub_res(
+        device_buffer.to_bitmap(['flag', 'duty_cycle']),
+        100,
+        device_uid.device_id,
+        device_uid.year,
+        device_uid.random,
+    )
+    device_buffer.set_subscription(sub_res)
     assert device_buffer.uid.device_id == 0xffff
     assert device_buffer.uid.year == 0xee
     assert device_buffer.uid.random == 0xc0debeefdeadbeef
     assert device_buffer.subscription == ['flag', 'duty_cycle']
-    device_buffer.set_subscription(DeviceUID(0, 0, 0), [])
+    assert device_buffer.delay == pytest.approx(0.1)
+    device_buffer.set_subscription(Message.make_sub_res(0, 0, 0, 0, 0))
     assert device_buffer.subscription == []
+    assert device_buffer.delay == 0
 
 
 def test_valid_bit(device_buffer):
@@ -207,7 +208,7 @@ def test_valid_bit(device_buffer):
         lambda: list(device_buffer.get_write()),
         lambda: device_buffer.get_update(),
         lambda: device_buffer.update_data(Message.decode(b'\x03\x15\x02\x01\x02\x17')),
-        lambda: device_buffer.set_subscription(DeviceUID(0, 0, 0), []),
+        lambda: device_buffer.set_subscription(Message.make_sub_res(0, 0, 0, 0, 0)),
         lambda: device_buffer.last_update,
         lambda: device_buffer.last_write,
         lambda: device_buffer.uid,
@@ -228,7 +229,7 @@ def test_shm_attach_fail(device_buffer_type):
 
 
 def test_shm_create_attach(device_buffer_type, peer):
-    for create in (True, False):
+    for create in (False, True):
         with device_buffer_type.open('test-device', create=create) as device_buffer:
             assert device_buffer.write.id == 0xc0debeef
             assert device_buffer.get_value('duty_cycle') == pytest.approx(-0.123)
@@ -302,8 +303,8 @@ def test_shm_open_close(buffer_manager):
     buffer_manager.stack.close()
     assert len(buffer_manager) == 0
     assert path.exists()
-    buf2 = buffer_manager[0x80_00_00000000_00000000]
-    buf3 = buffer_manager.get_or_create(0x80_00_00000000_00000000)
+    buf2 = buffer_manager.get_or_create(0x80_00_00000000_00000000)
+    buf3 = buffer_manager[0x80_00_00000000_00000000]
     assert buf2 is buf3
     assert buf2.valid
     assert buf is not buf2

@@ -1,3 +1,5 @@
+"""Peripheral Data Storage and Sharing."""
+
 import collections.abc
 import contextlib
 import ctypes
@@ -34,6 +36,8 @@ class RuntimeBufferError(RuntimeBaseException):
 
 
 class Parameter(NamedTuple):
+    """A description of a parameter."""
+
     name: str
     ctype: type
     lower: Real = float('-inf')
@@ -44,10 +48,23 @@ class Parameter(NamedTuple):
 
     @property
     def platform_type(self) -> type:
+        """Return a ``ctype`` that has the correct width to hold this parameter's values.
+
+        The type widths of Runtime's platform and the peripheral's platform may not match. This
+        method performs the conversion to ensure the space allocated in the buffer is exactly the
+        right size as the bytes emitted by the peripheral.
+        """
         return ctypes.c_float if self.ctype is ctypes.c_double else self.ctype
 
-    @classmethod
-    def get_ctype(self, type_specifier: str) -> type:
+    @staticmethod
+    def parse_ctype(type_specifier: str) -> type:
+        """Parse a type specifier into the corresponding C type.
+
+        Example:
+            >>> assert Parameter.parse_ctype('bool') is ctypes.c_bool
+            >>> assert Parameter.parse_ctype('int32[64]') is ctypes.c_int32 * 64
+            >>> assert Parameter.parse_ctype('uint64[8][8]') is ctypes.c_uint64 * 8 * 8
+        """
         pattern, dimensions = re.compile(r'(\[(\d+)\])$'), []
         while match := pattern.search(type_specifier):
             suffix, dimension = match.groups()
@@ -60,10 +77,6 @@ class Parameter(NamedTuple):
 
 
 class BaseStructure(ctypes.LittleEndianStructure):
-    def __repr__(self) -> str:
-        fields = ', '.join(f'{name}={getattr(self, name)!r}' for name, _ in self._fields_)
-        return f'{type(self).__name__}({fields})'
-
     @classmethod
     def get_field_view(cls, base_view: memoryview, field_name: str) -> memoryview:
         field = getattr(cls, field_name)
@@ -93,8 +106,7 @@ class DeviceUID(BaseStructure):
     """A unique device identifier.
 
     Examples:
-        >>> int(DeviceUID(0xffff, 0xee, 0xc0debeef_deadbeef)) == 0xffff_ee_c0debeef_deadbeef
-        True
+        >>> assert int(DeviceUID(0xffff, 0xee, 0xc0debeef_deadbeef)) == 0xffff_ee_c0debeef_deadbeef
         >>> uid = DeviceUID.from_int(0xffff_ee_c0debeef_deadbeef)
         >>> hex(uid.device_id)
         '0xffff'
@@ -142,16 +154,17 @@ class DeviceControlBlock(BaseStructure):
 class Buffer(BaseStructure):
     @classmethod
     def _make_block_type(cls, name: str, params: list[Parameter]):
-        fields = [('_timestamp', ctypes.c_double)]
+        fields = [('timestamp', ctypes.c_double)]
         fields.extend((param.name, param.platform_type) for param in params)
         return type(name, (BaseStructure,), {'_fields_': fields})
 
     @classmethod
     def make_type(cls, name: str, params: list[Parameter], *extra_fields, **options) -> type:
+        normalized_name = name.title().replace('-', '')
         readable_params = [param for param in params if param.readable]
-        read_block_type = cls._make_block_type(f'{name}ReadBlock', readable_params)
+        read_block_type = cls._make_block_type(f'{normalized_name}ReadBlock', readable_params)
         writeable_params = [param for param in params if param.writeable]
-        write_block_type = cls._make_block_type(f'{name}WriteBlock', writeable_params)
+        write_block_type = cls._make_block_type(f'{normalized_name}WriteBlock', writeable_params)
         attrs = {
             '_fields_': [
                 ('valid', ctypes.c_bool),
@@ -162,7 +175,7 @@ class Buffer(BaseStructure):
             'params': params,
             'param_indices': {param.name: i for i, param in enumerate(params)},
         }
-        return type(name.title().replace('-', ''), (cls,), options | attrs)
+        return type(normalized_name, (cls,), options | attrs)
 
     @classmethod
     @contextlib.contextmanager
@@ -197,6 +210,9 @@ class Buffer(BaseStructure):
         try:
             yield buffer
         finally:
+            if create:
+                buffer.set_valid(valid=False)
+            # pylint: disable=protected-access; there's not really a good solution without this.
             if isinstance(buffer._objects, dict):  # pragma: no cover
                 buffer._objects.clear()
             shm.close()
@@ -220,7 +236,7 @@ class Buffer(BaseStructure):
             with SyncError.suppress(errno.EPERM):
                 self.mutex.release()
 
-    def get_value(self, param: str, *, read_block: bool = True):
+    def get_value(self, param: str, /, *, read_block: bool = True):
         with self.operation():
             try:
                 block = self.read if read_block else self.write
@@ -236,19 +252,20 @@ class Buffer(BaseStructure):
             warnings.warn(f'{param.name} value exceeded upperbound ({value} > {param.upper})')
         return max(param.lower, min(param.upper, value))
 
-    def set_value(self, name: str, value, *, write_block: bool = True):
+    def set_value(self, param: str, value: Any, /, *, write_block: bool = True):
         with self.operation():
             block = self.write if write_block else self.read
-            if not hasattr(block, name):
-                raise RuntimeBufferError('parameter is not writeable', param=name)
-            param = self.params[self.param_indices[name]]
-            if param.platform_type in (ctypes.c_float, ctypes.c_double):
-                value = self._clamp_within_limits(param, value)
-            setattr(block, name, value)
-            block._timestamp = time.time()
+            if not hasattr(block, param):
+                raise RuntimeBufferError('parameter is not writeable', param=param)
+            param_desc = self.params[self.param_indices[param]]
+            if param_desc.platform_type in (ctypes.c_float, ctypes.c_double):
+                value = self._clamp_within_limits(param_desc, value)
+            setattr(block, param, value)
+            block.timestamp = time.time()
 
     def set_valid(self, valid: bool = True):
         with self.mutex:
+            # pylint: disable=attribute-defined-outside-init; special ``ctypes`` magic.
             self.valid = valid
 
 
@@ -257,10 +274,11 @@ class DeviceBuffer(Buffer):
     write_interval: Real = 0.08
     heartbeat_interval: Real = 1
 
-    def _make_param_map(self, view: memoryview, param_block_name: str):
+    def make_param_map(self, view: memoryview, param_block_name: str):
         param_block = getattr(self, param_block_name)
         param_block_view = self.get_field_view(view, param_block_name)
         param_map = ParameterMap()
+        # pylint: disable=protected-access; ``_fields_`` is a documented member of the API.
         for name, _ in param_block._fields_:
             index = self.param_indices.get(name)
             if index is not None:
@@ -272,12 +290,14 @@ class DeviceBuffer(Buffer):
     @contextlib.contextmanager
     def open(cls, name: str, *, create: bool = True):
         with super().open(name, create=create) as buffer:
-            buffer.read_param_map = buffer._make_param_map(buffer.shm.buf[Mutex.SIZE :], 'read')
-            buffer.write_param_map = buffer._make_param_map(buffer.shm.buf[Mutex.SIZE :], 'write')
+            buffer.read_param_map = buffer.make_param_map(buffer.shm.buf[Mutex.SIZE :], 'read')
+            buffer.write_param_map = buffer.make_param_map(buffer.shm.buf[Mutex.SIZE :], 'write')
             yield buffer
 
     @classmethod
     def make_type(cls, name: str, params: list[Parameter], *extra_fields, **options) -> type:
+        if len(params) > Message.MAX_PARAMS:
+            raise ValueError(f'Smart Devices may only have up to {Message.MAX_PARAMS} params')
         return super().make_type(
             name,
             params,
@@ -293,15 +313,19 @@ class DeviceBuffer(Buffer):
                 yield i, cls.params[i]
 
     @classmethod
-    def to_bitmap(cls, params: list[str], predicate: Callable[[Parameter], bool] = None) -> int:
+    def to_bitmap(
+        cls,
+        params: list[str],
+        predicate: Callable[[Parameter], bool] = lambda _: True,
+    ) -> int:
         bitmap = DeviceControlBlock.RESET
         for param in params:
             index = cls.param_indices[param]
-            if predicate is None or predicate(cls.params[index]):
+            if predicate(cls.params[index]):
                 bitmap |= 1 << index
         return bitmap
 
-    def set_value(self, param: str, value, *, write_block: bool = True):
+    def set_value(self, param: str, value: Any, /, *, write_block: bool = True):
         with self.operation():
             super().set_value(param, value, write_block=write_block)
             mask = 1 << self.param_indices[param]
@@ -320,6 +344,7 @@ class DeviceBuffer(Buffer):
                 message = Message.make_dev_read(self.control.read)
                 self.control.read = DeviceControlBlock.RESET
                 return message
+            return None
 
     def get_write(self) -> Iterable[Message]:
         with self.operation():
@@ -343,21 +368,22 @@ class DeviceBuffer(Buffer):
             bitmap = message.read_dev_data(self.read_param_map)
             self.control.update |= bitmap
             if bitmap:
-                self.read._timestamp = time.time()
+                self.read.timestamp = time.time()
 
-    def set_subscription(self, uid: DeviceUID, subscription: list[str]):
+    def set_subscription(self, message: Message):
         with self.operation():
-            self.control.uid, self.control.subscription = uid, self.to_bitmap(subscription)
+            self.control.subscription, self.control.delay, uid = message.read_sub_res()
+            self.control.uid = DeviceUID(*uid)
 
     @property
     def last_update(self) -> float:
         with self.operation():
-            return self.read._timestamp
+            return self.read.timestamp
 
     @property
     def last_write(self) -> float:
         with self.operation():
-            return self.write._timestamp
+            return self.write.timestamp
 
     @property
     def uid(self) -> DeviceUID:
@@ -368,6 +394,10 @@ class DeviceBuffer(Buffer):
     def subscription(self) -> list[str]:
         with self.operation():
             return [param.name for _, param in self.from_bitmap(self.control.subscription)]
+
+    @property
+    def delay(self) -> Real:
+        return self.control.delay / 1000
 
 
 BufferKey = Union[tuple[str, int], int, DeviceUID]
@@ -389,7 +419,7 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
         return self.stack.__exit__(exc_type, exc, traceback)
 
     def __getitem__(self, key: BufferKey) -> Buffer:
-        return self.open(key, create=False)
+        return self.get_or_create(key, create=False)
 
     def __iter__(self):
         return iter(self.buffers)
@@ -404,7 +434,7 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
             key = self.find_device_type(key.device_id), int(key)
         return key
 
-    def open(self, key: BufferKey, create: bool = True) -> Buffer:
+    def get_or_create(self, key: BufferKey, create: bool = True) -> Buffer:
         type_name, uid = key = self._normalize_key(key)
         buffer = self.buffers.get(key)
         if not buffer:
@@ -412,13 +442,9 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
             buffer = buffer_type.open(f'{type_name}-{uid}', create=create)
             buffer = self.buffers[key] = self.stack.enter_context(buffer)
             self.stack.callback(self.buffers.pop, key)
+        if create:
+            buffer.set_valid()
         return buffer
-
-    def get_or_create(self, key: BufferKey) -> Buffer:
-        try:
-            return self[key]
-        except RuntimeBufferError:
-            return self.open(key, create=True)
 
     def find_device_type(self, device_id: int) -> str:
         for type_name, buffer_type in self.catalog.items():
@@ -443,14 +469,15 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
     def load_catalog(self, stream: Union[Path, io.TextIOBase]):
         if isinstance(stream, Path):
             with open(stream) as file_handle:
-                return self.load_catalog(file_handle)
-        catalog = yaml.load(stream, Loader=yaml.SafeLoader)
-        for type_name, options in catalog.items():
-            params = []
-            for param in options.pop('params', None) or []:
-                param['ctype'] = Parameter.get_ctype(param.pop('type'))
-                params.append(Parameter(**param))
-            self.register_type(type_name, params, **options)
+                self.load_catalog(file_handle)
+        else:
+            catalog = yaml.load(stream, Loader=yaml.SafeLoader)
+            for type_name, options in catalog.items():
+                params = []
+                for param in options.pop('params', None) or []:
+                    param['ctype'] = Parameter.parse_ctype(param.pop('type'))
+                    params.append(Parameter(**param))
+                self.register_type(type_name, params, **options)
 
     @classmethod
     def unlink_all(cls):

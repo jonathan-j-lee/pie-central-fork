@@ -547,7 +547,8 @@ max-returns=6
 max-statements=50
 
 # Minimum number of public methods for a class (see R0903).
-min-public-methods=2
+# One public method is fine for abstract base classes.
+min-public-methods=1
 
 
 [IMPORTS]

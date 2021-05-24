@@ -27,8 +27,10 @@ def message_factory(wrapped, MessageType msg_type):
     def wrapper(*args, **kwargs):
         msg = Message()
         if not wrapped(msg, *args, **kwargs):
-            raise MessageError('failed to make Smart Device message',
-                               type=MessageType(msg_type).name)
+            raise MessageError(
+                'failed to make Smart Device message',
+                type=MessageType(msg_type).name,
+            )
         return msg
     return wrapper
 
@@ -91,14 +93,20 @@ cdef class Message:
         msg = Message()
         cdef ErrorCode status = msg.buf.decode(&buf[0], buf.shape[0])
         if status is not ErrorCode.OK:
-            raise MessageError('failed to decode Smart Device message', status=ErrorCode(status).name)
+            raise MessageError(
+                'failed to decode Smart Device message',
+                status=ErrorCode(status).name,
+            )
         return msg
 
     cpdef size_t encode_into_buf(self, byte[::1] buf):
         cdef size_t out_len
         cdef ErrorCode status = self.buf.encode(&buf[0], buf.shape[0], &out_len)
         if status is not ErrorCode.OK:
-            raise MessageError('failed to encode Smart Device message', status=ErrorCode(status).name)
+            raise MessageError(
+                'failed to encode Smart Device message',
+                status=ErrorCode(status).name,
+            )
         return out_len
 
     def encode(self) -> bytearray:
@@ -150,10 +158,16 @@ cdef class Message:
         return msg.buf.make_error(error)
     make_error = staticmethod(message_factory(make_error, MessageType.ERROR))
 
-    cdef void check_read(self, bool status, MessageType msg_type):
+    @classmethod
+    def make_unsubscribe(cls) -> Message:
+        return cls.make_sub_req(NO_PARAMETERS, NO_SUBSCRIPTION)
+
+    def check_read(self, bool status, MessageType msg_type):
         if not status:
-            raise MessageError('failed to read Smart Device message',
-                               type=MessageType(msg_type).name)
+            raise MessageError(
+                'failed to read Smart Device message',
+                type=MessageType(msg_type).name,
+            )
 
     def read_sub_req(self) -> tuple[int, int]:
         cdef param_map_t params = NO_PARAMETERS
@@ -199,4 +213,4 @@ cdef class Message:
     def read_error(self) -> ErrorCode:
         cdef ErrorCode error = ErrorCode.OK
         self.check_read(self.buf.read_error(&error), MessageType.ERROR)
-        return error
+        return ErrorCode(error)

@@ -244,8 +244,8 @@ class SocketNode(Node):
 
     socket_type: int
     options: dict[int, Union[int, bytes]] = dataclasses.field(default_factory=dict)
-    bindings: frozenset[str] = dataclasses.field(default_factory=frozenset)
-    connections: frozenset[str] = dataclasses.field(default_factory=frozenset)
+    bindings: frozenset[str] = frozenset()
+    connections: frozenset[str] = frozenset()
     subscriptions: set[str] = dataclasses.field(default_factory=set)
     socket: zmq.asyncio.Socket = dataclasses.field(default=None, init=False, repr=False)
     recv_task: Optional[asyncio.Task] = dataclasses.field(default=None, init=False, repr=False)
@@ -445,6 +445,52 @@ class Endpoint(abc.ABC):
         """
 
 
+class RequestTracker(dict[int, asyncio.Future]):
+    def __init__(self, *args, lower: int = 0, upper: int = 1 << 32, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lower, self.upper = lower, upper
+
+    def generate_id(self) -> int:
+        return random.randrange(self.lower, self.upper)
+
+    def generate_uid(self, attempts: int = 10) -> int:
+        """Generate a unique request ID.
+
+        Arguments:
+            attempts: The maximum number of times to try to generate an ID.
+
+        Raises:
+            ValueError: If the tracker could not generate a unique ID. If the ID space is
+                sufficiently large, this error is exceedingly rare. Increasing the number of
+                attempts or decreasing the number of in-flight requests should increase the
+                probability of a unique ID.
+        """
+        for _ in range(attempts):
+            request_id = self.generate_id()
+            if request_id not in self:
+                return request_id
+        raise ValueError('unable to generate a request ID')
+
+    @contextlib.contextmanager
+    def new_request(self, request_id: Optional[int] = None) -> tuple[int, asyncio.Future]:
+        if request_id is None:
+            request_id = self.generate_uid()
+        elif request_id in self:
+            raise ValueError('request ID already exists')
+        self[request_id] = future = asyncio.Future()
+        try:
+            yield request_id, future
+        finally:
+            self.pop(request_id, None)
+
+    def register_response(self, request_id: int, result: Any):
+        future = self[request_id]
+        if isinstance(result, BaseException):
+            future.set_exception(result)
+        else:
+            future.set_result(result)
+
+
 @dataclasses.dataclass
 class Client(Endpoint):
     """Issue RPC requests.
@@ -457,31 +503,13 @@ class Client(Endpoint):
             of a call.
     """
 
-    requests: dict[int, asyncio.Future] = dataclasses.field(default_factory=dict)
+    requests: RequestTracker = dataclasses.field(default_factory=RequestTracker)
 
     def __post_init__(self, *args, **kwargs):
         _check_type(self.node, zmq.PUB, zmq.DEALER)
         if not self.node.can_recv:
             self.concurrency = 0
         super().__post_init__(*args, **kwargs)
-
-    def generate_message_id(self, attempts: int = 10) -> int:
-        """Generate a unique message ID.
-
-        Arguments:
-            attempts: The maximum number of times to try to generate an ID.
-
-        Raises:
-            RuntimeRPCError: If the client could not generate a unique ID. Because the ID space is
-                so large, this error is exceedingly rare. Increasing the number of attempts or
-                decreasing the number of in-flight requests should increase the probability of a
-                unique ID.
-        """
-        for _ in range(attempts):
-            message_id = random.randrange(1 << 32)
-            if message_id not in self.requests:
-                return message_id
-        raise RuntimeRPCError('unable to generate a message ID', attempts=attempts)
 
     async def handle_message(self, address: Any, message_type: MessageType, *message: Any):
         if message_type is not MessageType.RESPONSE:
@@ -491,14 +519,16 @@ class Client(Endpoint):
                 message_parts=message,
             )
         message_id, error, result = message
-        future = self.requests.get(message_id)
-        if not future:
-            raise RuntimeRPCError('client received unexpected response', message_id=message_id)
         if isinstance(error, list):
             error_message, context = error
-            future.set_exception(RuntimeRPCError(error_message, **context))
-        else:
-            future.set_result(result)
+            result = RuntimeRPCError(error_message, **context)
+        try:
+            self.requests.register_response(message_id, result)
+        except KeyError as exc:
+            raise RuntimeRPCError(
+                'client received unexpected response',
+                message_id=message_id,
+            ) from exc
 
     async def issue_call(
         self,
@@ -525,8 +555,8 @@ class Client(Endpoint):
         Raises:
             asyncio.TimeoutError: The request was successfully sent, but the response never arrived
                 in time.
-            RuntimeRPCError: If the client was unable to send the message or the service returned
-                an error.
+            ValueError: If the request tracker could not generate a unique message ID.
+            RuntimeRPCError: If the service returned an error.
             cbor2.CBOREncodeError: If the arguments were not serializable.
         """
         if not self.node.can_recv:
@@ -542,15 +572,10 @@ class Client(Endpoint):
             message = [MessageType.NOTIFICATION.value, method, args]
             await self.node.send([await encode(message)], address=address)
         else:
-            message_id = self.generate_message_id()
-            message = [MessageType.REQUEST.value, message_id, method, args]
-            future = self.requests[message_id] = asyncio.Future()
-            try:
+            with self.requests.new_request() as (message_id, result):
+                message = [MessageType.REQUEST.value, message_id, method, args]
                 await self.node.send([await encode(message)], address=address)
-                await asyncio.wait_for(future, timeout)
-                return future.result()
-            finally:
-                self.requests.pop(message_id)
+                return await asyncio.wait_for(result, timeout)
 
     @functools.cached_property
     def call(self):
@@ -742,9 +767,11 @@ class Router:
     ) -> 'Router':
         """Construct a :class:`Router` whose ends are bound to the provided addresses."""
         # pylint: disable=unexpected-keyword-arg; pylint does not recognize dataclass.
+        frontend_options = {zmq.IDENTITY: b'router-frontend'} | (frontend_options or {})
+        backend_options = {zmq.IDENTITY: b'router-backend'} | (backend_options or {})
         return Router(
-            SocketNode(zmq.ROUTER, bindings=frontend, options=(frontend_options or {})),
-            SocketNode(zmq.ROUTER, bindings=backend, options=(backend_options or {})),
+            SocketNode(zmq.ROUTER, bindings=frontend, options=frontend_options),
+            SocketNode(zmq.ROUTER, bindings=backend, options=backend_options),
         )
 
     async def route(self, recv_socket: SocketNode, send_socket: SocketNode):
@@ -759,7 +786,10 @@ class Router:
                 with empty delimeter frames sandwiched between them.
             send_socket: The sending socket, which simply transposes the sender/recipient ID frames.
         """
-        logger = self.logger.bind(recv_addr=recv_socket.bindings, send_addr=send_socket.bindings)
+        logger = self.logger.bind(
+            recv_socket=_render_id(recv_socket.options.get(zmq.IDENTITY, b'(anonymous)')),
+            send_socket=_render_id(send_socket.options.get(zmq.IDENTITY, b'(anonymous)')),
+        )
         await logger.debug('Router started')
         while True:
             try:

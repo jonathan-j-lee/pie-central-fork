@@ -69,8 +69,7 @@ def get_level_num(level_name: str, default: int = logging.DEBUG) -> int:
     Example:
         >>> get_level_num('INFO')
         20
-        >>> get_level_num('DNE', default=logging.ERROR) == logging.ERROR
-        True
+        >>> assert get_level_num('DNE', default=logging.ERROR) == logging.ERROR
     """
     level = getattr(logging, level_name.upper(), None)
     return level if isinstance(level, int) else default

@@ -8,6 +8,7 @@ import contextlib
 import dataclasses
 import multiprocessing
 import threading
+from asyncio.subprocess import Process as AsyncSubprocess
 from concurrent.futures import Executor, ThreadPoolExecutor
 from numbers import Real
 from typing import Any, Container, Optional, Union
@@ -91,7 +92,7 @@ class AsyncProcess(multiprocessing.Process):
         return self.exitcode
 
 
-AsyncProcessType = Union[AsyncProcess, asyncio.subprocess.Process]
+AsyncProcessType = Union[AsyncProcess, AsyncSubprocess]
 
 
 async def run_process(process: AsyncProcessType, *, terminate_timeout: Real = 2) -> Optional[int]:
@@ -219,17 +220,20 @@ class EndpointManager:
 
     async def make_log_publisher(self, node: Optional[rpc.Node] = None) -> log.LogPublisher:
         if not node:  # pragma: no cover
+            # pylint: disable=unexpected-keyword-arg; pylint does not recognize dataclass.
             node = rpc.SocketNode(zmq.PUB, connections=get_connection(self.options['log_backend']))
         publisher = await self.stack.enter_async_context(log.LogPublisher(node))
         log.configure(publisher, fmt=self.options['log_format'], level=self.options['log_level'])
         return publisher
 
     async def make_log_subscriber(self, handler: rpc.Handler) -> rpc.Service:
+        # pylint: disable=unexpected-keyword-arg; pylint does not recognize dataclass.
         node = rpc.SocketNode(zmq.SUB, connections=get_connection(self.options['log_frontend']))
         return await self.make_service(handler, node)
 
     async def make_client(self, node: Optional[rpc.Node] = None) -> rpc.Client:
         if not node:
+            # pylint: disable=unexpected-keyword-arg; pylint does not recognize dataclass.
             options = {zmq.IDENTITY: f'{self.name}-client'.encode()}
             options |= dict(self.options['client_option'])
             node = rpc.SocketNode(
@@ -245,6 +249,7 @@ class EndpointManager:
         node: Optional[rpc.Node] = None,
     ) -> rpc.Service:
         if not node:
+            # pylint: disable=unexpected-keyword-arg; pylint does not recognize dataclass.
             options = {zmq.IDENTITY: f'{self.name}-service'.encode()}
             options |= dict(self.options['service_option'])
             node = rpc.SocketNode(

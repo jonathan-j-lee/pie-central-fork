@@ -214,7 +214,7 @@ async def test_bad_requests(mocker, endpoints):
     mocker.patch('random.randrange')
     random.randrange.return_value = 0
     client.requests[0] = asyncio.Future()
-    with pytest.raises(rpc.RuntimeRPCError):
+    with pytest.raises(ValueError):
         await client.call['echo-id'](1, address=service.node.address)
 
 

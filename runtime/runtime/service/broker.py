@@ -1,3 +1,5 @@
+"""Broker Service Handler."""
+
 import asyncio
 import collections
 import contextlib
@@ -20,6 +22,16 @@ __all__ = ['Broker', 'main']
 
 @dataclasses.dataclass
 class Broker(rpc.Handler):
+    """The coordinator between Runtime's clients and Runtime's other processes.
+
+    Attributes:
+        ctx: Command-line context.
+        update_publisher: A client for notifying subscribers of Smart Device parameter updates.
+        client: A client for interprocess calls.
+        buffers: A buffer manager.
+        uids: Smart Device UIDs.
+    """
+
     ctx: click.Context
     update_publisher: rpc.Client
     client: rpc.Client
@@ -41,18 +53,41 @@ class Broker(rpc.Handler):
     PATCHED_SYMBOLS: ClassVar[frozenset[str]] = frozenset({'Robot', 'Gamepad'})
 
     def get_envvar(self, name: str) -> str:
+        """Convert an option name into its corresponding environment variable."""
         return f'{self.ctx.auto_envvar_prefix}_{name}'.upper()
 
     def get_name(self, envvar: str) -> str:
+        """Convert an environment variable into its corresponding option name."""
         return envvar.lower().removeprefix(f'{self.ctx.auto_envvar_prefix.lower()}_')
 
     @rpc.route
     async def get_option(self, option: Optional[str] = None) -> Union[Any, dict[str, Any]]:
+        """Get a command-line option.
+
+        Arguments:
+            option: The option name. If not provided, all options are returned.
+
+        Returns:
+            If the option name was requested, a single option value. Otherwise, a mapping from
+            all option names to their respective values.
+        """
         if option:
             return self.ctx.obj[self.get_envvar(option)]
         return {self.get_name(envvar): value for envvar, value in self.ctx.obj.items()}
 
-    def get_args(self, options: dict[str, Any]) -> list[str]:
+    @staticmethod
+    def format_args(options: dict[str, Any]) -> Iterable[str]:
+        """Normalize a option name-value mapping as a flat command-line argument list.
+
+        Arguments:
+            options: Option name-value mapping. Names are in snake case.
+
+        Returns:
+            A command-line argument list.
+
+        Note:
+            Tokens are not quoted with ``shlex.quote``.
+        """
         for option, value in options.items():
             if option in ('help', 'version'):
                 continue
@@ -66,13 +101,14 @@ class Broker(rpc.Handler):
 
     @rpc.route
     async def set_option(self, options: dict[str, Any]):
-        """
+        """Set a command-line option to be used when Runtime is next restarted.
+
         Note:
             Command-line switches are not supported at this time.
         """
         current_options = {self.get_name(envvar): value for envvar, value in self.ctx.obj.items()}
         current_options.update(options)
-        args = list(self.get_args(current_options))
+        args = list(self.format_args(current_options))
         await asyncio.to_thread(self.ctx.command.parse_args, self.ctx, args)
 
     def filter_lint_message(self, message: dict[str, Any]) -> bool:
@@ -84,7 +120,16 @@ class Broker(rpc.Handler):
         return True
 
     def parse_lint_output(self, stdout: str, _stderr: str) -> Iterable[dict]:
-        """
+        """Parse raw ``pylint`` output into JSON records.
+
+        Arguments:
+            stdout: ``pylint`` subprocess standard output.
+
+        Returns:
+            A list of dictionaries, each of which has the keys: ``line``, ``column``, ``msg``,
+            ``msg_id``, ``symbol``, ``category``, and ``obj``. See the `Pylint Output`_
+            documentation for details.
+
         Note:
             We cannot selectively disable certain errors within a category from the command line.
             For example, undefined variables 'Robot' and 'Gamepad' are OK because the student API
@@ -92,6 +137,9 @@ class Broker(rpc.Handler):
             students (so we cannot disable the "undefined-variable" category entirely). This means
             the total score will always start with a large penalty and has a meaningless baseline.
             We solve this problem by computing the score client-side.
+
+        .. _Pylint Output:
+            https://docs.pylint.org/en/1.6.0/output.html
         """
         issue_counter = collections.defaultdict(lambda: 0)
         for line in stdout.splitlines():
@@ -107,11 +155,12 @@ class Broker(rpc.Handler):
         )
 
     @rpc.route
-    async def lint(self) -> list[dict]:
+    async def lint(self) -> list[dict[str, Union[str, int]]]:
         """Lint student code to catch errors and suggest best practices.
 
         Returns:
-            A list of lint messages, each of which represents one warning.
+            A list of lint messages, each of which represents one warning. See
+            :meth:`Broker.parse_lint_output` for details on the format of the output.
         """
         shell = await asyncio.create_subprocess_exec(
             self.PYLINT_EXEC,
@@ -126,11 +175,17 @@ class Broker(rpc.Handler):
 
     @functools.cached_property
     def button_params(self) -> list[Parameter]:
+        """Gamepad button parameters."""
         gamepad_type = self.buffers.catalog['gamepad']
         return [param for param in gamepad_type.params if param.platform_type == ctypes.c_bool]
 
     @rpc.route
-    def update_gamepads(self, update):
+    def update_gamepads(self, update: dict[str, dict[str, Union[int, float]]]):
+        """Update gamepad parameters.
+
+        Arguments:
+            update: A map of gamepad indices to their values.
+        """
         for index, params in update.items():
             gamepad = self.buffers.get_or_create(('gamepad', int(index)))
             with gamepad.operation():
@@ -145,6 +200,7 @@ class Broker(rpc.Handler):
                     gamepad.set_value(param.name, bool((bitmap >> i) & 0b1), write_block=False)
 
     def make_update(self) -> dict[str, dict[str, Any]]:
+        """Build a Smart Device update."""
         update = {}
         for uid in self.uids:
             with contextlib.suppress(RuntimeBufferError):
@@ -152,12 +208,14 @@ class Broker(rpc.Handler):
         return update
 
     async def send_update(self):
+        """Broadcast a Smart Device update."""
         update = await asyncio.to_thread(self.make_update)
         await self.update_publisher.call.update(update, notification=True)
 
     async def update_uids(self):
+        """Update the set of valid Smart Device UIDs."""
         try:
-            new_uids = await self.client.call.list_uids(address=b'device')
+            new_uids = await self.client.call.list_uids(address=b'device-service')
             self.uids.clear()
             self.uids.update(new_uids)
         except asyncio.TimeoutError as exc:
@@ -165,8 +223,14 @@ class Broker(rpc.Handler):
 
 
 async def main(ctx, **options):
+    """Async entry point.
+
+    Arguments:
+        **options: Command-line options.
+    """
     async with process.EndpointManager('broker', options) as manager:
         await manager.make_log_proxy()
+        await manager.make_router()
         broker = Broker(
             ctx,
             await manager.make_update_client(),
