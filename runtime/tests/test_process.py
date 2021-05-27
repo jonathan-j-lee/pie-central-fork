@@ -13,7 +13,7 @@ import zmq
 import zmq.asyncio
 
 from runtime import log, process, rpc
-from runtime.exception import EmergencyStopException
+from runtime.exception import RuntimeBaseException, EmergencyStopException
 
 from test_rpc import logger
 
@@ -35,6 +35,7 @@ async def endpoints():
         'router_backend': [f'tcp://*:{get_random_port()}'],
         'update_addr': f'udp://localhost:{get_random_port()}',
         'control_addr': f'udp://localhost:{get_random_port()}',
+        'health_check_interval': 60,
     }
     async with process.EndpointManager('test', options) as endpoints:
         proxy = await endpoints.make_log_proxy()
@@ -66,6 +67,12 @@ class LogHandler(rpc.Handler):
     @rpc.route
     async def warning(self, event):
         await self.queue.put(event)
+
+
+def test_runtime_exc_render():
+    exc = RuntimeBaseException('disconnect', error_code=0xff, device='limit-switch')
+    exc_dup = eval(repr(exc))
+    assert exc.context == exc_dup.context
 
 
 @pytest.mark.asyncio

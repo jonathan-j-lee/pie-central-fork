@@ -34,7 +34,7 @@ from ..buffer import BufferManager
 from ..exception import EmergencyStopException, RuntimeBaseException
 
 __all__ = [
-    'RuntimeExecutionError',
+    'ExecutionError',
     'ExecutionRequest',
     'SyncExecutor',
     'AsyncExecutor',
@@ -43,7 +43,7 @@ __all__ = [
 ]
 
 
-class RuntimeExecutionError(RuntimeBaseException):
+class ExecutionError(RuntimeBaseException):
     """General execution error."""
 
 
@@ -60,7 +60,7 @@ def using_timer(timeout: Real, interval: Real = 0, **context):
     try:
         yield
     except Exception as exc:
-        raise RuntimeExecutionError(
+        raise ExecutionError(
             'function raised an exception',
             timeout=timeout,
             interval=interval,
@@ -75,7 +75,7 @@ def run_once(func: Callable[..., Any], *args: Any, timeout: Real = 1) -> Any:
 
     Raises:
         signal.ItimerError: If the timer was unable to be set.
-        RuntimeExecutionError: If the callable produced an exception.
+        ExecutionError: If the callable produced an exception.
     """
     with using_timer(timeout, func=func.__name__):
         return func(*args)
@@ -95,7 +95,7 @@ def run_periodically(
 
     Raises:
         signal.ItimerError: If the timer was unable to be set.
-        RuntimeExecutionError: If the callable produced an exception.
+        ExecutionError: If the callable produced an exception.
     """
     with using_timer(timeout, timeout, func=func.__name__):
         while predicate():
@@ -145,7 +145,7 @@ class Executor(abc.ABC):
             request: The execution request.
 
         Raises:
-            RuntimeExecutionError: If the callable was unable to be scheduled.
+            ExecutionError: If the callable was unable to be scheduled.
 
         Note:
             This method should be thread-safe but is allowed to block. The order in which callables
@@ -199,13 +199,13 @@ class SyncExecutor(Executor):
 
     def execute_forever(self):
         if threading.current_thread() is not threading.main_thread():
-            raise RuntimeExecutionError(
+            raise ExecutionError(
                 'sync executor must be used in the main thread',
                 main_thread=threading.main_thread().ident,
                 current_thread=threading.current_thread().ident,
             )
         logger = Dispatcher.logger.sync_bl.bind(mode='sync')
-        logger.debug('Executor started', thread_id=threading.current_thread().ident)
+        logger.info('Executor started', thread_id=threading.current_thread().ident)
         while True:
             request = self.requests.get()
             if request is STOP_REQUEST:
@@ -222,7 +222,7 @@ class SyncExecutor(Executor):
                 )
                 try:
                     self.execute(request)
-                except (signal.ItimerError, RuntimeExecutionError) as exc:
+                except (signal.ItimerError, ExecutionError) as exc:
                     logger.error('Unable to execute function', exc_info=exc)
 
 
@@ -252,7 +252,7 @@ class AsyncExecutor(Executor):
 
     def schedule(self, request: ExecutionRequest):
         if not self.loop or not self.requests:
-            raise RuntimeExecutionError('async executor is not ready')
+            raise ExecutionError('async executor is not ready')
         try:
             current_loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -288,7 +288,7 @@ class AsyncExecutor(Executor):
         self.configure_loop()
         logger = Dispatcher.logger.sync_bl.bind(mode='async')
         await asyncio.to_thread(
-            logger.debug,
+            logger.info,
             'Executor started',
             thread_id=threading.current_thread().ident,
         )
@@ -358,6 +358,10 @@ class Dispatcher(rpc.Handler):
         """Whether student code should be imported for the first time."""
         return not hasattr(self.student_code, '__file__')
 
+    def _print(self, *values, sep: str = ' ', file=None, flush: bool = False):
+        message = sep.join(map(str, values))
+        self.logger.sync_bl.info(message, student_print=True)
+
     def reload(self):
         """Load student code from disk and monkey-patch in the Runtime API."""
         if self.should_import:
@@ -369,7 +373,8 @@ class Dispatcher(rpc.Handler):
         self.student_code.Robot = api.Robot(self.buffers)
         self.student_code.Gamepad = api.Gamepad(self.buffers)
         self.student_code.Field = api.Field(self.buffers)
-        self.logger.sync_bl.debug('Student code reloaded', student_code=self.student_code.__name__)
+        self.student_code.print = self._print
+        self.logger.sync_bl.info('Student code reloaded', student_code=self.student_code.__name__)
 
     def prepare_student_code_run(self, requests: list[dict[str, Any]]):
         """Prepare to run student code.
@@ -405,22 +410,22 @@ class Dispatcher(rpc.Handler):
     @rpc.route
     async def idle(self):
         """Suspend all execution (synchronous and asynchronous)."""
-        suppress = contextlib.suppress(RuntimeExecutionError)
+        suppress = contextlib.suppress(ExecutionError)
         with suppress:
             await asyncio.to_thread(self.sync_exec.cancel)
         with suppress:
             await asyncio.to_thread(self.async_exec.cancel)
 
     @rpc.route
-    async def teleop(self):
-        """Enter teleop mode."""
-        requests = [{'func': 'teleop_setup'}, {'func': 'teleop_main', 'periodic': True}]
+    async def auto(self):
+        """Enter autonomous mode."""
+        requests = [{'func': 'autonomous_setup'}, {'func': 'autonomous_main', 'periodic': True}]
         await self.execute(requests)
 
     @rpc.route
-    async def autonomous(self):
-        """Enter autonomous mode."""
-        requests = [{'func': 'autonomous_setup'}, {'func': 'autonomous_main', 'periodic': True}]
+    async def teleop(self):
+        """Enter teleop mode."""
+        requests = [{'func': 'teleop_setup'}, {'func': 'teleop_main', 'periodic': True}]
         await self.execute(requests)
 
     @rpc.route

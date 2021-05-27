@@ -1,4 +1,5 @@
 import asyncio
+import ctypes
 import os
 import socket
 import tempfile
@@ -11,6 +12,7 @@ import serial
 
 import runtime
 from runtime import log
+from runtime.buffer import Parameter
 from runtime.messaging import MessageType, MessageError, Message
 from runtime.service.device import (
     HAS_UDEV,
@@ -74,17 +76,19 @@ async def stream(mocker):
 @pytest.fixture
 async def device_manager(mocker, stream):
     manager = SmartDeviceManager()
-    await asyncio.to_thread(
-        manager.buffers.load_catalog,
-        Path(runtime.__file__).parent / 'catalog.yaml',
-    )
-    manager.buffers.catalog['limit-switch'].interval = 0.2
+    params = [
+        Parameter('switch0', ctypes.c_bool, 0, writeable=True),
+        Parameter('switch1', ctypes.c_bool, 1, writeable=True),
+        Parameter('switch2', ctypes.c_bool, 2, writeable=True),
+    ]
+    manager.buffers.register_type('limit-switch', params, device_id=0)
     with manager.buffers:
         uids = {0x0000_01_00000000_00000000 + i for i in range(3)}
         for uid in uids:
             manager.devices[uid] = device = SmartDeviceClient(*stream)
-            for method in ('ping', 'disable', 'subscribe', 'unsubscribe', 'heartbeat'):
-                mocker.patch.object(device, method, autospec=True).return_value = result = asyncio.Future()
+            for method in ('ping', 'disable', 'subscribe', 'unsubscribe', 'read', 'heartbeat'):
+                result = asyncio.Future()
+                mocker.patch.object(device, method, autospec=True).return_value = result
                 result.set_result(None)
         yield manager
     manager.buffers.unlink_all()
@@ -180,7 +184,7 @@ async def test_read_error(mocker, stream, device):
     reader, _ = stream
     reader.readuntil.side_effect = make_reads(b'\xff\xff\xff')
     logger = mocker.spy(device.logger, 'error')
-    async with device.communicate() as rw_tasks:
+    async with device.communicate():
         await asyncio.sleep(0.02)
         assert logger.call_count == 1
 
@@ -191,7 +195,7 @@ async def test_write_error(mocker, device):
     message.encode_into_buf.side_effect = MessageError('encoding error')
     await device.write_queue.put(message)
     logger = mocker.spy(device.logger, 'error')
-    async with device.communicate() as rw_tasks:
+    async with device.communicate():
         await asyncio.sleep(0.02)
         assert logger.call_count == 1
 
@@ -216,10 +220,10 @@ async def test_disable(stream, device):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('params,interval,packet', [
-    (None, 0, b'\x04\x11\x04\x07\x02\xc8\x02\xda'),
+    (None, 0, b'\x04\x11\x04\x07\x01\x01\x02\x12'),
     (['switch1'], 1, b'\x04\x11\x04\x02\x04\xe8\x03\xfc'),
 ])
-async def test_subscribe(params, interval, packet, stream, device, device_manager):
+async def test_subscribe(params, interval, packet, stream, device):
     _, writer = stream
     async with device.communicate():
         await device.subscribe(params, interval)
@@ -237,6 +241,26 @@ async def test_unsubscribe(stream, device):
 
 
 @pytest.mark.asyncio
+async def test_read(stream, device):
+    _, writer = stream
+    async with device.communicate():
+        await device.read(['switch0', 'switch2'])
+        await device.poll_buffer()
+        await asyncio.sleep(0.02)
+        writer.write.assert_has_calls([call(b'\x04\x13\x02\x05\x02\x14'), call(b'\x00')])
+
+
+@pytest.mark.asyncio
+async def test_write(stream, device):
+    _, writer = stream
+    async with device.communicate():
+        await asyncio.to_thread(device.buffer.write, 'switch1', True)
+        await device.poll_buffer()
+        await asyncio.sleep(0.02)
+        writer.write.assert_has_calls([call(b'\x04\x14\x03\x02\x03\x01\x14'), call(b'\x00')])
+
+
+@pytest.mark.asyncio
 async def test_discovery(mocker, stream, device, device_manager):
     reader, writer = stream
     device.buffer = None
@@ -249,19 +273,26 @@ async def test_discovery(mocker, stream, device, device_manager):
         uid = await asyncio.wait_for(device.discover(device_manager.buffers), 0.1)
     writer.write.assert_has_calls([call(b'\x02\x10\x02\x10'), call(b'\x00')])
     assert int(uid) == 0x0000_01_ffffffff_ffffffff
-    assert device.buffer.delay == pytest.approx(0)
-    assert device.buffer.subscription == []
+    assert device.buffer.subscription == set()
+    assert device.buffer.interval == pytest.approx(0)
     assert device.buffer.device_id == 0
-    assert [param.name for param in device.buffer.params] == ['switch0', 'switch1', 'switch2']
+    param_names = set(param.name for param in device.buffer.params.values())
+    assert param_names == {'switch0', 'switch1', 'switch2'}
 
 
 @pytest.mark.asyncio
-async def test_heartbeat(stream, device, device_manager):
-    reader, writer = stream
+async def test_heartbeat_timeout(device):
     async with device.communicate():
         with pytest.raises(asyncio.TimeoutError):
             await device.heartbeat(timeout=0.1)
+
+
+@pytest.mark.asyncio
+async def test_heartbeat(stream, device):
+    reader, writer = stream
+    async with device.communicate():
         await device.heartbeat(block=False)
+        await asyncio.sleep(0.02)
         ((req_buf,), _kwargs), _ = writer.write.call_args_list
         message = Message.decode(req_buf)
         assert message.type is MessageType.HB_REQ
@@ -275,12 +306,22 @@ async def test_heartbeat(stream, device, device_manager):
 
 
 @pytest.mark.asyncio
+async def test_heartbeat_dup_id(device):
+    async with device.communicate():
+        with pytest.raises(ValueError):
+            await asyncio.gather(
+                device.heartbeat(0xff, timeout=0.1),
+                device.heartbeat(0xff, timeout=0.1),
+            )
+
+
+@pytest.mark.asyncio
 async def test_serial_disconnect(stream, device):
     reader, _ = stream
     reader.readuntil.return_value = result = asyncio.Future()
     result.set_exception(serial.SerialException('connection broken'))
-    async with device.communicate() as rw_tasks:
-        await asyncio.gather(*rw_tasks)
+    async with device.communicate() as tasks:
+        await asyncio.gather(*tasks)
 
 
 @pytest.mark.asyncio
@@ -289,17 +330,18 @@ async def test_handle_buf_required(device):
     async with device.communicate():
         with pytest.raises(DeviceError):
             await device.handle_messages()
+        with pytest.raises(DeviceError):
+            await device.poll_buffer()
 
 
 @pytest.mark.asyncio
 async def test_handle_hb_req(stream, device):
     reader, writer = stream
     reader.readuntil.side_effect = make_reads(b'\x05\x17\x01\x80\x96')
-    async with device.communicate():
-        handle_task = asyncio.create_task(device.handle_messages())
+    async with device.communicate() as tasks:
+        tasks.add(asyncio.create_task(device.handle_messages(), name='dev-handle'))
         await asyncio.sleep(0.02)
         writer.write.assert_has_calls([call(b'\x05\x18\x01\x80\x99'), call(b'\x00')])
-        handle_task.cancel()
 
 
 @pytest.mark.asyncio
@@ -307,12 +349,11 @@ async def test_handle_hb_res(mocker, stream, device):
     reader, _ = stream
     reader.readuntil.side_effect = make_reads(b'\x05\x18\x01\x80\x99', b'\x05\x18\x01\x80\x99')
     logger = mocker.spy(device.logger, 'error')
-    async with device.communicate():
-        handle_task = asyncio.create_task(device.handle_messages())
+    async with device.communicate() as tasks:
+        tasks.add(asyncio.create_task(device.handle_messages(), name='dev-handle'))
         await device.heartbeat(heartbeat_id=0x80)
         await asyncio.sleep(0.02)
         assert logger.call_count == 1
-        handle_task.cancel()
 
 
 @pytest.mark.asyncio
@@ -322,26 +363,24 @@ async def test_handle_sub_res(mocker, stream, device):
         b'\x04\x12\x0f\x01\x02\x14\x01\x01\x06'
         b'\x0f\xef\xbe\xad\xde\x01\x01\x01\x02%'
     )
-    async with device.communicate():
-        handle_task = asyncio.create_task(device.handle_messages())
+    async with device.communicate() as tasks:
+        tasks.add(asyncio.create_task(device.handle_messages(), name='dev-handle'))
         await asyncio.sleep(0.02)
         assert int(device.buffer.uid) == 0x0000_0f_00000000_deadbeef
-        assert device.buffer.delay == pytest.approx(0.02)
-        assert device.buffer.subscription == ['switch0']
-        handle_task.cancel()
+        assert device.buffer.subscription == {'switch0'}
+        assert device.buffer.interval == pytest.approx(0.02)
 
 
 @pytest.mark.asyncio
 async def test_handle_dev_data(stream, device):
     reader, _ = stream
     reader.readuntil.side_effect = make_reads(b'\x04\x15\x05\x07\x01\x04\x01\x01\x17')
-    async with device.communicate():
-        handle_task = asyncio.create_task(device.handle_messages())
+    async with device.communicate() as tasks:
+        tasks.add(asyncio.create_task(device.handle_messages(), name='dev-handle'))
         await asyncio.sleep(0.02)
-        assert not device.buffer.get_value('switch0')
-        assert device.buffer.get_value('switch1')
-        assert device.buffer.get_value('switch2')
-        handle_task.cancel()
+        assert not device.buffer.get('switch0')
+        assert device.buffer.get('switch1')
+        assert device.buffer.get('switch2')
 
 
 @pytest.mark.parametrize('packet', [
@@ -355,34 +394,7 @@ async def test_handle_error(packet, mocker, stream, device):
     reader, _ = stream
     reader.readuntil.side_effect = make_reads(packet)
     logger = mocker.spy(device.logger, 'error')
-    async with device.communicate():
-        handle_task = asyncio.create_task(device.handle_messages())
+    async with device.communicate() as tasks:
+        tasks.add(asyncio.create_task(device.handle_messages(), name='dev-handle'))
         await asyncio.sleep(0.02)
         assert logger.call_count == 1
-        handle_task.cancel()
-
-
-@pytest.mark.asyncio
-async def test_device_manager(device_manager):
-    assert set(await device_manager.list_uids()) == {
-        0x0000_01_00000000_00000000,
-        0x0000_01_00000000_00000001,
-        0x0000_01_00000000_00000002,
-    }
-    for method_name in ('ping', 'disable', 'unsubscribe'):
-        method = getattr(device_manager, method_name)
-        await method()
-        await method(0x0000_01_00000000_00000001)
-        await method([0x0000_01_00000000_00000001, 0x0000_01_00000000_00000002])
-        calls = {
-            0x0000_01_00000000_00000000: 1,
-            0x0000_01_00000000_00000001: 3,
-            0x0000_01_00000000_00000002: 2,
-        }
-        for uid, count in calls.items():
-            assert getattr(device_manager.devices[uid], method_name).call_count == count
-    limit_switch = device_manager.devices[0x0000_01_00000000_00000000]
-    await device_manager.subscribe(0x0000_01_00000000_00000000, ['switch0'], 0.5)
-    limit_switch.subscribe.assert_called_with(['switch0'], pytest.approx(0.5))
-    await device_manager.heartbeat(0x0000_01_00000000_00000000, 0xa0, 2, True)
-    limit_switch.heartbeat.assert_called_with(0xa0, pytest.approx(2), True)

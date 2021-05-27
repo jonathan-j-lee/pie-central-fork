@@ -1,10 +1,12 @@
 """Common Runtime exceptions."""
 
+__all__ = ['RuntimeBaseException', 'EmergencyStopException']
+
 
 class RuntimeBaseException(Exception):
     """Base exception for Runtime-specific behavior."""
 
-    def __init__(self, message: str, **context):
+    def __init__(self, message: str, /, **context):
         super().__init__(message)
         self.context = context
 

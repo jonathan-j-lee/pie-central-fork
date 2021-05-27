@@ -1,6 +1,7 @@
 # distutils: language=c++
 
 import contextlib
+import errno
 import math
 import time
 from numbers import Real
@@ -27,28 +28,45 @@ class SyncError(RuntimeBaseException):
 
 
 cdef class Mutex:
+    """A mutex.
+
+    If initialized with ``recursive=True``, the mutex can be successfully reacquired.
+
+    Otherwise, re-acquiring will raise a :class:``SyncError`` with :attr:``errno.EDEADLK``.
+    Re-releasing will raise a :class:``SyncError`` with :attr:``errno.EPERM``.
+    """
     cdef pthread_mutex_t *mutex
     cdef pthread_mutexattr_t *attrs
     cdef pthread_mutex_t local_mutex
     cdef pthread_mutexattr_t local_attrs
-    cdef bool shared
+    cdef int pshared
+    cdef int type
 
     SIZE = sizeof(pthread_mutex_t) + sizeof(pthread_mutexattr_t)
+    DEFAULT_TIMEOUT = 1
 
-    def __cinit__(self, unsigned char[::1] buf = None, shared: bool = True):
+    def __cinit__(
+        self,
+        unsigned char[::1] buf = None,
+        /,
+        *,
+        shared: bool = True,
+        recursive: bool = True,
+    ):
         if buf is None:
             self.mutex = &self.local_mutex
             self.attrs = &self.local_attrs
-            self.shared = False
+            shared = False
         else:
             if buf.shape[0] < self.SIZE:
                 raise ValueError('buffer is too small to fit Mutex')
             self.mutex = <pthread_mutex_t *> &buf[0]
             self.attrs = <pthread_mutexattr_t *> &buf[sizeof(pthread_mutex_t)]
-            self.shared = shared
+        self.pshared = PTHREAD_PROCESS_SHARED if shared else PTHREAD_PROCESS_PRIVATE
+        self.type = PTHREAD_MUTEX_RECURSIVE if recursive else PTHREAD_MUTEX_ERRORCHECK
 
     def __enter__(self):
-        self.acquire()
+        self.acquire(self.DEFAULT_TIMEOUT)
 
     def __exit__(self, _exc_type, _exc, _traceback):
         self.release()
@@ -56,9 +74,8 @@ cdef class Mutex:
     def initialize(self):
         pthread_mutexattr_init(self.attrs)
         pthread_mutexattr_setprotocol(self.attrs, PTHREAD_PRIO_INHERIT)
-        shared = PTHREAD_PROCESS_SHARED if self.shared else PTHREAD_PROCESS_PRIVATE
-        pthread_mutexattr_setpshared(self.attrs, shared)
-        pthread_mutexattr_settype(self.attrs, PTHREAD_MUTEX_ERRORCHECK)
+        pthread_mutexattr_setpshared(self.attrs, self.pshared)
+        pthread_mutexattr_settype(self.attrs, self.type)
         pthread_mutex_init(self.mutex, self.attrs)
 
     def destroy(self):

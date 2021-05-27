@@ -9,6 +9,7 @@
 using namespace message;
 
 const param_map_t Message::NO_PARAMETERS = 0;
+const param_map_t Message::ALL_PARAMETERS = 0xffff;
 const interval_t Message::NO_SUBSCRIPTION = 0;
 const char Message::DELIMETER = '\0';
 

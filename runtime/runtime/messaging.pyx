@@ -22,7 +22,7 @@ class MessageError(RuntimeBaseException):
     pass
 
 
-def message_factory(wrapped, MessageType msg_type):
+def message_factory(wrapped, msg_type):
     @functools.wraps(wrapped)
     def wrapper(*args, **kwargs):
         msg = Message()
@@ -48,10 +48,13 @@ cdef class ParameterMap:
         if index >= MAX_PARAMETERS:
             raise MessageError('parameter index out of bounds', index=index)
 
-    def set_param(self, size_t index, const unsigned char[::1] buf):
-        self.check_index(index)
-        self.params[index].base = <void *>&buf[0]
-        self.params[index].size = buf.shape[0]
+    def update(self, block: 'ParameterBlock'):
+        cdef uint64_t base = ctypes.addressof(block)
+        for param in block.params:
+            field = getattr(type(block), param.name)
+            self.check_index(param.index)
+            self.params[param.index].base = <void *> (base + <uint64_t> field.offset)
+            self.params[param.index].size = field.size
 
     def clear_param(self, size_t index):
         self.check_index(index)
@@ -73,6 +76,8 @@ cdef class Message:
     MAX_SIZE = MESSAGE_MAX_SIZE
     MAX_ENCODING_SIZE = ENCODING_MAX_SIZE
     DELIM = bytes([DELIMETER])
+    NO_PARAMS = NO_PARAMETERS
+    ALL_PARAMS = ALL_PARAMETERS
     cdef _Message buf
 
     @property

@@ -9,7 +9,7 @@ from runtime import api, process
 from runtime.service.executor import (
     handle_timeout,
     run_once,
-    RuntimeExecutionError,
+    ExecutionError,
     ExecutionRequest,
     AsyncExecutor,
     Dispatcher,
@@ -20,7 +20,7 @@ import pytest
 
 
 @pytest.fixture
-def dispatcher(mocker):
+def dispatcher():
     timeouts = {
         re.compile(r'.*_setup'): 1,
         re.compile(r'.*_main'): 0.1,
@@ -75,7 +75,7 @@ def test_bad_imports(dispatcher):
     with pytest.raises(SyntaxError):
         dispatcher.prepare_student_code_run(requests)
     dispatcher.student_code = types.ModuleType('testcode.nohalt')
-    with pytest.raises(RuntimeExecutionError):
+    with pytest.raises(ExecutionError):
         run_once(dispatcher.prepare_student_code_run, [], timeout=0.1)
 
 
@@ -120,13 +120,13 @@ def test_sync_queueing_blank(dispatcher):
 
 @pytest.mark.slow
 @pytest.mark.asyncio
-async def test_dispatch(dispatcher):
+async def test_sync_dispatch(dispatcher):
     counts = []
     async def main():
         try:
             await asyncio.to_thread(dispatcher.sync_exec.schedule, ExecutionRequest())
             await dispatcher.execute([{'func': 'bad'}])
-            await dispatcher.autonomous()
+            await dispatcher.auto()
             await asyncio.sleep(0.45)
             counts.append(dict(dispatcher.student_code.counters))
             await dispatcher.teleop()
@@ -147,6 +147,12 @@ async def test_dispatch(dispatcher):
     auto_counts, teleop_counts, idle_counts = counts
     assert auto_counts == {'autonomous_setup': 1, 'autonomous_main': 5}
     assert teleop_counts, idle_counts == {'teleop_setup': 1, 'teleop_main': 5}
+
+
+@pytest.mark.asyncio
+async def test_sync_not_main_thread(dispatcher):
+    with pytest.raises(ExecutionError):
+        await asyncio.to_thread(dispatcher.sync_exec.execute_forever)
 
 
 def make_action():

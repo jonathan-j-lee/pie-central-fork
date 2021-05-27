@@ -36,7 +36,24 @@ sphinxcontrib-tikz = '~=0.4'
 [scripts]
 build = 'python setup.py build_ext --inplace'
 clean = 'sh -c "rm -rf build runtime/*.cpython-*.so runtime/*.c runtime/*.cpp"'
-dev = 'python -m runtime --debug --log-level debug --log-format pretty'
+client = """python -m runtime
+  --debug
+  --log-level info
+  --log-format pretty
+  client
+"""
+dev = """python -m runtime
+  --debug
+  --log-level info
+  --log-format pretty
+  start
+"""
+emulate = """python -m runtime
+  --debug
+  --log-level info
+  --log-format pretty
+  emulate-dev
+"""
 servedocs = 'make --directory=docs livehtml'
 lint = 'pylint runtime'
 fasttest = 'pytest -m "not slow"'

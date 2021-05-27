@@ -19,5 +19,5 @@ def teleop_setup():
 def teleop_main():
     global cycles
     cycles += 1
-    Robot.set_value(LEFT_MOTOR, 'duty_cycle', Gamepad.get_value('joystick_left_y'))
-    Robot.set_value(RIGHT_MOTOR, 'duty_cycle', Gamepad.get_value('joystick_right_y'))
+    Robot.write(LEFT_MOTOR, 'duty_cycle', Gamepad.get('joystick_left_y'))
+    Robot.write(RIGHT_MOTOR, 'duty_cycle', Gamepad.get('joystick_right_y'))

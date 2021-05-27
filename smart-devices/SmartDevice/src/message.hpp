@@ -119,6 +119,7 @@ class Message {
 
 public:
     static const param_map_t NO_PARAMETERS;
+    static const param_map_t ALL_PARAMETERS;
     static const interval_t NO_SUBSCRIPTION;
     static const char DELIMETER;
 

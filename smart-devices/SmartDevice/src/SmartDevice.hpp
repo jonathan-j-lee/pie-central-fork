@@ -112,6 +112,8 @@ class SmartDeviceLoop {
     bool send(void);
     /* True iff an active subscription exists. */
     bool is_subscribed(void);
+    /* Clear parameters present in the subscription, if a subscription exists. */
+    message::param_map_t mask_subscription(message::param_map_t);
     /* Handle a subscription request. The actual subscription may differ from
        the requested parameters if some parameters are not readable. */
     void set_subscription(message::param_map_t, message::interval_t);

@@ -10,7 +10,8 @@ cdef extern from "<pthread.h>" nogil:
         PTHREAD_PRIO_INHERIT,
         PTHREAD_PROCESS_PRIVATE,
         PTHREAD_PROCESS_SHARED,
-        PTHREAD_MUTEX_ERRORCHECK
+        PTHREAD_MUTEX_ERRORCHECK,
+        PTHREAD_MUTEX_RECURSIVE
     int pthread_mutex_init(pthread_mutex_t *, const pthread_mutexattr_t *)
     int pthread_mutex_destroy(pthread_mutex_t *)
     int pthread_mutex_lock(pthread_mutex_t *)

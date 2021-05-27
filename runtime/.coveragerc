@@ -1,5 +1,6 @@
 [run]
 branch = True
+concurrency = thread multiprocessing
 data_file = build/.coverage
 omit =
   runtime/__init__.py

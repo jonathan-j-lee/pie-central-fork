@@ -134,6 +134,13 @@ bool SmartDeviceLoop::send_data(param_map_t present) {
     return success;
 }
 
+param_map_t SmartDeviceLoop::mask_subscription(param_map_t present) {
+    if (this->is_subscribed()) {
+        present &= Message::ALL_PARAMETERS ^ present;
+    }
+    return present;
+}
+
 void SmartDeviceLoop::serve_once(unsigned long timeout) {
     if (!this->recv(timeout)) {
         return;
@@ -156,7 +163,7 @@ void SmartDeviceLoop::serve_once(unsigned long timeout) {
         break;
     case MessageType::DEV_WRITE:
         check_ok(msg_ok, this->msg.read_dev_write(&present, this->params));
-        check_ok(msg_ok, this->send_data(this->sd->write(present)));
+        check_ok(msg_ok, this->send_data(this->mask_subscription(this->sd->write(present))));
         if (msg_ok) {
             return;
         } else {
@@ -164,7 +171,7 @@ void SmartDeviceLoop::serve_once(unsigned long timeout) {
         }
     case MessageType::DEV_READ:
         check_ok(msg_ok, this->msg.read_dev_read(&present));
-        check_ok(msg_ok, this->send_data(present));
+        check_ok(msg_ok, this->send_data(this->mask_subscription(present)));
         if (msg_ok) {
             return;
         } else {

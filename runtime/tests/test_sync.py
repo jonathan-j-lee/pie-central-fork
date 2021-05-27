@@ -9,7 +9,7 @@ from runtime.sync import SyncError, Mutex
 
 @pytest.fixture
 def mutex():
-    mutex = Mutex(shared=False)
+    mutex = Mutex(shared=False, recursive=False)
     mutex.initialize()
     yield mutex
     mutex.destroy()

@@ -182,6 +182,14 @@ async def spin(func, /, *args, interval: Real = 1, **kwargs):
         await asyncio.gather(asyncio.sleep(interval), func(*args, **kwargs))
 
 
+async def health_check(logger: structlog.stdlib.AsyncBoundLogger):
+    await logger.info(
+        'Health check',
+        thread_count=threading.active_count(),
+        task_count=len(asyncio.all_tasks()),
+    )
+
+
 @dataclasses.dataclass
 class EndpointManager:
     name: str
@@ -190,19 +198,24 @@ class EndpointManager:
     stack: contextlib.AsyncExitStack = dataclasses.field(default_factory=contextlib.AsyncExitStack)
 
     def __post_init__(self):
-        if self.executor is None:
-            # pylint: disable=consider-using-with
-            # See ``__aenter__`` where this executor is placed on the exit stack.
-            self.executor = ThreadPoolExecutor(
-                max_workers=self.options['thread_pool_workers'],
-                thread_name_prefix='aioworker',
-            )
+        # pylint: disable=consider-using-with
+        # See ``__aenter__`` where this executor is placed on the exit stack.
+        self.executor = self.executor or ThreadPoolExecutor(
+            max_workers=self.options['thread_pool_workers'],
+            thread_name_prefix='aioworker',
+        )
 
     async def __aenter__(self):
         await self.stack.__aenter__()
         self.executor = self.stack.enter_context(self.executor)
         configure_loop(self.options['debug'], self.executor)
         await self.make_log_publisher()
+        health_task = spin(
+            health_check,
+            structlog.get_logger(endpoint=self.name),
+            interval=self.options['health_check_interval'],
+        )
+        self.stack.callback(asyncio.create_task(health_task, name='health-check').cancel)
         return self
 
     async def __aexit__(self, exc_type, exc, traceback):

@@ -164,7 +164,7 @@ yogi-bear:
 
 rfid:
   device_id: 11
-  delay: 0.1
+  sub_interval: 0.1
   params:
     - name: id
       type: uint32

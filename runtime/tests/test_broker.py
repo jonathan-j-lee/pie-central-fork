@@ -13,11 +13,6 @@ from runtime.buffer import BufferManager
 from runtime.service.broker import Broker
 
 
-@pytest.fixture(autouse=True)
-def logger():
-    Broker.logger = structlog.get_logger(wrapper_class=structlog.stdlib.AsyncBoundLogger)
-
-
 @pytest.fixture
 def buffers():
     with BufferManager() as buffers:
@@ -47,15 +42,16 @@ async def broker(update_publisher, client, buffers):
     args = [
         '--exec-module=testcode.lint',
         '--dev-name=left_motor:309480287454862199079567360',
+        'start',
     ]
     with cli.make_context('cli', args) as ctx:
         broker = Broker(ctx, update_publisher, client, buffers=buffers)
         limit_switch = broker.buffers.get_or_create(0x0000_00_ffffffff_ffffffff)
-        limit_switch.set_value('switch0', True, write_block=False)
-        limit_switch.set_value('switch1', False, write_block=False)
-        limit_switch.set_value('switch2', True, write_block=False)
+        limit_switch.set('switch0', True)
+        limit_switch.set('switch1', False)
+        limit_switch.set('switch2', True)
         broker.buffers.stack.close()
-        broker.buffers[0x0000_00_ffffffff_ffffffff].set_valid()
+        broker.buffers[0x0000_00_ffffffff_ffffffff].valid = True
         yield broker
 
 
@@ -99,32 +95,32 @@ async def test_gamepad_update(broker):
     }
     broker.update_gamepads(update1)
     buf0 = broker.buffers['gamepad', 0]
-    assert buf0.get_value('joystick_left_x') == pytest.approx(-0.5)
-    assert buf0.get_value('joystick_left_y') == pytest.approx(-1)
-    assert buf0.get_value('joystick_right_x') == pytest.approx(1)
-    assert buf0.get_value('joystick_right_y') == pytest.approx(0.5)
-    assert buf0.get_value('button_a')
-    assert not buf0.get_value('button_b')
-    assert not buf0.get_value('button_x')
+    assert buf0.get('joystick_left_x') == pytest.approx(-0.5)
+    assert buf0.get('joystick_left_y') == pytest.approx(-1)
+    assert buf0.get('joystick_right_x') == pytest.approx(1)
+    assert buf0.get('joystick_right_y') == pytest.approx(0.5)
+    assert buf0.get('button_a')
+    assert not buf0.get('button_b')
+    assert not buf0.get('button_x')
     broker.update_gamepads(update2)
-    assert buf0.get_value('joystick_left_x') == pytest.approx(-0.7)
-    assert buf0.get_value('joystick_left_y') == pytest.approx(-1)
-    assert buf0.get_value('joystick_right_x') == pytest.approx(1)
-    assert buf0.get_value('joystick_right_y') == pytest.approx(0.7)
-    assert not buf0.get_value('button_a')
-    assert buf0.get_value('button_b')
-    assert buf0.get_value('button_x')
+    assert buf0.get('joystick_left_x') == pytest.approx(-0.7)
+    assert buf0.get('joystick_left_y') == pytest.approx(-1)
+    assert buf0.get('joystick_right_x') == pytest.approx(1)
+    assert buf0.get('joystick_right_y') == pytest.approx(0.7)
+    assert not buf0.get('button_a')
+    assert buf0.get('button_b')
+    assert buf0.get('button_x')
     buf1 = broker.buffers['gamepad', 1]
-    assert buf1.get_value('joystick_left_x') == pytest.approx(0.7)
-    assert not buf1.get_value('button_a')
-    assert not buf1.get_value('button_b')
-    assert not buf1.get_value('button_x')
+    assert buf1.get('joystick_left_x') == pytest.approx(0.7)
+    assert not buf1.get('button_a')
+    assert not buf1.get('button_b')
+    assert not buf1.get('button_x')
     broker.update_gamepads(update3)
-    assert buf0.get_value('joystick_left_x') == pytest.approx(-0.7)
-    assert buf0.get_value('joystick_left_y') == pytest.approx(-1)
-    assert buf0.get_value('joystick_right_x') == pytest.approx(1)
-    assert buf0.get_value('joystick_right_y') == pytest.approx(0.7)
-    assert buf1.get_value('joystick_left_x') == pytest.approx(-0.5)
+    assert buf0.get('joystick_left_x') == pytest.approx(-0.7)
+    assert buf0.get('joystick_left_y') == pytest.approx(-1)
+    assert buf0.get('joystick_right_x') == pytest.approx(1)
+    assert buf0.get('joystick_right_y') == pytest.approx(0.7)
+    assert buf1.get('joystick_left_x') == pytest.approx(-0.5)
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,6 @@
 import asyncio
 import collections
+import dataclasses
 import functools
 import re
 from numbers import Real
@@ -7,13 +8,15 @@ from pathlib import Path
 from typing import Any, Callable, NamedTuple, Optional, Union
 
 import click
+import orjson as json
 import uvloop
 import zmq
 
 import runtime
+from runtime.tools import client, devemulator
 
 
-class OptionGroupCommand(click.Command):
+class OptionGroupMixin:
     @staticmethod
     def format_group(ctx, formatter, header: str, params: list[click.Parameter]):
         with formatter.section(header):
@@ -35,6 +38,22 @@ class OptionGroupCommand(click.Command):
             header = group.header or f'{group.key.title()} Options'
             self.format_group(ctx, formatter, header, params)
         self.format_group(ctx, formatter, 'Other Options', other_params)
+        if isinstance(self, click.Group):
+            self.format_commands(ctx, formatter)
+
+
+class OptionGroupMultiCommand(OptionGroupMixin, click.Group):
+    pass
+
+
+class OptionGroupCommand(OptionGroupMixin, click.Command):
+    pass
+
+
+@dataclasses.dataclass
+class OptionStore:
+    options: dict[str, Any] = dataclasses.field(default_factory=dict)
+    envvars: dict[str, Any] = dataclasses.field(default_factory=dict)
 
 
 class OptionGroup(NamedTuple):
@@ -48,9 +67,9 @@ class Option(click.Option):
         self.group = group
 
     def process_value(self, ctx: click.Context, value):
-        ctx.ensure_object(dict)
+        ctx.ensure_object(OptionStore)
         if value:
-            ctx.obj[f'{ctx.auto_envvar_prefix}_{self.name}'.upper()] = value
+            ctx.obj.envvars[f'{ctx.auto_envvar_prefix}_{self.name}'.upper()] = value
         return super().process_value(ctx, value)
 
 
@@ -100,10 +119,28 @@ def to_int_or_bytes(value: str) -> Union[int, bytes]:
         return bytes.fromhex(value.removeprefix('"').removesuffix('"'))
 
 
-def check_positive(value: Real):
+def check_positive(value: Real) -> Real:
     if value <= 0:
         raise click.BadParameter(f'{value} should be a positive number')
     return value
+
+
+def parse_uid(value: str) -> int:
+    bases = (10, 16)
+    for base in bases:
+        try:
+            return int(value, base=base)
+        except ValueError:
+            pass
+    bases_list = ', '.join(map(str, bases))
+    raise click.BadParameter(f'{value!r} should be an integer (bases: {bases_list})')
+
+
+def check_uid(value: str) -> int:
+    uid = parse_uid(value)
+    if not 0 <= uid < (1 << 96):
+        raise click.BadParameter(f'{hex(uid)} should be a 96-bit unsigned integer')
+    return uid
 
 
 optgroup = OptionGroupFactory()
@@ -111,9 +148,9 @@ click.option = functools.partial(click.option, cls=Option)
 get_zmq_option = lambda option: getattr(zmq, option.upper())
 
 
-@click.command(
+@click.group(
     context_settings=dict(auto_envvar_prefix='RT', max_content_width=100, show_default=True),
-    cls=OptionGroupCommand,
+    cls=OptionGroupMultiCommand,
 )
 @optgroup.group('broker')
 @optgroup.option(
@@ -159,7 +196,7 @@ get_zmq_option = lambda option: getattr(zmq, option.upper())
 )
 @optgroup.option(
     '--dev-name',
-    callback=make_multipart_parser(str, lambda value: check_positive(int(value))),
+    callback=make_multipart_parser(str, check_uid),
     metavar='NAME:UID',
     multiple=True,
     help='Assign a human-readable name to a device UID.',
@@ -173,6 +210,13 @@ get_zmq_option = lambda option: getattr(zmq, option.upper())
         'Smart Device serial Baud rate. '
         'Depending on the underlying hardware, non-standard baud rates may or may not work.'
     ),
+)
+@optgroup.option(
+    '--dev-poll-interval',
+    callback=make_converter(check_positive),
+    type=float,
+    default=0.04,
+    help='Interval (in seconds) at which device reads/writes should be written.',
 )
 @optgroup.option(
     '--dev-vsd-addr',
@@ -247,7 +291,7 @@ get_zmq_option = lambda option: getattr(zmq, option.upper())
     callback=make_converter(check_positive),
     type=int,
     default=5,
-    help='Number of service per client.',
+    help='Number of workers per service.',
 )
 @optgroup.option(
     '--client-option',
@@ -265,15 +309,55 @@ get_zmq_option = lambda option: getattr(zmq, option.upper())
     default=['SNDTIMEO:1000'],
     help='ZMQ socket options for services.',
 )
+@optgroup.option(
+    '--health-check-interval',
+    callback=make_converter(check_positive),
+    type=float,
+    default=60,
+    help='Seconds between health checks.',
+)
 @click.option('--debug/--no-debug', help='Enable the event loop debugger.')
 @click.version_option(version=runtime.__version__, message='%(version)s')
 @click.pass_context
 def cli(ctx, **options):
+    uvloop.install()
+    ctx.obj.options.update(options)
+
+
+@cli.command()
+@click.pass_context
+def start(ctx, **options):
     """
     Start the Runtime daemon.
     """
-    uvloop.install()
-    asyncio.run(runtime.main(ctx, options))
+    ctx.obj.options.update(options)
+    asyncio.run(runtime.main(ctx))
+
+
+@cli.command(name='emulate-dev')
+@click.argument('uid', callback=make_converter(check_uid), nargs=-1)
+@click.pass_context
+def emulate(ctx, **options):
+    """Emulate Smart Devices."""
+    ctx.obj.options.update(options)
+    asyncio.run(devemulator.main(ctx))
+
+
+@cli.command(name='client')
+@click.option('--notification/--no-notification', help='Issue a notification call.')
+@click.option(
+    '--arguments',
+    callback=make_converter(json.loads),
+    default='[]',
+    help='Positional arguments (in JSON format).',
+)
+@click.option('--address', help='Service address (identity).')
+@click.argument('method')
+@click.pass_context
+def client_cli(ctx, **options):
+    """Invoke a remote procedure call."""
+    ctx.obj.options.update(options)
+    asyncio.run(client.main(ctx))
 
 
 if __name__ == '__main__':

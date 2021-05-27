@@ -5,10 +5,10 @@ In this object-oriented context, RPC is synonymous with remote method invocation
 Much like :mod:`asyncio`'s transports and protocols, this module is divided into low-level and
 high-level APIs:
 
-  * The low-level API, :class:`Node` and its descendents, deal with transporting discrete binary
-    messages and managing the underlying transport.
-  * The high-level API, :class:`Endpoint` and its descendents, implement request/response
-    semantics. Most consumers should use the high-level API.
+    * The low-level API, :class:`Node` and its descendents, deal with transporting discrete binary
+      messages and managing the underlying transport.
+    * The high-level API, :class:`Endpoint` and its descendents, implement request/response
+      semantics. Most consumers should use the high-level API.
 """
 
 import abc
@@ -21,7 +21,7 @@ import inspect
 import random
 import types
 from numbers import Real
-from typing import Any, ClassVar, Container, NoReturn, Optional, Union
+from typing import Any, Container, NoReturn, Optional, Union
 from urllib.parse import urlsplit
 
 import cbor2
@@ -145,7 +145,7 @@ class Node(abc.ABC):
 
     @contextlib.asynccontextmanager
     async def maybe_reopen(self, *exc_types: type):
-        """An async context manager for maybe_reopen the transport when an error occurs.
+        """An async context manager for reopening the transport when an error occurs.
 
         Arguments:
             *exc_types: Exception types to catch.
@@ -248,7 +248,11 @@ class SocketNode(Node):
     connections: frozenset[str] = frozenset()
     subscriptions: set[str] = dataclasses.field(default_factory=set)
     socket: zmq.asyncio.Socket = dataclasses.field(default=None, init=False, repr=False)
-    recv_task: Optional[asyncio.Task] = dataclasses.field(default=None, init=False, repr=False)
+    recv_task: asyncio.Future = dataclasses.field(
+        default_factory=asyncio.Future,
+        init=False,
+        repr=False,
+    )
 
     def __post_init__(self):
         super().__init__()
@@ -297,8 +301,7 @@ class SocketNode(Node):
             self.recv_task = asyncio.create_task(self._recv_forever(), name='recv')
 
     def close(self):
-        if self.recv_task:
-            self.recv_task.cancel()
+        self.recv_task.cancel()
         self.socket.close()
 
     @property
@@ -396,8 +399,10 @@ class Endpoint(abc.ABC):
     node: Node
     concurrency: int = 1
     stack: contextlib.AsyncExitStack = dataclasses.field(default_factory=contextlib.AsyncExitStack)
-    logger: ClassVar[structlog.stdlib.AsyncBoundLogger] = structlog.get_logger(
-        wrapper_class=structlog.stdlib.AsyncBoundLogger,
+    logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(
+        default_factory=lambda: structlog.get_logger(
+            wrapper_class=structlog.stdlib.AsyncBoundLogger,
+        ),
     )
 
     def __post_init__(self):
@@ -649,11 +654,11 @@ class Handler:
         func = self.method_table.get(method)
         if not func:
             raise RuntimeRPCError('no such method exists', method=method)
-        if inspect.iscoroutinefunction(func):
-            call = func(*args)
-        else:
-            call = asyncio.to_thread(func, *args)
         try:
+            if inspect.iscoroutinefunction(func):
+                call = func(*args)
+            else:
+                call = asyncio.to_thread(func, *args)
             return await asyncio.wait_for(call, timeout)
         except asyncio.TimeoutError as exc:
             raise RuntimeRPCError('method timed out', timeout=timeout) from exc
@@ -732,9 +737,10 @@ class Router:
 
     frontend: SocketNode
     backend: SocketNode
-    route_task: Optional[asyncio.Task] = dataclasses.field(init=False, repr=False)
-    logger: ClassVar[structlog.stdlib.AsyncBoundLogger] = structlog.get_logger(
-        wrapper_class=structlog.stdlib.AsyncBoundLogger,
+    route_task: asyncio.Future = dataclasses.field(
+        default_factory=asyncio.Future,
+        init=False,
+        repr=False,
     )
 
     def __post_init__(self):
@@ -786,16 +792,16 @@ class Router:
                 with empty delimeter frames sandwiched between them.
             send_socket: The sending socket, which simply transposes the sender/recipient ID frames.
         """
-        logger = self.logger.bind(
+        logger = structlog.get_logger().bind(
             recv_socket=_render_id(recv_socket.options.get(zmq.IDENTITY, b'(anonymous)')),
             send_socket=_render_id(send_socket.options.get(zmq.IDENTITY, b'(anonymous)')),
         )
-        await logger.debug('Router started')
+        await logger.info('Router started')
         while True:
             try:
                 frames, sender_id = await recv_socket.recv()
                 if frames == [b'']:
-                    await logger.debug(
+                    await logger.info(
                         'Router connected to endpoint',
                         sender_id=_render_id(sender_id),
                     )

@@ -5,7 +5,7 @@ import contextlib
 import dataclasses
 import functools
 import logging
-from typing import ClassVar, NoReturn, Optional
+from typing import NoReturn, Optional
 
 import orjson as json
 import structlog
@@ -39,7 +39,10 @@ class LogPublisher(rpc.Client):
         default_factory=lambda: asyncio.Queue(512)
     )
     loop: asyncio.AbstractEventLoop = dataclasses.field(default_factory=asyncio.get_running_loop)
-    logger: ClassVar[structlog.stdlib.AsyncBoundLogger] = get_null_logger()
+
+    def __post_init__(self, *args, **kwargs):
+        super().__post_init__(*args, **kwargs)
+        self.logger = get_null_logger()
 
     def __call__(self, logger: structlog.BoundLogger, method: str, event: dict):
         self.loop.call_soon_threadsafe(self.send_queue.put_nowait, (method, dict(event)))

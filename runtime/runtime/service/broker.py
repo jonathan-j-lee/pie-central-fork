@@ -15,7 +15,7 @@ import orjson as json
 import structlog
 
 from .. import process, rpc
-from ..buffer import BufferManager, Parameter, RuntimeBufferError
+from ..buffer import BufferManager, DeviceBufferError, Parameter
 
 __all__ = ['Broker', 'main']
 
@@ -37,8 +37,10 @@ class Broker(rpc.Handler):
     client: rpc.Client
     buffers: BufferManager = dataclasses.field(default_factory=BufferManager)
     uids: set[int] = dataclasses.field(default_factory=set)
-    logger: ClassVar[structlog.stdlib.AsyncBoundLogger] = structlog.get_logger(
-        wrapper_class=structlog.stdlib.AsyncBoundLogger,
+    logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(
+        default_factory=lambda: structlog.get_logger(
+            wrapper_class=structlog.stdlib.AsyncBoundLogger,
+        ),
     )
 
     PYLINT_EXEC: ClassVar[str] = 'pylint'
@@ -72,8 +74,8 @@ class Broker(rpc.Handler):
             all option names to their respective values.
         """
         if option:
-            return self.ctx.obj[self.get_envvar(option)]
-        return {self.get_name(envvar): value for envvar, value in self.ctx.obj.items()}
+            return self.ctx.obj.envvars[self.get_envvar(option)]
+        return {self.get_name(envvar): value for envvar, value in self.ctx.obj.envvars.items()}
 
     @staticmethod
     def format_args(options: dict[str, Any]) -> Iterable[str]:
@@ -106,7 +108,8 @@ class Broker(rpc.Handler):
         Note:
             Command-line switches are not supported at this time.
         """
-        current_options = {self.get_name(envvar): value for envvar, value in self.ctx.obj.items()}
+        items = self.ctx.obj.envvars.items()
+        current_options = {self.get_name(envvar): value for envvar, value in items}
         current_options.update(options)
         args = list(self.format_args(current_options))
         await asyncio.to_thread(self.ctx.command.parse_args, self.ctx, args)
@@ -177,7 +180,10 @@ class Broker(rpc.Handler):
     def button_params(self) -> list[Parameter]:
         """Gamepad button parameters."""
         gamepad_type = self.buffers.catalog['gamepad']
-        return [param for param in gamepad_type.params if param.platform_type == ctypes.c_bool]
+        params = gamepad_type.params.values()
+        params = [param for param in params if param.platform_type == ctypes.c_bool]
+        params.sort(key=lambda param: param.index)
+        return params
 
     @rpc.route
     def update_gamepads(self, update: dict[str, dict[str, Union[int, float]]]):
@@ -188,22 +194,22 @@ class Broker(rpc.Handler):
         """
         for index, params in update.items():
             gamepad = self.buffers.get_or_create(('gamepad', int(index)))
-            with gamepad.operation():
+            with gamepad.transaction():
                 for joystick in ('left', 'right'):
                     for axis in ('x', 'y'):
                         with contextlib.suppress(KeyError):
                             param = f'joystick_{joystick}_{axis}'
                             value = params[joystick[0] + axis]
-                            gamepad.set_value(param, value, write_block=False)
+                            gamepad.set(param, value)
                 bitmap = params.get('btn', 0)
                 for i, param in enumerate(self.button_params):
-                    gamepad.set_value(param.name, bool((bitmap >> i) & 0b1), write_block=False)
+                    gamepad.set(param.name, bool((bitmap >> i) & 0b1))
 
     def make_update(self) -> dict[str, dict[str, Any]]:
         """Build a Smart Device update."""
         update = {}
         for uid in self.uids:
-            with contextlib.suppress(RuntimeBufferError):
+            with contextlib.suppress(DeviceBufferError):
                 update[str(uid)] = self.buffers[uid].get_update()
         return update
 
