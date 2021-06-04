@@ -210,7 +210,7 @@ class Broker(rpc.Handler):
         update = {}
         for uid in self.uids:
             with contextlib.suppress(DeviceBufferError):
-                update[str(uid)] = self.buffers[uid].get_update()
+                update[uid] = self.buffers[int(uid)].get_update()
         return update
 
     async def send_update(self):
@@ -234,18 +234,18 @@ async def main(ctx, **options):
     Arguments:
         **options: Command-line options.
     """
-    async with process.EndpointManager('broker', options) as manager:
-        await manager.make_log_proxy()
-        await manager.make_router()
+    async with process.Application('broker', options) as app:
+        await app.make_log_forwarder()
+        await app.make_router()
         broker = Broker(
             ctx,
-            await manager.make_update_client(),
-            await manager.make_client(),
-            manager.stack.enter_context(BufferManager()),
+            await app.make_update_client(),
+            await app.make_client(),
+            app.make_buffer_manager(),
         )
-        await asyncio.to_thread(broker.buffers.load_catalog, options['dev_catalog'])
-        await manager.make_service(broker)
+        await app.make_service(broker)
         await asyncio.gather(
+            app.report_health(),
             process.spin(broker.send_update, interval=options['update_interval']),
             process.spin(broker.update_uids, interval=1),
         )

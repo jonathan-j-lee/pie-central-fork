@@ -25,7 +25,7 @@ import structlog
 from serial.tools import list_ports
 
 from .. import process, rpc
-from ..buffer import BufferManager, DeviceBuffer, DeviceBufferError, DeviceUID
+from ..buffer import BufferManager, DeviceBuffer, DeviceUID
 from ..exception import RuntimeBaseException
 from ..messaging import ErrorCode, Message, MessageError, MessageType
 
@@ -282,14 +282,15 @@ class SmartDevice(abc.ABC):
             try:
                 self.requests.register_response(heartbeat_id, message)
             except KeyError as exc:
-                raise MessageError(
+                raise DeviceError(
                     'unknown heartbeat response ID',
                     heartbeat_id=heartbeat_id,
                 ) from exc
         elif message.type is MessageType.ERROR:
-            raise MessageError('error message received', error_code=message.read_error().name)
+            error = message.read_error()
+            raise DeviceError('error message received', error=error.name, error_code=error.value)
         else:
-            raise MessageError('message type not handled', type=message.type.name)
+            raise DeviceError('message type not handled', type=message.type.name)
 
     def _check_buffer(self):
         if not self.buffer:
@@ -573,14 +574,14 @@ async def main(**options):
     Arguments:
         **options: Command-line options.
     """
-    async with process.EndpointManager('device', options) as manager:
+    async with process.Application('device', options) as app:
         device_manager = SmartDeviceManager(
-            buffers=manager.stack.enter_context(BufferManager()),
+            buffers=app.make_buffer_manager(),
             poll_interval=options['dev_poll_interval'],
         )
-        await asyncio.to_thread(device_manager.buffers.load_catalog, options['dev_catalog'])
-        await manager.make_service(device_manager)
+        await app.make_service(device_manager)
         await asyncio.gather(
+            app.report_health(),
             device_manager.open_serial_devices(baudrate=options['dev_baud_rate']),
             device_manager.open_virtual_devices(options['dev_vsd_addr']),
         )

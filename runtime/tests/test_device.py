@@ -1,5 +1,4 @@
 import asyncio
-import ctypes
 import os
 import socket
 import tempfile
@@ -12,7 +11,7 @@ import serial
 
 import runtime
 from runtime import log
-from runtime.buffer import Parameter
+from runtime.buffer import Buffer, BufferManager
 from runtime.messaging import MessageType, MessageError, Message
 from runtime.service.device import (
     HAS_UDEV,
@@ -74,15 +73,24 @@ async def stream(mocker):
 
 
 @pytest.fixture
-async def device_manager(mocker, stream):
-    manager = SmartDeviceManager()
-    params = [
-        Parameter('switch0', ctypes.c_bool, 0, writeable=True),
-        Parameter('switch1', ctypes.c_bool, 1, writeable=True),
-        Parameter('switch2', ctypes.c_bool, 2, writeable=True),
-    ]
-    manager.buffers.register_type('limit-switch', params, device_id=0)
-    with manager.buffers:
+def catalog() -> dict[str, type[Buffer]]:
+    catalog = {
+        'limit-switch': {
+            'device_id': 0,
+            'params': [
+                {'name': 'switch0', 'type': 'bool', 'writeable': True},
+                {'name': 'switch1', 'type': 'bool', 'writeable': True},
+                {'name': 'switch2', 'type': 'bool', 'writeable': True},
+            ],
+        },
+    }
+    yield BufferManager.make_catalog(catalog)
+
+
+@pytest.fixture
+async def device_manager(mocker, catalog, stream):
+    with BufferManager(catalog) as buffers:
+        manager = SmartDeviceManager(buffers=buffers)
         uids = {0x0000_01_00000000_00000000 + i for i in range(3)}
         for uid in uids:
             manager.devices[uid] = device = SmartDeviceClient(*stream)
@@ -91,7 +99,7 @@ async def device_manager(mocker, stream):
                 mocker.patch.object(device, method, autospec=True).return_value = result
                 result.set_result(None)
         yield manager
-    manager.buffers.unlink_all()
+    BufferManager.unlink_all()
 
 
 @pytest.fixture

@@ -1,12 +1,11 @@
 import asyncio
-import ctypes
 import random
 from pathlib import Path
 
 import pytest
 
 import runtime
-from runtime.buffer import DeviceUID, BufferManager, Parameter
+from runtime.buffer import DeviceUID, Buffer, BufferManager
 from runtime.messaging import Message
 from runtime.tools.devemulator import start_virtual_device
 from runtime.service.device import SmartDeviceManager
@@ -24,20 +23,25 @@ def catalog_path() -> Path:
 
 
 @pytest.fixture
-def params() -> list[Parameter]:
-    yield [
-        Parameter('duty_cycle', ctypes.c_float, 0, writeable=True),
-        Parameter('pid_pos_setpoint', ctypes.c_float, 1, writeable=True),
-        Parameter('enabled', ctypes.c_bool, 2, writeable=True),
-        Parameter('switches', ctypes.c_bool * 3, 3, writeable=True),
-        Parameter('in_deadzone', ctypes.c_bool, 4),
-    ]
+def catalog() -> dict[str, type[Buffer]]:
+    catalog = {
+        'motor-controller': {
+            'device_id': 0xc,
+            'params': [
+                {'name': 'duty_cycle', 'type': 'float', 'writeable': True},
+                {'name': 'pid_pos_setpoint', 'type': 'float', 'writeable': True},
+                {'name': 'enabled', 'type': 'bool', 'writeable': True},
+                {'name': 'switches', 'type': 'bool[3]', 'writeable': True},
+                {'name': 'in_deadzone', 'type': 'bool'},
+            ],
+        },
+    }
+    yield BufferManager.make_catalog(catalog)
 
 
 @pytest.fixture
-async def device_manager(params, vsd_addr, catalog_path):
-    with BufferManager(shared=False) as buffers:
-        buffers.register_type('motor-controller', params, device_id=0xc)
+async def device_manager(catalog, vsd_addr, catalog_path):
+    with BufferManager(catalog, shared=False) as buffers:
         manager = SmartDeviceManager(buffers=buffers)
         open_task = asyncio.create_task(manager.open_virtual_devices(vsd_addr))
         yield manager
@@ -54,9 +58,8 @@ async def upstream(device_manager, downstream):
 
 
 @pytest.fixture
-async def downstream(params, vsd_addr, catalog_path):
-    with BufferManager(shared=False) as buffers:
-        buffers.register_type('motor-controller', params, device_id=0xc)
+async def downstream(catalog, vsd_addr, catalog_path):
+    with BufferManager(catalog, shared=False) as buffers:
         options = {'dev_vsd_addr': vsd_addr, 'dev_poll_interval': 0.04}
         async with start_virtual_device(buffers, 0xc_00_00000000_00000000, options) as tasks:
             yield buffers[0xc_00_00000000_00000000]

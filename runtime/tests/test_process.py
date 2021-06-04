@@ -6,6 +6,7 @@ import random
 import signal
 import threading
 import time
+from unittest.mock import ANY
 
 import pytest
 import structlog
@@ -19,7 +20,7 @@ from test_rpc import logger
 
 
 @pytest.fixture
-async def endpoints():
+async def app():
     get_random_port = lambda: random.randrange(3000, 10000)
     options = {
         'debug': True,
@@ -37,13 +38,11 @@ async def endpoints():
         'control_addr': f'udp://localhost:{get_random_port()}',
         'health_check_interval': 60,
     }
-    async with process.EndpointManager('test', options) as endpoints:
-        proxy = await endpoints.make_log_proxy()
-        await endpoints.make_router()
-        yield endpoints
-    zmq.asyncio.Context.instance().term()
-    # We cannot join ``proxy`` to ensure the ports are freed and the thread exits. However, because
-    # the ports are randomized, tests should not clash. The thread exits eventually.
+    async with process.Application('test', options) as app:
+        await app.make_log_forwarder()
+        await app.make_router()
+        yield app
+    # The log forwarder eventually exits. Because the ports are randomized, tests should not clash.
 
 
 class MathHandler(rpc.Handler):
@@ -129,77 +128,56 @@ async def test_process_estop():
         await process.run_process(proc)
 
 
-def test_loop_cleanup():
-    count = 0
-
-    async def inc():
-        try:
-            await asyncio.sleep(60)
-        except asyncio.CancelledError:
-            nonlocal count
-            count += 1
-
-    async def main():
-        for _ in range(5):
-            asyncio.create_task(inc(), name='inc')
-        assert len(asyncio.all_tasks()) == 6
-        asyncio.get_running_loop().call_soon(process.cancel_loop)
-
-    asyncio.run(main())
-    assert count == 5
-
-
 @pytest.mark.asyncio
-async def test_process_cleanup():
-    async def main(counter: multiprocessing.Value, barrier: threading.Barrier):
-        process.configure_loop()
-        try:
-            await asyncio.to_thread(barrier.wait)
-            while True:
-                await asyncio.sleep(0.01)
-        except asyncio.CancelledError:
-            with counter.get_lock():
-                counter.value += 1
-
-    def target(counter: multiprocessing.Value):
-        barrier = threading.Barrier(5)
-        for _ in range(4):
-            thread = threading.Thread(
-                target=lambda counter, barrier: asyncio.run(main(counter, barrier)),
-                args=(counter, barrier),
-                daemon=True,
-            )
-            thread.start()
-        barrier.wait()
-        process.clean_up()
-
-    counter = multiprocessing.Value('i', 0)
-    await process.run_process(process.AsyncProcess(target=target, args=(counter,)))
-    assert counter.value == 4
+async def test_loop_debug(app):
+    assert asyncio.get_running_loop().get_debug()
 
 
 @pytest.mark.slow
 @pytest.mark.asyncio
-async def test_async_environment(endpoints):
+async def test_loop_default_executor(app):
     loop = asyncio.get_running_loop()
-    assert loop.get_debug()
     start = loop.time()
     await asyncio.gather(*(asyncio.to_thread(time.sleep, 0.5) for _ in range(7)))
     assert loop.time() - start == pytest.approx(1.5, rel=0.1)
 
 
 @pytest.mark.asyncio
-async def test_routing(endpoints):
-    client = await endpoints.make_client()
-    service = await endpoints.make_service(MathHandler())
+async def test_loop_exc_handler(mocker, app):
+    logger = mocker.patch('structlog.stdlib.AsyncBoundLogger.error')
+    loop = asyncio.get_running_loop()
+    loop.call_exception_handler({'message': 'fail'})
+    await asyncio.sleep(0.02)
+    logger.assert_called_once_with('fail')
+    logger.reset_mock()
+    loop.call_exception_handler({'message': 'fail', 'future': asyncio.Future()})
+    await asyncio.sleep(0.02)
+    logger.assert_called_once_with('fail', done=False)
+    logger.reset_mock()
+    async def error():
+        raise ValueError
+    asyncio.create_task(error(), name='raises-error')
+    await asyncio.sleep(0.02)
+    logger.assert_called_once_with(
+        'Task exception was never retrieved',
+        exc_info=ANY,
+        done=True,
+        task_name='raises-error',
+    )
+
+
+@pytest.mark.asyncio
+async def test_routing(app):
+    client = await app.make_client()
+    service = await app.make_service(MathHandler())
     assert await client.call.add(1, 2, address=b'test-service') == 3
 
 
 @pytest.mark.slow
 @pytest.mark.asyncio
-async def test_log_proxy(endpoints):
+async def test_log_forwarder(app):
     handler = LogHandler()
-    subscriber = await endpoints.make_log_subscriber(handler)
+    subscriber = await app.make_log_subscriber(handler)
     subscriber.logger = log.get_null_logger()
     await asyncio.sleep(0.3)
     logger = structlog.get_logger()
@@ -219,16 +197,16 @@ async def test_log_proxy(endpoints):
 
 
 @pytest.mark.asyncio
-async def test_update(endpoints):
-    client = await endpoints.make_update_client()
-    node = rpc.DatagramNode.from_address(endpoints.options['update_addr'], bind=True)
-    service = await endpoints.make_service(MathHandler(), node)
+async def test_update(app):
+    client = await app.make_update_client()
+    node = rpc.DatagramNode.from_address(app.options['update_addr'], bind=True)
+    service = await app.make_service(MathHandler(), node)
     assert await client.call.add(1, 2) == 3
 
 
 @pytest.mark.asyncio
-async def test_control(endpoints):
-    node = rpc.DatagramNode.from_address(endpoints.options['control_addr'], bind=False)
-    client = await endpoints.make_client(node)
-    service = await endpoints.make_control_service(MathHandler())
+async def test_control(app):
+    node = rpc.DatagramNode.from_address(app.options['control_addr'], bind=False)
+    client = await app.make_client(node)
+    service = await app.make_control_service(MathHandler())
     assert await client.call.add(1, 2) == 3

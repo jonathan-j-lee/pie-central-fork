@@ -2,16 +2,16 @@
 Process Management.
 """
 
+import abc
 import asyncio
-import atexit
 import contextlib
 import dataclasses
+import functools
 import multiprocessing
 import threading
-from asyncio.subprocess import Process as AsyncSubprocess
-from concurrent.futures import Executor, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from numbers import Real
-from typing import Any, Container, Optional, Union
+from typing import Any, Collection, Optional, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
 import structlog
@@ -19,57 +19,30 @@ import zmq
 import zmq.devices
 
 from . import log, rpc
+from .buffer import BufferManager
 from .exception import EmergencyStopException
 
-__all__ = ['run_process', 'spin', 'EndpointManager']
+__all__ = ['AsyncProcess', 'run_process', 'spin', 'Application']
 
 
-def cancel_loop(loop: Optional[asyncio.AbstractEventLoop] = None, timeout: Real = 3):
-    """
-    Cancel all tasks in an event loop and wait for them to terminate.
+class AsyncProcessType(Protocol):
+    pid: Optional[int]
+    returncode: Optional[int]
 
-    Arguments:
-        loop: The event loop whose tasks are to be cancelled. Defaults to the running loop.
-        timeout: Duration (in seconds) to wait for all tasks to exit.
+    @abc.abstractmethod
+    async def wait(self):
+        raise NotImplementedError
 
-    Raises:
-        RuntimeError: If no loop was provided and there is no currently running loop.
+    @abc.abstractmethod
+    def terminate(self):
+        raise NotImplementedError
 
-    Note:
-        All tasks should quickly clean up their resources. Use with tasks protected by
-        :func:`asyncio.shield` is strongly discouraged.
-
-        This function is thread-safe.
-    """
-    loop = loop or asyncio.get_running_loop()
-    tasks = asyncio.all_tasks(loop=loop)
-    for task in tasks:
-        task.cancel()
-    loop.create_task(asyncio.wait_for(asyncio.gather(*tasks), timeout), name='cleanup')
+    @abc.abstractmethod
+    def kill(self):
+        raise NotImplementedError
 
 
-@atexit.register
-def clean_up(timeout: Real = 3):
-    current_thread, async_threads = threading.current_thread(), []
-    for thread in threading.enumerate():
-        loop = getattr(thread, 'async_loop', None)
-        if loop and loop.is_running() and thread is not current_thread:
-            async_threads.append(thread)
-    for thread in async_threads:
-        cancel_loop(thread.async_loop, 0.9 * timeout)
-    for thread in async_threads:
-        thread.join(timeout)
-
-
-def configure_loop(debug: bool = False, executor: Optional[Executor] = None):
-    threading.current_thread().async_loop = loop = asyncio.get_running_loop()
-    loop.set_debug(debug)
-    if executor:
-        loop.set_default_executor(executor)
-    # Currently, we have no default exception handler.
-
-
-class AsyncProcess(multiprocessing.Process):
+class AsyncProcess(multiprocessing.Process, AsyncProcessType):
     def __init__(self, *args, **kwargs):
         kwargs.setdefault('daemon', True)
         super().__init__(*args, **kwargs)
@@ -90,9 +63,6 @@ class AsyncProcess(multiprocessing.Process):
     @property
     def returncode(self) -> Optional[int]:
         return self.exitcode
-
-
-AsyncProcessType = Union[AsyncProcess, AsyncSubprocess]
 
 
 async def run_process(process: AsyncProcessType, *, terminate_timeout: Real = 2) -> Optional[int]:
@@ -151,7 +121,7 @@ def resolve_address(address: str, peer: str = '127.0.0.1') -> str:
     return urlunsplit(components)
 
 
-def get_connection(bindings: Container[str]) -> str:
+def get_connection(bindings: Collection[str]) -> str:
     """Find an address to connect to from one or more bound addresses.
 
     Arguments:
@@ -182,80 +152,137 @@ async def spin(func, /, *args, interval: Real = 1, **kwargs):
         await asyncio.gather(asyncio.sleep(interval), func(*args, **kwargs))
 
 
-async def health_check(logger: structlog.stdlib.AsyncBoundLogger):
-    await logger.info(
-        'Health check',
-        thread_count=threading.active_count(),
-        task_count=len(asyncio.all_tasks()),
-    )
+def enter_async_context(wrapped):
+    @functools.wraps(wrapped)
+    async def wrapper(self, /, *args, **kwargs):
+        return await self.stack.enter_async_context(await wrapped(self, *args, **kwargs))
+
+    return wrapper
 
 
 @dataclasses.dataclass
-class EndpointManager:
+class Application:
+    """Open and close resources created from command-line options.
+
+    Generally, you create one :class:`Application` per ``asyncio.run`` main function, like so:
+
+        >>> async def main(**options):
+        ...     async with Application('my-app', options) as app:
+        ...         ...
+
+    An :class:`Application` produces :class:`rpc.Endpoint` and :class:`rpc.Router` instances in
+    common configurations. It also configures the asyncio loop and logging framework, which are
+    needed to make the messaging components work.
+    """
+
     name: str
     options: dict[str, Any]
-    executor: Executor = None
     stack: contextlib.AsyncExitStack = dataclasses.field(default_factory=contextlib.AsyncExitStack)
+    nodes: dict[str, rpc.Node] = dataclasses.field(default_factory=dict)
+    logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(
+        default_factory=lambda: structlog.get_logger(
+            wrapper_class=structlog.stdlib.AsyncBoundLogger,
+        ),
+    )
 
     def __post_init__(self):
-        # pylint: disable=consider-using-with
-        # See ``__aenter__`` where this executor is placed on the exit stack.
-        self.executor = self.executor or ThreadPoolExecutor(
-            max_workers=self.options['thread_pool_workers'],
-            thread_name_prefix='aioworker',
-        )
+        self.logger = self.logger.bind(app=self.name)
 
     async def __aenter__(self):
+        self.configure_loop()
         await self.stack.__aenter__()
-        self.executor = self.stack.enter_context(self.executor)
-        configure_loop(self.options['debug'], self.executor)
+        self.stack.push_async_callback(self._terminate_zmq_context)
         await self.make_log_publisher()
-        health_task = spin(
-            health_check,
-            structlog.get_logger(endpoint=self.name),
-            interval=self.options['health_check_interval'],
-        )
-        self.stack.callback(asyncio.create_task(health_task, name='health-check').cancel)
         return self
 
     async def __aexit__(self, exc_type, exc, traceback):
         return await self.stack.__aexit__(exc_type, exc, traceback)
 
-    async def make_log_proxy(self) -> zmq.devices.Device:
-        proxy = zmq.devices.ThreadDevice(zmq.FORWARDER, zmq.SUB, zmq.PUB)
-        for address in self.options['log_backend']:
-            proxy.bind_in(address)
-        for address in self.options['log_frontend']:
-            proxy.bind_out(address)
-        proxy.setsockopt_in(zmq.SUBSCRIBE, b'')
-        proxy.start()
-        return proxy
+    async def _terminate_zmq_context(self):
+        zmq.asyncio.Context.instance().term()
+        await self.logger.info('ZMQ context terminated')
 
-    async def make_log_publisher(self, node: Optional[rpc.Node] = None) -> log.LogPublisher:
-        if not node:  # pragma: no cover
-            # pylint: disable=unexpected-keyword-arg; pylint does not recognize dataclass.
-            node = rpc.SocketNode(zmq.PUB, connections=get_connection(self.options['log_backend']))
-        publisher = await self.stack.enter_async_context(log.LogPublisher(node))
+    def configure_loop(self):
+        loop = asyncio.get_running_loop()
+        loop.set_debug(self.options['debug'])
+        loop.set_default_executor(self.executor)
+        loop.set_exception_handler(self.handle_exception)
+
+    @functools.cached_property
+    def executor(self) -> ThreadPoolExecutor:
+        # pylint: disable=consider-using-with
+        # Closed by ``asyncio.AbstractEventLoop.shutdown_default_executor``
+        return ThreadPoolExecutor(
+            max_workers=self.options['thread_pool_workers'],
+            thread_name_prefix='aioworker',
+        )
+
+    async def _report_health_callback(self):
+        await self.logger.info(
+            'Health check',
+            thread_count=threading.active_count(),
+            task_count=len(asyncio.all_tasks()),
+        )
+
+    def report_health(self) -> asyncio.Task:
+        return asyncio.create_task(
+            spin(self._report_health_callback, interval=self.options['health_check_interval']),
+            name='report-health',
+        )
+
+    def handle_exception(self, loop: asyncio.AbstractEventLoop, context: dict[str, Any]):
+        log_context = {}
+        if exception := context.get('exception'):
+            log_context['exc_info'] = exception
+        if future := context.get('future'):
+            log_context['done'] = future.done()
+            if isinstance(future, asyncio.Task):
+                log_context['task_name'] = future.get_name()
+        loop.create_task(self.logger.error(context['message'], **log_context))
+
+    async def make_log_forwarder(self) -> zmq.devices.Device:
+        forwarder = zmq.devices.ThreadDevice(zmq.FORWARDER, zmq.SUB, zmq.PUB)
+        for address in self.options['log_backend']:
+            forwarder.bind_in(address)
+        for address in self.options['log_frontend']:
+            forwarder.bind_out(address)
+        forwarder.setsockopt_in(zmq.SUBSCRIBE, b'')
+        forwarder.start()
+        return forwarder
+
+    @enter_async_context
+    async def make_log_publisher(self, /) -> log.LogPublisher:
+        # pylint: disable=unexpected-keyword-arg; pylint does not recognize dataclass.
+        node = rpc.SocketNode(zmq.PUB, connections=get_connection(self.options['log_backend']))
+        publisher = log.LogPublisher(node)
         log.configure(publisher, fmt=self.options['log_format'], level=self.options['log_level'])
+        self.logger = self.logger.bind()
+        await self.logger.info(
+            'Logging configured',
+            fmt=self.options['log_format'],
+            level=self.options['log_level'],
+        )
         return publisher
 
-    async def make_log_subscriber(self, handler: rpc.Handler) -> rpc.Service:
+    async def make_log_subscriber(self, /, handler: rpc.Handler) -> rpc.Service:
         # pylint: disable=unexpected-keyword-arg; pylint does not recognize dataclass.
         node = rpc.SocketNode(zmq.SUB, connections=get_connection(self.options['log_frontend']))
         return await self.make_service(handler, node)
 
+    @enter_async_context
     async def make_client(self, node: Optional[rpc.Node] = None) -> rpc.Client:
         if not node:
             # pylint: disable=unexpected-keyword-arg; pylint does not recognize dataclass.
-            options = {zmq.IDENTITY: f'{self.name}-client'.encode()}
-            options |= dict(self.options['client_option'])
+            options = dict(self.options['client_option'])
+            options.setdefault(zmq.IDENTITY, f'{self.name}-client'.encode())
             node = rpc.SocketNode(
                 zmq.DEALER,
                 connections=get_connection(self.options['router_frontend']),
                 options=options,
             )
-        return await self.stack.enter_async_context(rpc.Client(node))
+        return rpc.Client(node)
 
+    @enter_async_context
     async def make_service(
         self,
         handler: rpc.Handler,
@@ -263,24 +290,27 @@ class EndpointManager:
     ) -> rpc.Service:
         if not node:
             # pylint: disable=unexpected-keyword-arg; pylint does not recognize dataclass.
-            options = {zmq.IDENTITY: f'{self.name}-service'.encode()}
-            options |= dict(self.options['service_option'])
+            options = dict(self.options['service_option'])
+            options.setdefault(zmq.IDENTITY, f'{self.name}-service'.encode())
             node = rpc.SocketNode(
                 zmq.DEALER,
                 connections=get_connection(self.options['router_backend']),
                 options=options,
             )
-        service = rpc.Service(handler, node, concurrency=self.options['service_workers'])
-        return await self.stack.enter_async_context(service)
+        return rpc.Service(handler, node, concurrency=self.options['service_workers'])
 
-    async def make_update_client(self, **options) -> rpc.Client:
-        node = rpc.DatagramNode.from_address(self.options['update_addr'], bind=False, **options)
+    async def make_update_client(self, /) -> rpc.Client:
+        node = rpc.DatagramNode.from_address(self.options['update_addr'], bind=False)
         return await self.make_client(node)
 
-    async def make_control_service(self, handler: rpc.Handler, **options) -> rpc.Service:
-        node = rpc.DatagramNode.from_address(self.options['control_addr'], bind=True, **options)
+    async def make_control_service(self, /, handler: rpc.Handler) -> rpc.Service:
+        node = rpc.DatagramNode.from_address(self.options['control_addr'], bind=True)
         return await self.make_service(handler, node)
 
-    async def make_router(self) -> rpc.Router:
-        router = rpc.Router.bind(self.options['router_frontend'], self.options['router_backend'])
-        return await self.stack.enter_async_context(router)
+    @enter_async_context
+    async def make_router(self, /) -> rpc.Router:
+        return rpc.Router.bind(self.options['router_frontend'], self.options['router_backend'])
+
+    def make_buffer_manager(self, /, *args, **kwargs) -> BufferManager:
+        buffers = BufferManager(self.options['dev_catalog'], *args, **kwargs)
+        return self.stack.enter_context(buffers)

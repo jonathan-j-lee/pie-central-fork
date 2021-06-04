@@ -26,19 +26,19 @@ DEFAULT_ADDRESSES: dict[str, str] = {
 
 
 async def main(ctx):
-    async with process.EndpointManager('cli', ctx.obj.options) as manager:
-        client = await manager.make_client()
+    async with process.Application('cli', ctx.obj.options) as app:
+        client = await app.make_client()
         logger = structlog.get_logger(wrapper_class=structlog.stdlib.AsyncBoundLogger)
-        method = manager.options['method']
-        address = manager.options['address'] or DEFAULT_ADDRESSES.get(method)
+        method = app.options['method']
+        address = app.options['address'] or DEFAULT_ADDRESSES.get(method)
         if not address:
             await logger.error('Address not provided or inferred', method=method)
             return
         try:
             result = await client.call[method](
-                *manager.options['arguments'],
+                *app.options['arguments'],
                 address=address.encode(),
-                notification=manager.options['notification'],
+                notification=app.options['notification'],
             )
             await logger.info('Remote call succeeded', result=result)
         except (asyncio.TimeoutError, ValueError, RuntimeRPCError, cbor2.CBOREncodeError) as exc:

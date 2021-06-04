@@ -26,6 +26,7 @@ def dispatcher():
         re.compile(r'.*_main'): 0.1,
     }
     dispatcher = Dispatcher(
+        None,
         'testcode.incr',
         timeouts,
         async_exec=AsyncExecutor(max_actions=2),

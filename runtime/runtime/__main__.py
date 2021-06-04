@@ -1,5 +1,8 @@
+"""Command-line interface and configuration."""
+
 import asyncio
 import collections
+import contextlib
 import dataclasses
 import functools
 import re
@@ -10,10 +13,13 @@ from typing import Any, Callable, NamedTuple, Optional, Union
 import click
 import orjson as json
 import uvloop
+import yaml
 import zmq
 
 import runtime
-from runtime.tools import client, devemulator
+
+from .buffer import Buffer, BufferManager
+from .tools import client, devemulator, msgparser
 
 
 class OptionGroupMixin:
@@ -85,17 +91,49 @@ class OptionGroupFactory:
         return click.option(*args, **kwargs, group=self.current)
 
 
-@functools.lru_cache(maxsize=16)
-def make_converter(convert):
-    def callback(_ctx, _param, value):
-        if isinstance(value, (tuple, list)):
-            return tuple(convert(element) for element in value)
-        return convert(value)
+@functools.lru_cache(maxsize=64)
+def make_converter(
+    convert: Callable[[Any], Any],
+) -> Callable[[click.Context, click.Parameter, Any], Any]:
+    """Make a :mod:`click` callback that applies a conversion to each option value.
+
+    Works with options provided multiple times (where ``multiple=True``).
+
+    Arguments:
+        convert: A unary conversion callable. The argument/return types are arbitrary and need not
+            be the same.
+
+    Returns:
+        A :mod:`click`-compatible callback.
+    """
+
+    def callback(_ctx, _param, value, /):
+        try:
+            if isinstance(value, (tuple, list)):
+                return tuple(convert(element) for element in value)
+            return convert(value)
+        except Exception as exc:
+            raise click.BadParameter(str(exc)) from exc
 
     return callback
 
 
 def make_multipart_parser(*converters: Callable[[str], Any], delimeter: str = ':'):
+    """Make a :mod:`click` callback that parses a tuple-like multipart option.
+
+    Examples:
+        >>> make_multipart_parser()
+        Traceback (most recent call last):
+          ...
+        ValueError: not enough converters
+        >>> convert = make_multipart_parser(int, int)
+        >>> convert(None, None, '1')
+        Traceback (most recent call last):
+          ...
+        click.exceptions.BadParameter: not enough parts provided
+        >>> convert(None, None, '1:2')
+        (1, 2)
+    """
     if not converters:
         raise ValueError('not enough converters')
 
@@ -106,41 +144,105 @@ def make_multipart_parser(*converters: Callable[[str], Any], delimeter: str = ':
         for i, (converter, component) in enumerate(zip(converters, components)):
             try:
                 yield converter(component)
-            except (TypeError, ValueError, AttributeError) as exc:
-                raise click.BadParameter(f'failed to parse part {i+1}: {exc}')
+            except Exception as exc:
+                raise click.BadParameter(f'failed to parse part {i+1}: {exc}') from exc
 
     return make_converter(lambda value: tuple(convert(value)))
 
 
 def to_int_or_bytes(value: str) -> Union[int, bytes]:
+    r"""Parse a value as either an integer or a bytestring.
+
+    Examples:
+        >>> to_int_or_bytes('1212')
+        1212
+        >>> to_int_or_bytes('-1')
+        -1
+        >>> to_int_or_bytes('a0')
+        b'\xa0'
+        >>> to_int_or_bytes("'1212'")  # Note the disambiguation
+        b'\x12\x12'
+        >>> to_int_or_bytes('zz')
+        Traceback (most recent call last):
+          ...
+        ValueError: non-hexadecimal number found in fromhex() arg at position 0
+    """
     try:
         return int(value)
     except ValueError:
-        return bytes.fromhex(value.removeprefix('"').removesuffix('"'))
+        return bytes.fromhex(value.removeprefix("'").removesuffix("'"))
 
 
 def check_positive(value: Real) -> Real:
+    """Check whether the provided value is strictly positive.
+
+    Examples:
+        >>> check_positive(0.01)
+        0.01
+        >>> check_positive(0)
+        Traceback (most recent call last):
+          ...
+        ValueError: '0' should be a positive number
+        >>> check_positive(-0.01)
+        Traceback (most recent call last):
+          ...
+        ValueError: '-0.01' should be a positive number
+    """
     if value <= 0:
-        raise click.BadParameter(f'{value} should be a positive number')
+        raise ValueError(f"'{value}' should be a positive number")
     return value
 
 
 def parse_uid(value: str) -> int:
+    """Parse a Smart Device UID as an integer.
+
+    Examples:
+        >>> parse_uid('1234')
+        1234
+        >>> hex(parse_uid('0xdeadbeef'))
+        '0xdeadbeef'
+        >>> parse_uid('0o12')
+        Traceback (most recent call last):
+          ...
+        ValueError: '0o12' could not be parsed as an integer (attempted bases: 10, 16)
+        >>> parse_uid(hex(1 << 96))
+        Traceback (most recent call last):
+          ...
+        ValueError: '0x1000000000000000000000000' should be a 96-bit unsigned integer
+        >>> parse_uid(str(-1))
+        Traceback (most recent call last):
+          ...
+        ValueError: '-1' should be a 96-bit unsigned integer
+    """
     bases = (10, 16)
     for base in bases:
         try:
-            return int(value, base=base)
+            uid = int(value, base=base)
         except ValueError:
-            pass
+            continue
+        else:
+            if not 0 <= uid < (1 << 96):
+                raise ValueError(f'{value!r} should be a 96-bit unsigned integer')
+            return uid
     bases_list = ', '.join(map(str, bases))
-    raise click.BadParameter(f'{value!r} should be an integer (bases: {bases_list})')
+    raise ValueError(
+        f'{value!r} could not be parsed as an integer (attempted bases: {bases_list})',
+    )
 
 
-def check_uid(value: str) -> int:
-    uid = parse_uid(value)
-    if not 0 <= uid < (1 << 96):
-        raise click.BadParameter(f'{hex(uid)} should be a 96-bit unsigned integer')
-    return uid
+def load_catalog(path: Union[str, Path]) -> dict[str, type[Buffer]]:
+    try:
+        with Path(path).open() as stream:
+            catalog = yaml.load(stream, Loader=yaml.SafeLoader)
+        return BufferManager.make_catalog(catalog)
+    except yaml.YAMLError as exc:
+        message = f'Unable to parse device catalog ({path})'
+        if hasattr(exc, 'problem_mark'):
+            # pylint: disable=no-member; hasattr(...) check ensures member exists.
+            # The PyYAML docs recommend this pattern: https://pyyaml.org/wiki/PyYAMLDocumentation
+            mark = exc.problem_mark
+            message += f': line {mark.line + 1}, column {mark.column + 1}'
+        raise click.BadParameter(message) from exc
 
 
 optgroup = OptionGroupFactory()
@@ -191,12 +293,13 @@ get_zmq_option = lambda option: getattr(zmq, option.upper())
     '--dev-catalog',
     type=click.Path(dir_okay=False, exists=True),
     default=(Path(__file__).parent / 'catalog.yaml'),
+    callback=make_converter(load_catalog),
     show_default=True,
     help='Device catalog file.',
 )
 @optgroup.option(
     '--dev-name',
-    callback=make_multipart_parser(str, check_uid),
+    callback=make_multipart_parser(str, parse_uid),
     metavar='NAME:UID',
     multiple=True,
     help='Assign a human-readable name to a device UID.',
@@ -334,15 +437,6 @@ def start(ctx, **options):
     asyncio.run(runtime.main(ctx))
 
 
-@cli.command(name='emulate-dev')
-@click.argument('uid', callback=make_converter(check_uid), nargs=-1)
-@click.pass_context
-def emulate(ctx, **options):
-    """Emulate Smart Devices."""
-    ctx.obj.options.update(options)
-    asyncio.run(devemulator.main(ctx))
-
-
 @cli.command(name='client')
 @click.option('--notification/--no-notification', help='Issue a notification call.')
 @click.option(
@@ -355,9 +449,61 @@ def emulate(ctx, **options):
 @click.argument('method')
 @click.pass_context
 def client_cli(ctx, **options):
-    """Invoke a remote procedure call."""
+    """Issue a remote call."""
     ctx.obj.options.update(options)
     asyncio.run(client.main(ctx))
+
+
+@cli.command()
+@click.argument('uid', callback=make_converter(parse_uid), nargs=-1)
+@click.pass_context
+def emulate_dev(ctx, **options):
+    """Emulate Smart Devices."""
+    ctx.obj.options.update(options)
+    asyncio.run(devemulator.main(ctx))
+
+
+def get_buf_type(ctx, _param, value):
+    catalog = ctx.obj.options['dev_catalog']
+    with contextlib.suppress(KeyError):
+        return catalog[value]
+    not_found = click.BadParameter(
+        'Unrecognized device. Provide a valid device ID (integer) or name.',
+    )
+    try:
+        device_id = int(value)
+    except ValueError as exc:
+        raise not_found from exc
+    for buf_type in catalog.values():
+        if getattr(buf_type, 'device_id', None) == device_id:
+            return buf_type
+    raise not_found
+
+
+@cli.command()
+@click.argument('dev_type', callback=get_buf_type)
+@click.argument('message', callback=make_converter(json.loads), nargs=-1)
+@click.pass_context
+def format_msg(ctx, **options):
+    """Format a Smart Device message."""
+    ctx.obj.options.update(options)
+    msgparser.format_message(ctx.obj.options)
+
+
+@cli.command()
+@click.option(
+    '--output-format',
+    type=click.Choice(['json', 'pretty'], case_sensitive=False),
+    default='pretty',
+    help='Format of records printed to standard output.',
+)
+@click.argument('dev_type', callback=get_buf_type)
+@click.argument('message', callback=make_converter(bytes.fromhex), nargs=-1)
+@click.pass_context
+def parse_msg(ctx, **options):
+    """Parse a Smart Device message."""
+    ctx.obj.options.update(options)
+    msgparser.parse_messages(ctx.obj.options)
 
 
 if __name__ == '__main__':

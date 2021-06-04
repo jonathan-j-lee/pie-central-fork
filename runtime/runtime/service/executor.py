@@ -13,8 +13,6 @@ import threading
 import time
 import types
 import warnings
-from concurrent.futures import Executor as BaseExecutor
-from concurrent.futures import ThreadPoolExecutor
 from numbers import Real
 from typing import (
     Any,
@@ -247,8 +245,7 @@ class AsyncExecutor(Executor):
     max_actions: int = 128
     requests_size: int = 128
     running_actions: dict[api.Action, asyncio.Task] = dataclasses.field(default_factory=dict)
-    debug: bool = False
-    executor: Optional[BaseExecutor] = None
+    configure_loop: Callable[[], None] = lambda: None
 
     def schedule(self, request: ExecutionRequest):
         if not self.loop or not self.requests:
@@ -265,7 +262,7 @@ class AsyncExecutor(Executor):
     def cancel_actions(self):
         """Cancel all running actions."""
         for task in list(self.running_actions.values()):
-            task.cancel()
+            task.cancel('action cancelled')
 
     def register_action(self, request: ExecutionRequest):
         """Schedule a regular request as an ``asyncio.Task`` instance."""
@@ -277,15 +274,11 @@ class AsyncExecutor(Executor):
         self.running_actions[request.func] = task
         task.add_done_callback(lambda _: self.running_actions.pop(request.func, None))
 
-    def configure_loop(self):
-        """Configure the event loop and set references to ``asyncio`` resources."""
-        process.configure_loop(debug=self.debug, executor=self.executor)
-        self.loop = asyncio.get_running_loop()
-        self.requests = asyncio.Queue(self.requests_size)
-
     async def dispatch(self, *, cooldown: Real = 1):
         """Receive and handle requests from the queue."""
         self.configure_loop()
+        self.loop = asyncio.get_running_loop()
+        self.requests = asyncio.Queue(self.requests_size)
         logger = Dispatcher.logger.sync_bl.bind(mode='async')
         await asyncio.to_thread(
             logger.info,
@@ -300,7 +293,7 @@ class AsyncExecutor(Executor):
                 break
             if request is CANCEL_REQUEST:
                 self.cancel_actions()
-                await asyncio.to_thread(logger.info, 'Executor cancelled')
+                await asyncio.to_thread(logger.info, 'Executor cancelled, idling')
             elif request.func in self.running_actions:
                 await asyncio.to_thread(logger.warn, 'Action already running')
             elif len(self.running_actions) >= self.max_actions:
@@ -340,12 +333,12 @@ class Dispatcher(rpc.Handler):
         buffers: Buffer manager.
     """
 
+    buffers: BufferManager
     student_code_name: dataclasses.InitVar[str] = 'studentcode'
     timeouts: dict[re.Pattern, Real] = dataclasses.field(default_factory=dict)
     student_code: types.ModuleType = dataclasses.field(init=False)
     sync_exec: SyncExecutor = dataclasses.field(default_factory=SyncExecutor)
     async_exec: AsyncExecutor = dataclasses.field(default_factory=AsyncExecutor)
-    buffers: BufferManager = dataclasses.field(default_factory=BufferManager)
     logger: ClassVar[structlog.stdlib.AsyncBoundLogger] = structlog.get_logger(
         wrapper_class=structlog.stdlib.AsyncBoundLogger,
     )
@@ -358,7 +351,14 @@ class Dispatcher(rpc.Handler):
         """Whether student code should be imported for the first time."""
         return not hasattr(self.student_code, '__file__')
 
-    def _print(self, *values, sep: str = ' ', file=None, flush: bool = False):
+    def _print(
+        self,
+        /,
+        *values,
+        sep: str = ' ',
+        file=None,
+        flush: bool = False,
+    ):  # pylint: disable=unused-argument; function signature matches that of ``print``.
         message = sep.join(map(str, values))
         self.logger.sync_bl.info(message, student_print=True)
 
@@ -436,42 +436,34 @@ class Dispatcher(rpc.Handler):
 
 async def main(
     dispatcher: Dispatcher,
-    executor: BaseExecutor,
     ready: threading.Event,
     name: str,
     **options,
 ):
     """Service thread's async entry point."""
-    async with process.EndpointManager(name, options, executor) as manager:
-        await manager.make_service(dispatcher)
+    async with process.Application(name, options) as app:
+        app.stack.callback(dispatcher.sync_exec.stop)
+        await app.make_service(dispatcher)
+        dispatcher.async_exec.configure_loop = app.configure_loop
         await Dispatcher.logger.info('Execution dispatcher started')
         # Logger has been attached to this thread's event loop.
         await asyncio.to_thread(ready.set)
         await asyncio.gather(
-            asyncio.sleep(3600),  # TODO: replace with health check
+            app.report_health(),
         )
 
 
 def target(name: str, **options):
     """The process entry point."""
-    with contextlib.ExitStack() as stack:
-        executor = stack.enter_context(
-            ThreadPoolExecutor(
-                max_workers=options['thread_pool_workers'],
-                thread_name_prefix='aioworker',
-            )
-        )
+    with BufferManager(options['dev_catalog']) as buffers:
         dispatcher = Dispatcher(
+            buffers,
             options['exec_module'],
             dict(options['exec_timeout']),
-            async_exec=AsyncExecutor(debug=options['debug'], executor=executor),
-            buffers=stack.enter_context(BufferManager()),
         )
-        dispatcher.buffers.load_catalog(options['dev_catalog'])
-
         ready = threading.Event()
         service_thread = threading.Thread(
-            target=lambda: asyncio.run(main(dispatcher, executor, ready, name, **options)),
+            target=lambda: asyncio.run(main(dispatcher, ready, name, **options)),
             daemon=True,
             name='service-thread',
         )

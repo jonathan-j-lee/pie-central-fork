@@ -5,7 +5,6 @@ import contextlib
 import ctypes
 import dataclasses
 import functools
-import io
 import operator
 import re
 import time
@@ -24,8 +23,6 @@ from typing import (
     TypeVar,
     Union,
 )
-
-import yaml
 
 from .exception import RuntimeBaseException
 from .messaging import Message, MessageError, MessageType, ParameterMap
@@ -537,6 +534,13 @@ class DeviceBuffer(Buffer):
         buf = self.control.get_field_view(buf, 'uid')
         return DeviceUID.from_buffer_copy(buf)
 
+    @uid.setter
+    @with_transaction
+    def uid(self, uid: DeviceUID, /):
+        self.control.uid.device_id = uid.device_id
+        self.control.uid.year = uid.year
+        self.control.uid.random = uid.random
+
     @property
     @with_transaction
     def subscription(self) -> frozenset[str]:
@@ -565,11 +569,19 @@ BufferKey = Union[tuple[str, int], int, DeviceUID]
 class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
     """Manage the lifecycle of a collection of buffers."""
 
+    catalog: collections.abc.Mapping[str, type[Buffer]]
     buffers: dict[tuple[str, int], Buffer] = dataclasses.field(default_factory=dict)
-    catalog: dict[str, type[Buffer]] = dataclasses.field(default_factory=dict)
-    device_ids: dict[int, str] = dataclasses.field(default_factory=dict)
     stack: contextlib.ExitStack = dataclasses.field(default_factory=contextlib.ExitStack)
     shared: bool = True
+    device_ids: dict[int, str] = dataclasses.field(default_factory=dict, init=False, repr=False)
+
+    def __post_init__(self):
+        for type_name, buf_type in self.catalog.items():
+            device_id = getattr(buf_type, 'device_id', None)
+            if device_id is not None:
+                if device_id in self.device_ids:
+                    raise DeviceBufferError('duplicate Smart Device ID', device_id=device_id)
+                self.device_ids[device_id] = type_name
 
     def __enter__(self, /):
         self.stack.__enter__()
@@ -615,32 +627,23 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
             self.stack.callback(self.buffers.pop, key)
         return buffer
 
-    def register_type(self, type_name: str, params: list[Parameter], **options):
-        device_id = options.get('device_id')
-        if device_id is None:
-            buffer_type_factory = Buffer.make_type
-        else:
-            if device_id in self.device_ids:
-                raise DeviceBufferError('duplicate Smart Device ID', device_id=device_id)
-            self.device_ids[device_id] = type_name
-            buffer_type_factory = DeviceBuffer.make_type
-        self.catalog[type_name] = buffer_type_factory(type_name, params, **options)
-
-    def load_catalog(self, stream: Union[Path, io.TextIOBase]):
-        if isinstance(stream, Path):
-            with open(stream) as file_handle:
-                self.load_catalog(file_handle)
-        else:
-            catalog = yaml.load(stream, Loader=yaml.SafeLoader)
-            for type_name, options in catalog.items():
-                params = []
-                for index, param in enumerate(options.pop('params', None) or []):
-                    param.setdefault('index', index)
-                    param['ctype'] = Parameter.parse_ctype(param.pop('type'))
-                    params.append(Parameter(**param))
-                self.register_type(type_name, params, **options)
-
     @staticmethod
     def unlink_all(shm_path: Path = Path('/dev/shm')):
         for path in shm_path.glob('rt-*'):
             Buffer.unlink(path.name)
+
+    @staticmethod
+    def _make_params(attrs: dict[str, Any]) -> Iterable[Parameter]:
+        for index, param in enumerate(attrs.pop('params', [])):
+            param.setdefault('index', index)
+            param['ctype'] = Parameter.parse_ctype(param.pop('type'))
+            yield Parameter(**param)
+
+    @classmethod
+    def make_catalog(cls, catalog: dict[str, dict[str, Any]]) -> dict[str, type[Buffer]]:
+        catalog_types = {}
+        for type_name, attrs in catalog.items():
+            params = list(cls._make_params(attrs))
+            base_type = DeviceBuffer if 'device_id' in attrs else Buffer
+            catalog_types[type_name] = base_type.make_type(type_name, params, **attrs)
+        return catalog_types

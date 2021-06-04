@@ -8,5 +8,10 @@ omit =
 plugins = Cython.Coverage
 
 [report]
+exclude_lines =
+  # Standard pragma
+  pragma: no cover
+  # Abstract method body
+  raise NotImplementedError
 precision = 1
 show_missing = True

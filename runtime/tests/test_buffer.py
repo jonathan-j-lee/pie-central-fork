@@ -1,6 +1,5 @@
 import ctypes
 import multiprocessing
-import io
 import time
 import warnings
 from pathlib import Path
@@ -97,10 +96,9 @@ def buffer_manager(request):
             ]
         },
     }
-    catalog_file = io.StringIO(yaml.dump(catalog))
-    with BufferManager(shared=request.param) as manager:
-        manager.load_catalog(catalog_file)
-        yield manager
+    catalog = BufferManager.make_catalog(catalog)
+    with BufferManager(catalog, shared=request.param) as buffers:
+        yield buffers
     BufferManager.unlink_all()
 
 
@@ -347,9 +345,13 @@ def test_type_registration(buffer_manager):
     assert list(Camera.params.values()) == [Parameter('rgb', ctypes.c_uint8 * 128 * 128 * 3, 0)]
 
 
-def test_duplicate_registration(buffer_manager):
+def test_duplicate_registration():
+    catalog = {
+        'dev1': {'device_id': 0x80},
+        'dev2': {'device_id': 0x80},
+    }
     with pytest.raises(DeviceBufferError):
-        buffer_manager.register_type('duplicate-device', [], device_id=0x80)
+        BufferManager(BufferManager.make_catalog(catalog))
 
 
 def test_key_equivalence(buffer_manager):

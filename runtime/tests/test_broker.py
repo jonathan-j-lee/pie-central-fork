@@ -8,15 +8,20 @@ import zmq
 
 import runtime
 from runtime import rpc
-from runtime.__main__ import cli
+from runtime.__main__ import cli, load_catalog
 from runtime.buffer import BufferManager
 from runtime.service.broker import Broker
 
 
+@pytest.fixture(scope='module')
+def catalog():
+    catalog_path = Path(runtime.__file__).parent / 'catalog.yaml'
+    yield load_catalog(catalog_path)
+
+
 @pytest.fixture
-def buffers():
-    with BufferManager() as buffers:
-        buffers.load_catalog(Path(runtime.__file__).parent / 'catalog.yaml')
+def buffers(catalog):
+    with BufferManager(catalog) as buffers:
         yield buffers
     BufferManager.unlink_all()
 
@@ -128,7 +133,7 @@ async def test_send_update(broker):
     await broker.send_update()
     broker.update_publisher.call.update.assert_called_with({}, notification=True)
     broker.client.call.list_uids.return_value = future = asyncio.Future()
-    future.set_result([0x0_00_ffffffff_ffffffff])
+    future.set_result([str(0x0_00_ffffffff_ffffffff)])
     await broker.update_uids()
     await broker.send_update()
     broker.update_publisher.call.update.assert_called_with(
@@ -137,9 +142,9 @@ async def test_send_update(broker):
     )
     broker.client.call.list_uids.return_value = future = asyncio.Future()
     future.set_result([
-        0x0000_00_ffffffff_ffffffff,
-        0x0000_ff_ffffffff_ffffffff,
-        0xffff_ff_ffffffff_ffffffff,
+        str(0x0000_00_ffffffff_ffffffff),
+        str(0x0000_ff_ffffffff_ffffffff),
+        str(0xffff_ff_ffffffff_ffffffff),
     ])
     await broker.update_uids()
     await broker.send_update()

@@ -101,7 +101,7 @@ async def start_virtual_device(
     vsd_addr_parts = urlsplit(options['dev_vsd_addr'])
     reader, writer = await asyncio.open_connection(vsd_addr_parts.hostname, vsd_addr_parts.port)
     buffer = buffers.get_or_create(uid)
-    buffer.control.uid = DeviceUID.from_int(uid)
+    buffer.uid = DeviceUID.from_int(uid)
     device = SmartDeviceService(reader, writer, buffer)
     async with device.communicate() as tasks:
         poll = process.spin(device.poll_buffer, interval=options['dev_poll_interval'])
@@ -111,15 +111,14 @@ async def start_virtual_device(
 
 
 async def main(ctx):
-    async with process.EndpointManager('dev-emulator', ctx.obj.options) as manager:
-        buffers = manager.stack.enter_context(BufferManager(shared=False))
-        await asyncio.to_thread(buffers.load_catalog, manager.options['dev_catalog'])
+    async with process.Application('dev-emulator', ctx.obj.options) as app:
+        buffers = app.make_buffer_manager(shared=False)
         logger = structlog.get_logger()
         tasks = set()
         try:
-            for uid in manager.options['uid']:
-                vsd = start_virtual_device(buffers, uid, manager.options)
-                tasks.update(await manager.stack.enter_async_context(vsd))
+            for uid in app.options['uid']:
+                vsd = start_virtual_device(buffers, uid, app.options)
+                tasks.update(await app.stack.enter_async_context(vsd))
             await asyncio.gather(*tasks)
         except ConnectionRefusedError as exc:
             await logger.error('Connection refused', exc_info=exc)
