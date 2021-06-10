@@ -1,12 +1,14 @@
 import asyncio
 
+import click
+
 from runtime import buffer, log, process
 from runtime.service import broker, device, executor
 
 __version__ = '0.0.1-alpha'
 
 
-async def main(ctx):
+async def main(ctx: click.Context) -> None:
     log.configure(fmt='pretty')
     try:
         await asyncio.gather(

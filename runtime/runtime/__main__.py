@@ -6,9 +6,8 @@ import contextlib
 import dataclasses
 import functools
 import re
-from numbers import Real
 from pathlib import Path
-from typing import Any, Callable, NamedTuple, Optional, Union
+from typing import Any, Callable, Iterator, NamedTuple, Optional, TypeVar, Union
 
 import click
 import orjson as json
@@ -22,9 +21,14 @@ from .buffer import Buffer, BufferManager
 from .tools import client, devemulator, msgparser
 
 
-class OptionGroupMixin:
+class OptionGroupCommand(click.Command):
     @staticmethod
-    def format_group(ctx, formatter, header: str, params: list[click.Parameter]):
+    def format_group(
+        ctx: click.Context,
+        formatter: click.HelpFormatter,
+        header: str,
+        params: list[click.Parameter],
+    ) -> None:
         with formatter.section(header):
             options = []
             for param in params:
@@ -33,27 +37,24 @@ class OptionGroupMixin:
                     options.append(record)
             formatter.write_dl(options, col_max=30)
 
-    def format_options(self, ctx, formatter):
-        grouped_params = collections.defaultdict(list)
+    def format_options(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        grouped_params: dict['OptionGroup', list[click.Parameter]] = collections.defaultdict(list)
+        other_params: list[click.Parameter] = []
         for param in self.get_params(ctx):
             group = getattr(param, 'group', None)
-            grouped_params[group].append(param)
-        other_params = grouped_params.pop(None, None) or []
+            params = grouped_params[group] if group else other_params
+            params.append(param)
         for group in sorted(grouped_params, key=lambda group: group.key):
             params = grouped_params[group]
             header = group.header or f'{group.key.title()} Options'
             self.format_group(ctx, formatter, header, params)
         self.format_group(ctx, formatter, 'Other Options', other_params)
-        if isinstance(self, click.Group):
-            self.format_commands(ctx, formatter)
 
 
-class OptionGroupMultiCommand(OptionGroupMixin, click.Group):
-    pass
-
-
-class OptionGroupCommand(OptionGroupMixin, click.Command):
-    pass
+class OptionGroupMultiCommand(OptionGroupCommand, click.Group):
+    def format_options(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        super().format_options(ctx, formatter)
+        self.format_commands(ctx, formatter)
 
 
 @dataclasses.dataclass
@@ -68,33 +69,35 @@ class OptionGroup(NamedTuple):
 
 
 class Option(click.Option):
-    def __init__(self, *args, group: Optional[OptionGroup] = None, **kwargs):
+    def __init__(self, *args: Any, group: Optional[OptionGroup] = None, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.group = group
 
-    def process_value(self, ctx: click.Context, value):
+    def process_value(self, ctx: click.Context, value: Any) -> Any:
         ctx.ensure_object(OptionStore)
         if value:
             ctx.obj.envvars[f'{ctx.auto_envvar_prefix}_{self.name}'.upper()] = value
         return super().process_value(ctx, value)
 
 
-class OptionGroupFactory:
-    def __init__(self):
-        self.current = None
+FC = TypeVar('FC', Callable[..., Any], click.Command)
+Callback = Callable[[click.Context, click.Parameter, Any], Any]
 
-    def group(self, *args, **kwargs):
+
+class OptionGroupFactory:
+    def __init__(self) -> None:
+        self.current: Optional[OptionGroup] = None
+
+    def group(self, *args: Any, **kwargs: Any) -> Callable[[FC], FC]:
         self.current = OptionGroup(*args, **kwargs)
         return lambda func: func
 
-    def option(self, *args, **kwargs):
+    def option(self, *args: Any, **kwargs: Any) -> Callable[[FC], FC]:
         return click.option(*args, **kwargs, group=self.current)
 
 
 @functools.lru_cache(maxsize=64)
-def make_converter(
-    convert: Callable[[Any], Any],
-) -> Callable[[click.Context, click.Parameter, Any], Any]:
+def make_converter(convert: Callable[[Any], Any]) -> Callback:
     """Make a :mod:`click` callback that applies a conversion to each option value.
 
     Works with options provided multiple times (where ``multiple=True``).
@@ -107,7 +110,7 @@ def make_converter(
         A :mod:`click`-compatible callback.
     """
 
-    def callback(_ctx, _param, value, /):
+    def callback(_ctx: click.Context, _param: click.Parameter, value: Any, /) -> Any:
         try:
             if isinstance(value, (tuple, list)):
                 return tuple(convert(element) for element in value)
@@ -118,7 +121,7 @@ def make_converter(
     return callback
 
 
-def make_multipart_parser(*converters: Callable[[str], Any], delimeter: str = ':'):
+def make_multipart_parser(*converters: Callable[[str], Any], delimeter: str = ':') -> Callback:
     """Make a :mod:`click` callback that parses a tuple-like multipart option.
 
     Examples:
@@ -137,7 +140,7 @@ def make_multipart_parser(*converters: Callable[[str], Any], delimeter: str = ':
     if not converters:
         raise ValueError('not enough converters')
 
-    def convert(element: str):
+    def convert(element: str) -> Iterator[Any]:
         components = element.rsplit(delimeter, maxsplit=len(converters) - 1)
         if len(components) != len(converters):
             raise click.BadParameter('not enough parts provided')
@@ -173,7 +176,7 @@ def to_int_or_bytes(value: str) -> Union[int, bytes]:
         return bytes.fromhex(value.removeprefix("'").removesuffix("'"))
 
 
-def check_positive(value: Real) -> Real:
+def check_positive(value: float) -> float:
     """Check whether the provided value is strictly positive.
 
     Examples:
@@ -237,16 +240,15 @@ def load_catalog(path: Union[str, Path]) -> dict[str, type[Buffer]]:
         return BufferManager.make_catalog(catalog)
     except yaml.YAMLError as exc:
         message = f'Unable to parse device catalog ({path})'
-        if hasattr(exc, 'problem_mark'):
-            # pylint: disable=no-member; hasattr(...) check ensures member exists.
+        mark = getattr(exc, 'problem_mark', None)
+        if mark:
             # The PyYAML docs recommend this pattern: https://pyyaml.org/wiki/PyYAMLDocumentation
-            mark = exc.problem_mark
             message += f': line {mark.line + 1}, column {mark.column + 1}'
         raise click.BadParameter(message) from exc
 
 
 optgroup = OptionGroupFactory()
-click.option = functools.partial(click.option, cls=Option)
+click.option: Callable[[FC], FC] = functools.partial(click.option, cls=Option)  # type: ignore[misc]
 get_zmq_option = lambda option: getattr(zmq, option.upper())
 
 
@@ -422,14 +424,14 @@ get_zmq_option = lambda option: getattr(zmq, option.upper())
 @click.option('--debug/--no-debug', help='Enable the event loop debugger.')
 @click.version_option(version=runtime.__version__, message='%(version)s')
 @click.pass_context
-def cli(ctx, **options):
+def cli(ctx: click.Context, **options: Any) -> None:
     uvloop.install()
     ctx.obj.options.update(options)
 
 
 @cli.command()
 @click.pass_context
-def start(ctx, **options):
+def start(ctx: click.Context, **options: Any) -> None:
     """
     Start the Runtime daemon.
     """
@@ -448,7 +450,7 @@ def start(ctx, **options):
 @click.option('--address', help='Service address (identity).')
 @click.argument('method')
 @click.pass_context
-def client_cli(ctx, **options):
+def client_cli(ctx: click.Context, **options: Any) -> None:
     """Issue a remote call."""
     ctx.obj.options.update(options)
     asyncio.run(client.main(ctx))
@@ -457,14 +459,18 @@ def client_cli(ctx, **options):
 @cli.command()
 @click.argument('uid', callback=make_converter(parse_uid), nargs=-1)
 @click.pass_context
-def emulate_dev(ctx, **options):
+def emulate_dev(ctx: click.Context, **options: Any) -> None:
     """Emulate Smart Devices."""
     ctx.obj.options.update(options)
     asyncio.run(devemulator.main(ctx))
 
 
-def get_buf_type(ctx, _param, value):
-    catalog = ctx.obj.options['dev_catalog']
+def get_buf_type(
+    ctx: click.Context,
+    _param: click.Parameter,
+    value: str,
+) -> type[Buffer]:
+    catalog: dict[str, type[Buffer]] = ctx.obj.options['dev_catalog']
     with contextlib.suppress(KeyError):
         return catalog[value]
     not_found = click.BadParameter(
@@ -484,7 +490,7 @@ def get_buf_type(ctx, _param, value):
 @click.argument('dev_type', callback=get_buf_type)
 @click.argument('message', callback=make_converter(json.loads), nargs=-1)
 @click.pass_context
-def format_msg(ctx, **options):
+def format_msg(ctx: click.Context, **options: Any) -> None:
     """Format a Smart Device message."""
     ctx.obj.options.update(options)
     msgparser.format_message(ctx.obj.options)
@@ -500,7 +506,7 @@ def format_msg(ctx, **options):
 @click.argument('dev_type', callback=get_buf_type)
 @click.argument('message', callback=make_converter(bytes.fromhex), nargs=-1)
 @click.pass_context
-def parse_msg(ctx, **options):
+def parse_msg(ctx: click.Context, **options: Any) -> None:
     """Parse a Smart Device message."""
     ctx.obj.options.update(options)
     msgparser.parse_messages(ctx.obj.options)

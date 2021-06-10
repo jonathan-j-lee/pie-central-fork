@@ -6,14 +6,15 @@ import contextlib
 import dataclasses
 import glob
 import time
-from numbers import Real
 from pathlib import Path
 from typing import (
-    AsyncContextManager,
+    Any,
     AsyncIterable,
+    AsyncIterator,
     ClassVar,
     Collection,
     Iterable,
+    NoReturn,
     Optional,
     Union,
 )
@@ -24,8 +25,8 @@ import serial_asyncio as aioserial
 import structlog
 from serial.tools import list_ports
 
-from .. import process, rpc
-from ..buffer import BufferManager, DeviceBuffer, DeviceUID
+from .. import log, process, rpc
+from ..buffer import BufferManager, DeviceBuffer, DeviceUID, NullDevice
 from ..exception import RuntimeBaseException
 from ..messaging import ErrorCode, Message, MessageError, MessageType
 
@@ -52,7 +53,7 @@ class SmartDeviceObserver(abc.ABC):
     """Watch for recently connected Smart Devices."""
 
     @abc.abstractmethod
-    async def get_ports(self) -> set[Path]:
+    async def get_ports(self, /) -> set[Path]:
         """Retrieve a set of serial ports of recently connected devices."""
 
 
@@ -72,19 +73,19 @@ if HAS_UDEV:  # pragma: no cover; platform-dependent
             default_factory=lambda: asyncio.Queue(128),
         )
         context: pyudev.Context = dataclasses.field(default_factory=pyudev.Context)
-        monitor: pyudev.Monitor = None
+        monitor: pyudev.Monitor = dataclasses.field(init=False, repr=False)
 
         SUBSYSTEM: ClassVar[str] = 'usb'
         DEVICE_TYPE: ClassVar[str] = 'usb_interface'
         VENDOR_ID: ClassVar[int] = 0x2341
         PRODUCT_ID: ClassVar[int] = 0x8037
 
-        def __post_init__(self):
-            self.monitor = self.monitor or pyudev.Monitor.from_netlink(self.context)
+        def __post_init__(self, /) -> None:
+            self.monitor = pyudev.Monitor.from_netlink(self.context)
             self.monitor.filter_by(self.SUBSYSTEM, self.DEVICE_TYPE)
 
         @classmethod
-        def is_sensor(cls, device: pyudev.Device) -> bool:
+        def is_sensor(cls, /, device: pyudev.Device) -> bool:
             """Determine whether a udev device is a Smart Sensor."""
             try:
                 vendor_id, product_id, _ = device.properties['PRODUCT'].split('/')
@@ -92,7 +93,7 @@ if HAS_UDEV:  # pragma: no cover; platform-dependent
             except (KeyError, ValueError):
                 return False
 
-        def handle_devices(self, devices: Iterable[pyudev.Device]):
+        def handle_devices(self, /, devices: Iterable[pyudev.Device]) -> None:
             """Callback for handling newly connected devices."""
             valid_devices = []
             for device in devices:
@@ -102,18 +103,18 @@ if HAS_UDEV:  # pragma: no cover; platform-dependent
                 with contextlib.suppress(asyncio.QueueFull):
                     self.devices.put_nowait(valid_devices)
 
-        async def start(self):
+        async def start(self, /) -> None:
             """Begin monitoring udev events and register initially connected devices."""
             asyncio.get_running_loop().add_reader(self.monitor.fileno(), self.on_new_events)
             self.monitor.start()
             devices = await asyncio.to_thread(self.context.list_devices, subsystem=self.SUBSYSTEM)
             self.handle_devices(devices)
 
-        def on_new_events(self):
+        def on_new_events(self, /) -> None:
             """Callback when new udev events are available."""
             self.handle_devices(iter(lambda: self.monitor.poll(0), None))
 
-        async def get_ports(self) -> set[Path]:
+        async def get_ports(self, /) -> set[Path]:
             if not self.monitor.started:
                 await self.start()
             devices = await self.devices.get()
@@ -133,16 +134,17 @@ class PollingObserver(SmartDeviceObserver):
     """
 
     patterns: frozenset[str] = frozenset({'/dev/ttyACM*'})
-    interval: Real = 1
+    interval: float = 1
     ports: set[Path] = dataclasses.field(default_factory=set)
 
-    def __post_init__(self):
+    def __post_init__(self, /) -> None:
         self.patterns = frozenset(self.patterns)
 
-    async def get_ports(self) -> set[Path]:
-        ports = set()
+    async def get_ports(self, /) -> set[Path]:
+        ports: set[Path] = set()
         for pattern in self.patterns:
-            ports.update(map(Path, await asyncio.to_thread(glob.glob, pattern)))
+            paths: list[str] = await asyncio.to_thread(glob.glob, pattern)
+            ports.update(map(Path, paths))
         await asyncio.sleep(self.interval)
         new_ports = ports - self.ports
         self.ports.clear()
@@ -150,13 +152,13 @@ class PollingObserver(SmartDeviceObserver):
         return new_ports
 
 
-def make_observer():
+def make_observer() -> SmartDeviceObserver:
     """Make an observer suitable for this platform."""
     return EventObserver() if HAS_UDEV else PollingObserver()
 
 
-@dataclasses.dataclass
-class SmartDevice(abc.ABC):
+@dataclasses.dataclass  # type: ignore[misc]
+class SmartDevice(abc.ABC):  # https://github.com/python/mypy/issues/5374
     """A sensor or actuator that uses the Smart Device protocol.
 
     Attributes:
@@ -172,8 +174,8 @@ class SmartDevice(abc.ABC):
 
     reader: asyncio.StreamReader
     writer: asyncio.StreamWriter
-    buffer: Optional[DeviceBuffer] = None
-    requests: rpc.RequestTracker = dataclasses.field(
+    buffer: DeviceBuffer = dataclasses.field(default_factory=NullDevice.attach)
+    requests: rpc.RequestTracker[Message] = dataclasses.field(
         default_factory=lambda: rpc.RequestTracker(upper=256),
     )
     read_queue: asyncio.Queue[Message] = dataclasses.field(
@@ -182,13 +184,9 @@ class SmartDevice(abc.ABC):
     write_queue: asyncio.Queue[Message] = dataclasses.field(
         default_factory=lambda: asyncio.Queue(1024),
     )
-    logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(
-        default_factory=lambda: structlog.get_logger(
-            wrapper_class=structlog.stdlib.AsyncBoundLogger,
-        ),
-    )
+    logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(default_factory=log.get_logger)
 
-    async def read_messages(self):
+    async def read_messages(self) -> NoReturn:
         """Read inbound messages indefinitely.
 
         Raises:
@@ -206,7 +204,7 @@ class SmartDevice(abc.ABC):
                 status = exc.context.get('status', ErrorCode.GENERIC_ERROR.name)
                 await self.write_queue.put(Message.make_error(ErrorCode[status]))
 
-    async def write_messages(self):
+    async def write_messages(self) -> NoReturn:
         """Write outbound messages indefinitely.
 
         Raises:
@@ -229,9 +227,9 @@ class SmartDevice(abc.ABC):
     async def heartbeat(
         self,
         heartbeat_id: Optional[int] = None,
-        timeout: Real = 1,
+        timeout: float = 1,
         block: bool = True,
-    ) -> Message:
+    ) -> Optional[Message]:
         """Send a heartbeat request.
 
         Arguments:
@@ -249,9 +247,10 @@ class SmartDevice(abc.ABC):
             await self.write_queue.put(Message.make_hb_req(request_id))
             if block:
                 return await asyncio.wait_for(result, timeout)
+            return None
 
     @contextlib.asynccontextmanager
-    async def communicate(self, /) -> AsyncContextManager[set[asyncio.Task]]:
+    async def communicate(self, /) -> AsyncIterator[set[asyncio.Task[NoReturn]]]:
         """Context manager to start and stop reading and writing messages."""
         tasks = {
             asyncio.create_task(self.read_messages(), name='dev-read'),
@@ -292,13 +291,8 @@ class SmartDevice(abc.ABC):
         else:
             raise DeviceError('message type not handled', type=message.type.name)
 
-    def _check_buffer(self):
-        if not self.buffer:
-            raise DeviceError('device buffer not initialized')
-
-    async def handle_messages(self, /):
+    async def handle_messages(self, /) -> NoReturn:
         """Handle inbound messages indefinitely."""
-        self._check_buffer()
         while True:
             message = await self.read_queue.get()
             try:
@@ -309,16 +303,16 @@ class SmartDevice(abc.ABC):
                 await self.logger.error('Message handling error', exc_info=exc)
 
     @abc.abstractmethod
-    async def poll_buffer(self):
+    async def poll_buffer(self, /) -> None:
         """Poll the buffer for changes."""
 
 
 class SmartDeviceClient(SmartDevice):
-    async def ping(self, /):
+    async def ping(self, /) -> None:
         """Ping the sensor to receive a subscription response."""
         await self.write_queue.put(Message.make_ping())
 
-    async def disable(self, /):
+    async def disable(self, /) -> None:
         """Disable the sensor."""
         await self.write_queue.put(Message.make_dev_disable())
 
@@ -326,8 +320,8 @@ class SmartDeviceClient(SmartDevice):
         self,
         /,
         params: Optional[Collection[str]] = None,
-        interval: Optional[Real] = None,
-    ):
+        interval: Optional[float] = None,
+    ) -> None:
         """Receive periodic updates for zero or more parameters.
 
         Arguments:
@@ -340,15 +334,15 @@ class SmartDeviceClient(SmartDevice):
         message = await asyncio.to_thread(self.buffer.make_sub_req, params, interval)
         await self.write_queue.put(message)
 
-    async def unsubscribe(self, /):
+    async def unsubscribe(self, /) -> None:
         """Stop receiving subscription updates."""
         await self.write_queue.put(Message.make_unsubscribe())
 
-    async def read(self, /, params: Optional[Collection[str]] = None):
+    async def read(self, /, params: Optional[Collection[str]] = None) -> None:
         """Read some parameters from the device."""
         await asyncio.to_thread(self.buffer.read, params)
 
-    def _handle_sub_res(self):
+    def _handle_sub_res(self, /) -> None:
         """Copy subscription/UID information into the internal buffer.
 
         Raises:
@@ -366,7 +360,7 @@ class SmartDeviceClient(SmartDevice):
                 interval=self.buffer.interval,
             )
 
-    async def discover(self, buffers: BufferManager, *, interval: Real = 1) -> DeviceUID:
+    async def discover(self, buffers: BufferManager, /, *, interval: float = 1) -> DeviceUID:
         """Identify information about a newly connected device.
 
         This method periodically pings the device to get a subscription response, which contains
@@ -381,8 +375,8 @@ class SmartDeviceClient(SmartDevice):
             while True:
                 message = await self.read_queue.get()
                 if message.type is MessageType.SUB_RES:
-                    _, _, uid = message.read_sub_res()
-                    uid = DeviceUID(*uid)
+                    _, _, uid_parts = message.read_sub_res()
+                    uid = DeviceUID(*uid_parts)
                     self.buffer = await asyncio.to_thread(buffers.get_or_create, uid)
                     await asyncio.to_thread(setattr, self.buffer, 'valid', True)
                     await asyncio.to_thread(self.buffer.update, message)
@@ -398,14 +392,10 @@ class SmartDeviceClient(SmartDevice):
             async for response in super()._emit_responses(message):
                 yield response
 
-    async def poll_buffer(self):
-        self._check_buffer()
+    async def poll_buffer(self, /) -> None:
         messages = await asyncio.to_thread(lambda: list(self.buffer.emit_dev_rw()))
         for message in messages:
             await self.write_queue.put(message)
-
-
-DeviceKey = Union[str, int]
 
 
 @dataclasses.dataclass
@@ -422,23 +412,19 @@ class SmartDeviceManager(rpc.Handler):
         strings because the serialization protocol may not support 96-bit integers.
     """
 
+    buffers: BufferManager
     observer: SmartDeviceObserver = dataclasses.field(default_factory=make_observer)
-    buffers: BufferManager = dataclasses.field(default_factory=BufferManager)
     devices: dict[int, SmartDeviceClient] = dataclasses.field(default_factory=dict)
-    poll_interval: Real = 0.04
-    discovery_timeout: Real = 10
-    logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(
-        default_factory=lambda: structlog.get_logger(
-            wrapper_class=structlog.stdlib.AsyncBoundLogger,
-        ),
-    )
+    poll_interval: float = 0.04
+    discovery_timeout: float = 10
+    logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(default_factory=log.get_logger)
 
     @rpc.route
     async def list_uids(self) -> list[str]:
         """List the UIDs of Smart Devices connected currently."""
         return list(map(str, self.devices))
 
-    def _normalize_uids(self, uids: Optional[Union[DeviceKey, list[DeviceKey]]]) -> list[int]:
+    def _normalize_uids(self, uids: Optional[Union[str, list[str]]]) -> list[int]:
         if uids is None:
             return list(self.devices)
         if isinstance(uids, (str, int)):
@@ -446,7 +432,7 @@ class SmartDeviceManager(rpc.Handler):
         return list(map(int, uids))
 
     @rpc.route
-    async def ping(self, uids: Optional[Union[DeviceKey, list[DeviceKey]]] = None):
+    async def ping(self, uids: Optional[Union[str, list[str]]] = None) -> None:
         """Ping one or more devices.
 
         Arguments:
@@ -457,7 +443,7 @@ class SmartDeviceManager(rpc.Handler):
             await self.devices[uid].ping()
 
     @rpc.route
-    async def disable(self, uids: Optional[Union[DeviceKey, list[DeviceKey]]] = None):
+    async def disable(self, uids: Optional[Union[str, list[str]]] = None) -> None:
         """Disable one or more devices.
 
         Arguments:
@@ -470,10 +456,10 @@ class SmartDeviceManager(rpc.Handler):
     @rpc.route
     async def subscribe(
         self,
-        uid: DeviceKey,
+        uid: str,
         params: Optional[list[str]] = None,
-        interval: Optional[Real] = None,
-    ):
+        interval: Optional[float] = None,
+    ) -> None:
         """Send subscription requests to a device.
 
         Arguments:
@@ -484,22 +470,22 @@ class SmartDeviceManager(rpc.Handler):
         await self.devices[int(uid)].subscribe(params, interval)
 
     @rpc.route
-    async def unsubscribe(self, uids: Optional[Union[DeviceKey, list[DeviceKey]]] = None):
+    async def unsubscribe(self, uids: Optional[Union[str, list[str]]] = None) -> None:
         for uid in self._normalize_uids(uids):
             await self.devices[uid].unsubscribe()
 
     @rpc.route
-    async def read(self, uid: DeviceKey, params: Optional[Collection[str]] = None):
+    async def read(self, uid: str, params: Optional[Collection[str]] = None) -> None:
         await self.devices[int(uid)].read(params)
 
     @rpc.route
     async def heartbeat(
         self,
-        uid: DeviceKey,
+        uid: str,
         heartbeat_id: Optional[int] = None,
-        timeout: Optional[Real] = 1,
+        timeout: float = 1,
         block: bool = True,
-    ) -> Real:
+    ) -> float:
         """Send heartbeat requests to a device.
 
         Arguments:
@@ -516,7 +502,7 @@ class SmartDeviceManager(rpc.Handler):
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
         port: Optional[Path] = None,
-    ):
+    ) -> None:
         """Create and register a new Smart Device and block until the connection closes.
 
         Arguments:
@@ -525,8 +511,8 @@ class SmartDeviceManager(rpc.Handler):
             port: The COM port path, if this is a serial connection. If not provided, this method
                 assumes this device is virtual.
         """
-        port = str(port) if port else '(virtual)'
-        device = SmartDeviceClient(reader, writer, logger=self.logger.bind(port=port))
+        port_name = str(port) if port else '(virtual)'
+        device = SmartDeviceClient(reader, writer, logger=self.logger.bind(port=port_name))
         async with device.communicate() as tasks:
             uid = int(await asyncio.wait_for(device.discover(self.buffers), self.discovery_timeout))
             self.devices[uid] = device
@@ -540,7 +526,7 @@ class SmartDeviceManager(rpc.Handler):
                 device.buffer.valid = False
                 self.devices.pop(uid, None)
 
-    async def open_serial_devices(self, **options):
+    async def open_serial_devices(self, **options: Any) -> NoReturn:
         """Open serial ports and schedule their execution concurrently.
 
         Arguments:
@@ -556,7 +542,7 @@ class SmartDeviceManager(rpc.Handler):
                 reader, writer = await aioserial.open_serial_connection(url=str(port), **options)
                 asyncio.create_task(self.run_device(reader, writer, port), name='dev-run')
 
-    async def open_virtual_devices(self, vsd_addr: str):
+    async def open_virtual_devices(self, vsd_addr: str) -> None:
         vsd_addr_parts = urlsplit(vsd_addr)
         server = await asyncio.start_server(
             self.run_device,
@@ -568,7 +554,7 @@ class SmartDeviceManager(rpc.Handler):
             await server.serve_forever()
 
 
-async def main(**options):
+async def main(**options: Any) -> None:
     """Async entry point.
 
     Arguments:
@@ -576,7 +562,7 @@ async def main(**options):
     """
     async with process.Application('device', options) as app:
         device_manager = SmartDeviceManager(
-            buffers=app.make_buffer_manager(),
+            app.make_buffer_manager(),
             poll_interval=options['dev_poll_interval'],
         )
         await app.make_service(device_manager)

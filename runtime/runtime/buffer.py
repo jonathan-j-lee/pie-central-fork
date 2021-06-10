@@ -8,9 +8,10 @@ import functools
 import operator
 import re
 import time
+import types
+import typing
 import warnings
 from multiprocessing.shared_memory import SharedMemory
-from numbers import Real
 from pathlib import Path
 from typing import (
     Any,
@@ -18,6 +19,7 @@ from typing import (
     Collection,
     ContextManager,
     Iterable,
+    Iterator,
     NamedTuple,
     Optional,
     TypeVar,
@@ -29,12 +31,13 @@ from .messaging import Message, MessageError, MessageType, ParameterMap
 from .sync import Mutex
 
 __all__ = [
+    'BufferManager',
     'DeviceBufferError',
     'Parameter',
     'DeviceUID',
     'Buffer',
     'DeviceBuffer',
-    'BufferManager',
+    'NullDevice',
 ]
 
 
@@ -47,9 +50,9 @@ class Parameter(NamedTuple):
 
     name: str
     ctype: type
-    index: int
-    lower: Real = float('-inf')
-    upper: Real = float('inf')
+    id: int
+    lower: float = float('-inf')
+    upper: float = float('inf')
     readable: bool = True
     writeable: bool = False
     subscribed: bool = True
@@ -81,9 +84,9 @@ class Parameter(NamedTuple):
         ctype = getattr(ctypes, f'c_{type_specifier}')
         for dim in dimensions[::-1]:
             ctype *= dim
-        return ctype
+        return typing.cast(type, ctype)
 
-    def clamp(self, value: Real) -> Real:
+    def clamp(self, value: float) -> float:
         """Ensure a parameter value is between the parameter's lower and upper limits."""
         if value < self.lower:
             warnings.warn(f'{self.name} value exceeded lowerbound ({value} < {self.lower})')
@@ -146,7 +149,7 @@ class DeviceUID(BaseStructure):
 
     def __int__(self) -> int:
         """Serialize this UID as a 96-bit integer."""
-        uid = self.device_id
+        uid = int(self.device_id)
         uid = (uid << 8 * type(self).year.size) | self.year
         uid = (uid << 8 * type(self).random.size) | self.random
         return uid
@@ -193,13 +196,20 @@ class ParameterBlock(BaseStructure):
         return type(name, (cls,), {'_fields_': fields, 'params': params})
 
 
-def with_transaction(wrapped):
+RT = TypeVar('RT')
+
+
+def with_transaction(wrapped: Callable[..., RT]) -> Callable[..., RT]:
     @functools.wraps(wrapped)
-    def wrapper(self, /, *args, **kwargs):
+    def wrapper(self: 'Buffer', /, *args: Any, **kwargs: Any) -> RT:
         with self.transaction():
             return wrapped(self, *args, **kwargs)
 
     return wrapper
+
+
+BufferType = TypeVar('BufferType', bound='Buffer')
+DeviceBufferType = TypeVar('DeviceBufferType', bound='DeviceBuffer')
 
 
 class Buffer(BaseStructure):
@@ -210,20 +220,25 @@ class Buffer(BaseStructure):
     peripheral.
     """
 
-    mutex = contextlib.nullcontext()
+    params: dict[str, Parameter]
+    mutex: ContextManager[None] = contextlib.nullcontext()
 
     @classmethod
-    def attach(cls, buf: Optional[WriteableBuffer] = None, /):
+    def attach(cls: type[BufferType], buf: Optional[WriteableBuffer] = None, /) -> BufferType:
         if buf is None:
-            buf = bytearray(ctypes.sizeof(cls))
+            return cls.attach(bytearray(ctypes.sizeof(cls)))
         structure = cls.from_buffer(buf)
         structure.buf = buf
         return structure
 
     @classmethod
     def make_type(
-        cls, name: str, params: list[Parameter], *extra_fields, **attrs
-    ) -> type['Buffer']:
+        cls: type[BufferType],
+        name: str,
+        params: list[Parameter],
+        *extra_fields: tuple[str, type],
+        **attrs: Any,
+    ) -> type[BufferType]:
         normalized_name = name.title().replace('-', '')
         update_block_type = ParameterBlock.make_type(
             f'{normalized_name}UpdateBlock',
@@ -246,7 +261,7 @@ class Buffer(BaseStructure):
 
     @classmethod
     @contextlib.contextmanager
-    def open(cls, name: str, /, *, create: bool = True) -> ContextManager['Buffer']:
+    def open(cls, name: str, /, *, create: bool = True) -> Iterator['Buffer']:
         """Create a new buffer backed by shared memory.
 
         Arguments:
@@ -283,9 +298,10 @@ class Buffer(BaseStructure):
         except FileExistsError:
             shm, create_success = SharedMemory(name), False
         buffer = cls.attach(shm.buf[Mutex.SIZE :])
-        buffer.mutex = Mutex(shm.buf[: Mutex.SIZE], shared=True, recursive=True)
+        mutex = Mutex(shm.buf[: Mutex.SIZE], shared=True, recursive=True)
         if create_success:
-            buffer.mutex.initialize()
+            mutex.initialize()
+        buffer.mutex = mutex
         if create:
             buffer.valid = True
         try:
@@ -300,7 +316,7 @@ class Buffer(BaseStructure):
             shm.close()
 
     @classmethod
-    def unlink(cls, name: str):
+    def unlink(cls, name: str) -> None:
         """Destroy a shared memory object.
 
         The exact behavior depends on the platform. See :meth:`SharedMemory.unlink` for details.
@@ -311,7 +327,7 @@ class Buffer(BaseStructure):
             shm.close()
 
     @contextlib.contextmanager
-    def transaction(self, /) -> ContextManager:
+    def transaction(self, /) -> Iterator[None]:
         """Acquire the buffer's mutex and check its valid bit.
 
         All methods already use this reentrant context manager to guarantee consistency, but this
@@ -324,21 +340,21 @@ class Buffer(BaseStructure):
             yield
 
     @with_transaction
-    def get(self, param: str, /):
+    def get(self, param: str, /) -> Any:
         try:
             return getattr(self.update_block, param)
         except AttributeError as exc:
             raise DeviceBufferError('parameter is not readable', param=param) from exc
 
     @with_transaction
-    def set(self, param: str, value: Any, /):
+    def set(self, param: str, value: Any, /) -> None:
         self._set(self.update_block, param, value)
 
     @with_transaction
-    def write(self, param: str, value: Any, /):
+    def write(self, param: str, value: Any, /) -> None:
         self._set(self.write_block, param, value)
 
-    def _set(self, block: ParameterBlock, param_name: str, value: Any, /):
+    def _set(self, block: ParameterBlock, param_name: str, value: Any, /) -> None:
         if not hasattr(block, param_name):
             raise DeviceBufferError('parameter is not writeable', param=param_name)
         param = self.params[param_name]
@@ -353,32 +369,42 @@ class Buffer(BaseStructure):
             return self.valid_flag
 
     @valid.setter
-    def valid(self, flag: bool, /):
+    def valid(self, flag: bool, /) -> None:
         with self.mutex:
             self.valid_flag = flag
 
 
 class DeviceBuffer(Buffer):
-    sub_interval: Real = 0.04
-    write_interval: Real = 0.04
-    heartbeat_interval: Real = 1
+    sub_interval: float = 0.04
+    write_interval: float = 0.04
+    heartbeat_interval: float = 1
+
+    @staticmethod
+    def _make_param_map(block: ParameterBlock, /) -> ParameterMap:
+        param_map = ParameterMap()
+        base, block_type = ctypes.addressof(block), type(block)
+        for param in block.params:
+            field = getattr(block_type, param.name, None)
+            if field is not None:
+                param_map.set_param(param.id, base + field.offset, field.size)
+        return param_map
 
     @functools.cached_property
     def _update_param_map(self, /) -> ParameterMap:
-        param_map = ParameterMap()
-        param_map.update(self.update_block)
-        return param_map
+        return self._make_param_map(self.update_block)
 
     @functools.cached_property
     def _write_param_map(self, /) -> ParameterMap:
-        param_map = ParameterMap()
-        param_map.update(self.write_block)
-        return param_map
+        return self._make_param_map(self.write_block)
 
     @classmethod
     def make_type(
-        cls, name: str, params: list[Parameter], *extra_fields, **attrs
-    ) -> type['DeviceBuffer']:
+        cls: type[DeviceBufferType],
+        name: str,
+        params: list[Parameter],
+        *extra_fields: tuple[str, type],
+        **attrs: Any,
+    ) -> type[DeviceBufferType]:
         if len(params) > Message.MAX_PARAMS:
             raise ValueError(f'Smart Devices may only have up to {Message.MAX_PARAMS} params')
         return super().make_type(
@@ -392,11 +418,11 @@ class DeviceBuffer(Buffer):
 
     @classmethod
     def _from_bitmap(cls, bitmap: int, /) -> frozenset[Parameter]:
-        return frozenset(param for param in cls.params.values() if (bitmap >> param.index) & 0b1)
+        return frozenset(param for param in cls.params.values() if (bitmap >> param.id) & 0b1)
 
     @classmethod
     def _to_bitmap(cls, params: Collection[str], /) -> int:
-        masks = (1 << cls.params[param].index for param in params)
+        masks = (1 << cls.params[param].id for param in params)
         return functools.reduce(operator.or_, masks, Message.NO_PARAMS)
 
     @functools.cached_property
@@ -404,19 +430,19 @@ class DeviceBuffer(Buffer):
         return self._to_bitmap([param.name for param in self.params.values() if param.readable])
 
     @with_transaction
-    def set(self, param: str, value: Any, /):
+    def set(self, param: str, value: Any, /) -> None:
         super().set(param, value)
-        self.control.update |= 1 << self.params[param].index
+        self.control.update |= 1 << self.params[param].id
         self.control.last_update = time.time()
 
     @with_transaction
-    def write(self, param: str, value: Any, /):
+    def write(self, param: str, value: Any, /) -> None:
         super().write(param, value)
-        self.control.write |= 1 << self.params[param].index
+        self.control.write |= 1 << self.params[param].id
         self.control.last_write = time.time()
 
     @with_transaction
-    def read(self, /, params: Optional[Collection[str]] = None):
+    def read(self, /, params: Optional[Collection[str]] = None) -> None:
         if params is None:
             params = {param.name for param in self.params.values() if param.readable}
         self.control.read |= self._to_bitmap(params) & self._read_mask
@@ -431,7 +457,7 @@ class DeviceBuffer(Buffer):
             yield make_msg(bitmap, param_map)
         except MessageError:
             for param in self._from_bitmap(bitmap):
-                yield make_msg(1 << param.index, param_map)
+                yield make_msg(1 << param.id, param_map)
 
     @with_transaction
     def emit_dev_rw(self, /) -> Iterable[Message]:
@@ -472,7 +498,7 @@ class DeviceBuffer(Buffer):
         self,
         /,
         params: Optional[Collection[str]] = None,
-        interval: Optional[Real] = None,
+        interval: Optional[float] = None,
     ) -> Message:
         if params is None:
             params = {param.name for param in self.params.values() if param.subscribed}
@@ -509,7 +535,7 @@ class DeviceBuffer(Buffer):
         return {param.name: self.get(param.name) for param in params}
 
     @with_transaction
-    def update(self, message: Message, /):
+    def update(self, message: Message, /) -> None:
         if message.type is MessageType.DEV_DATA:
             self.control.update |= message.read_dev_data(self._update_param_map)
             self.control.last_update = time.time()
@@ -528,41 +554,43 @@ class DeviceBuffer(Buffer):
             self.control.uid = DeviceUID(*uid)
 
     @property
-    @with_transaction
     def uid(self) -> DeviceUID:
-        buf = self.get_field_view(self.buf, 'control')
-        buf = self.control.get_field_view(buf, 'uid')
-        return DeviceUID.from_buffer_copy(buf)
+        with self.transaction():
+            buf = self.get_field_view(self.buf, 'control')
+            buf = self.control.get_field_view(buf, 'uid')
+            return DeviceUID.from_buffer_copy(buf)
 
     @uid.setter
-    @with_transaction
-    def uid(self, uid: DeviceUID, /):
-        self.control.uid.device_id = uid.device_id
-        self.control.uid.year = uid.year
-        self.control.uid.random = uid.random
+    def uid(self, uid: DeviceUID, /) -> None:
+        with self.transaction():
+            self.control.uid.device_id = uid.device_id
+            self.control.uid.year = uid.year
+            self.control.uid.random = uid.random
 
     @property
-    @with_transaction
     def subscription(self) -> frozenset[str]:
-        return frozenset(param.name for param in self._from_bitmap(self.control.subscription))
+        with self.transaction():
+            return frozenset(param.name for param in self._from_bitmap(self.control.subscription))
 
     @property
-    @with_transaction
-    def last_write(self) -> Real:
-        return self.control.last_write
+    def last_write(self) -> float:
+        with self.transaction():
+            return float(self.control.last_write)
 
     @property
-    @with_transaction
-    def last_update(self) -> Real:
-        return self.control.last_update
+    def last_update(self) -> float:
+        with self.transaction():
+            return float(self.control.last_update)
 
     @property
-    @with_transaction
-    def interval(self) -> Real:
-        return self.control.interval / 1000
+    def interval(self) -> float:
+        with self.transaction():
+            return float(self.control.interval) / 1000
 
 
-BufferKey = Union[tuple[str, int], int, DeviceUID]
+NullDevice = DeviceBuffer.make_type('NullDevice', [])
+DeviceBufferKey = Union[int, DeviceUID]
+BufferKey = Union[tuple[str, int], DeviceBufferKey]
 
 
 @dataclasses.dataclass
@@ -575,7 +603,7 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
     shared: bool = True
     device_ids: dict[int, str] = dataclasses.field(default_factory=dict, init=False, repr=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         for type_name, buf_type in self.catalog.items():
             device_id = getattr(buf_type, 'device_id', None)
             if device_id is not None:
@@ -583,17 +611,23 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
                     raise DeviceBufferError('duplicate Smart Device ID', device_id=device_id)
                 self.device_ids[device_id] = type_name
 
-    def __enter__(self, /):
+    def __enter__(self, /) -> 'BufferManager':
         self.stack.__enter__()
         return self
 
-    def __exit__(self, exc_type, exc, traceback, /):
+    def __exit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc: Optional[BaseException],
+        traceback: Optional[types.TracebackType],
+        /,
+    ) -> Optional[bool]:
         return self.stack.__exit__(exc_type, exc, traceback)
 
     def __getitem__(self, key: BufferKey, /) -> Buffer:
         return self.get_or_create(key, create=False)
 
-    def __iter__(self, /) -> Iterable[BufferKey]:
+    def __iter__(self, /) -> Iterator[BufferKey]:
         return iter(self.buffers)
 
     def __len__(self, /) -> int:
@@ -601,13 +635,21 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
 
     def _normalize_key(self, key: BufferKey, /) -> tuple[str, int]:
         if isinstance(key, int):
-            key = DeviceUID.from_int(key)
+            return self._normalize_key(DeviceUID.from_int(key))
         if isinstance(key, DeviceUID):
             try:
-                key = self.device_ids[key.device_id], int(key)
+                return self.device_ids[key.device_id], int(key)
             except KeyError as exc:
                 raise DeviceBufferError('type not found', device_id=key.device_id) from exc
         return key
+
+    @typing.overload
+    def get_or_create(self, key: DeviceBufferKey, /, *, create: bool = True) -> DeviceBuffer:
+        ...
+
+    @typing.overload
+    def get_or_create(self, key: BufferKey, /, *, create: bool = True) -> Buffer:
+        ...
 
     def get_or_create(self, key: BufferKey, /, *, create: bool = True) -> Buffer:
         type_name, uid = key = self._normalize_key(key)
@@ -615,8 +657,9 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
         if not buffer:
             buffer_type = self.catalog[type_name]
             if self.shared:
-                buffer = buffer_type.open(f'rt-{type_name}-{uid}', create=create)
-                buffer = self.stack.enter_context(buffer)
+                buffer = self.stack.enter_context(
+                    buffer_type.open(f'rt-{type_name}-{uid}', create=create),
+                )
             else:
                 if create:
                     buffer = buffer_type.attach()
@@ -628,14 +671,14 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
         return buffer
 
     @staticmethod
-    def unlink_all(shm_path: Path = Path('/dev/shm')):
+    def unlink_all(shm_path: Path = Path('/dev/shm')) -> None:
         for path in shm_path.glob('rt-*'):
             Buffer.unlink(path.name)
 
     @staticmethod
     def _make_params(attrs: dict[str, Any]) -> Iterable[Parameter]:
         for index, param in enumerate(attrs.pop('params', [])):
-            param.setdefault('index', index)
+            param.setdefault('id', index)
             param['ctype'] = Parameter.parse_ctype(param.pop('type'))
             yield Parameter(**param)
 

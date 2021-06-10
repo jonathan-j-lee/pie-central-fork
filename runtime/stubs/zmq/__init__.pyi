@@ -1,0 +1,9 @@
+PUB: int
+SUB: int
+ROUTER: int
+DEALER: int
+FORWARDER: int
+SUBSCRIBE: int
+IDENTITY: int
+PROBE_ROUTER: int
+ROUTER_HANDOVER: int

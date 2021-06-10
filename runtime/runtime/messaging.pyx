@@ -1,6 +1,5 @@
 # distutils: language=c++
 
-import ctypes
 import functools
 
 cimport cython
@@ -48,13 +47,10 @@ cdef class ParameterMap:
         if index >= MAX_PARAMETERS:
             raise MessageError('parameter index out of bounds', index=index)
 
-    def update(self, block: 'ParameterBlock'):
-        cdef uint64_t base = ctypes.addressof(block)
-        for param in block.params:
-            field = getattr(type(block), param.name)
-            self.check_index(param.index)
-            self.params[param.index].base = <void *> (base + <uint64_t> field.offset)
-            self.params[param.index].size = field.size
+    def set_param(self, size_t index, uint64_t base, size_t size):
+        self.check_index(index)
+        self.params[index].base = <void *> base
+        self.params[index].size = size
 
     def clear_param(self, size_t index):
         self.check_index(index)
@@ -81,20 +77,20 @@ cdef class Message:
     cdef _Message buf
 
     @property
-    def type(self) -> MessageType:
+    def type(self):
         return MessageType(self.buf.get_type())
 
-    def __str__(self) -> str:
+    def __str__(self):
         return f'{self.__class__.__name__}({self.type.name}, {len(self)})'
 
-    def __len__(self) -> int:
+    def __len__(self):
         return self.buf.get_payload_length()
 
     cpdef bool verify_checksum(self):
         return self.buf.verify_checksum()
 
     @staticmethod
-    def decode(const byte[::1] buf not None) -> Message:
+    def decode(const byte[::1] buf not None):
         msg = Message()
         cdef ErrorCode status = msg.buf.decode(&buf[0], buf.shape[0])
         if status is not ErrorCode.OK:
@@ -114,57 +110,57 @@ cdef class Message:
             )
         return out_len
 
-    def encode(self) -> bytearray:
+    def encode(self):
         output = bytearray(ENCODING_MAX_SIZE)
         return output[:self.encode_into_buf(output)]
 
-    def make_ping(Message msg not None) -> bool:
+    def make_ping(Message msg not None):
         return msg.buf.make_ping()
     make_ping = staticmethod(message_factory(make_ping, MessageType.PING))
 
-    def make_sub_req(Message msg not None, param_map_t params, interval_t interval) -> bool:
+    def make_sub_req(Message msg not None, param_map_t params, interval_t interval):
         return msg.buf.make_sub_req(params, interval)
     make_sub_req = staticmethod(message_factory(make_sub_req, MessageType.SUB_REQ))
 
     def make_sub_res(Message msg not None, param_map_t params, interval_t interval,
-                     device_id_t device_id, uint8_t year, uint64_t random) -> bool:
+                     device_id_t device_id, uint8_t year, uint64_t random):
         cdef _DeviceUID _uid
         _uid.device_id, _uid.year, _uid.random = device_id, year, random
         return msg.buf.make_sub_res(params, interval, &_uid)
     make_sub_res = staticmethod(message_factory(make_sub_res, MessageType.SUB_RES))
 
-    def make_dev_read(Message msg not None, param_map_t params) -> bool:
+    def make_dev_read(Message msg not None, param_map_t params):
         return msg.buf.make_dev_read(params)
     make_dev_read = staticmethod(message_factory(make_dev_read, MessageType.DEV_READ))
 
     def make_dev_write(Message msg not None, param_map_t params,
-                       ParameterMap param_map not None) -> bool:
+                       ParameterMap param_map not None):
         return msg.buf.make_dev_write(params, param_map.params)
     make_dev_write = staticmethod(message_factory(make_dev_write, MessageType.DEV_WRITE))
 
     def make_dev_data(Message msg not None, param_map_t params,
-                      ParameterMap param_map not None) -> bool:
+                      ParameterMap param_map not None):
         return msg.buf.make_dev_data(params, param_map.params)
     make_dev_data = staticmethod(message_factory(make_dev_data, MessageType.DEV_WRITE))
 
-    def make_dev_disable(Message msg not None) -> bool:
+    def make_dev_disable(Message msg not None):
         return msg.buf.make_dev_disable()
     make_dev_disable = staticmethod(message_factory(make_dev_disable, MessageType.DEV_DISABLE))
 
-    def make_hb_req(Message msg not None, heartbeat_id_t hb_id) -> bool:
+    def make_hb_req(Message msg not None, heartbeat_id_t hb_id):
         return msg.buf.make_hb_req(hb_id)
     make_hb_req = staticmethod(message_factory(make_hb_req, MessageType.HB_REQ))
 
-    def make_hb_res(Message msg not None, heartbeat_id_t hb_id) -> bool:
+    def make_hb_res(Message msg not None, heartbeat_id_t hb_id):
         return msg.buf.make_hb_res(hb_id)
     make_hb_res = staticmethod(message_factory(make_hb_res, MessageType.HB_RES))
 
-    def make_error(Message msg not None, ErrorCode error) -> bool:
+    def make_error(Message msg not None, ErrorCode error):
         return msg.buf.make_error(error)
     make_error = staticmethod(message_factory(make_error, MessageType.ERROR))
 
     @classmethod
-    def make_unsubscribe(cls) -> Message:
+    def make_unsubscribe(cls):
         return cls.make_sub_req(NO_PARAMETERS, NO_SUBSCRIPTION)
 
     def check_read(self, bool status, MessageType msg_type):
@@ -174,13 +170,13 @@ cdef class Message:
                 type=MessageType(msg_type).name,
             )
 
-    def read_sub_req(self) -> tuple[int, int]:
+    def read_sub_req(self):
         cdef param_map_t params = NO_PARAMETERS
         cdef interval_t interval = NO_SUBSCRIPTION
         self.check_read(self.buf.read_sub_req(&params, &interval), MessageType.SUB_REQ)
         return params, interval
 
-    def read_sub_res(self) -> tuple[int, int, tuple[int, int, int]]:
+    def read_sub_res(self):
         cdef param_map_t params = NO_PARAMETERS
         cdef interval_t interval = NO_SUBSCRIPTION
         cdef _DeviceUID _uid
@@ -190,32 +186,32 @@ cdef class Message:
         self.check_read(self.buf.read_sub_res(&params, &interval, &_uid), MessageType.SUB_RES)
         return params, interval, (_uid.device_id, _uid.year, _uid.random)
 
-    def read_dev_read(self) -> int:
+    def read_dev_read(self):
         cdef param_map_t params = NO_PARAMETERS
         self.check_read(self.buf.read_dev_read(&params), MessageType.DEV_READ)
         return params
 
-    def read_dev_write(self, ParameterMap param_map not None) -> int:
+    def read_dev_write(self, ParameterMap param_map not None):
         cdef param_map_t params = NO_PARAMETERS
         self.check_read(self.buf.read_dev_write(&params, param_map.params), MessageType.DEV_WRITE)
         return params
 
-    def read_dev_data(self, ParameterMap param_map not None) -> int:
+    def read_dev_data(self, ParameterMap param_map not None):
         cdef param_map_t params = NO_PARAMETERS
         self.check_read(self.buf.read_dev_data(&params, param_map.params), MessageType.DEV_DATA)
         return params
 
-    def read_hb_req(self) -> int:
+    def read_hb_req(self):
         cdef heartbeat_id_t hb_id = 0
         self.check_read(self.buf.read_hb_req(&hb_id), MessageType.HB_REQ)
         return hb_id
 
-    def read_hb_res(self) -> int:
+    def read_hb_res(self):
         cdef heartbeat_id_t hb_id = 0
         self.check_read(self.buf.read_hb_res(&hb_id), MessageType.HB_RES)
         return hb_id
 
-    def read_error(self) -> ErrorCode:
+    def read_error(self):
         cdef ErrorCode error = ErrorCode.OK
         self.check_read(self.buf.read_error(&error), MessageType.ERROR)
         return ErrorCode(error)

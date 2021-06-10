@@ -1,12 +1,14 @@
 """Common Runtime exceptions."""
 
+from typing import Any
+
 __all__ = ['RuntimeBaseException', 'EmergencyStopException']
 
 
 class RuntimeBaseException(Exception):
     """Base exception for Runtime-specific behavior."""
 
-    def __init__(self, message: str, /, **context):
+    def __init__(self, message: str, /, **context: Any) -> None:
         super().__init__(message)
         self.context = context
 
@@ -23,7 +25,7 @@ class EmergencyStopException(SystemExit):
     :attr:`EmergencyStopException.EXIT_CODE`. Instead, re-raise the exception in the parent
     process."""
 
-    EXIT_CODE = 0xFF
+    EXIT_CODE: int = 0xFF
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(self.EXIT_CODE)

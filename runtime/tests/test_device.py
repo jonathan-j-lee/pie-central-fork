@@ -4,6 +4,7 @@ import socket
 import tempfile
 import types
 from pathlib import Path
+from typing import Optional
 from unittest.mock import call
 
 import pytest
@@ -36,7 +37,8 @@ async def event_observer(mocker):
     context = mocker.patch('pyudev.Context').return_value
     monitor = mocker.patch('pyudev.Monitor').return_value
     monitor.started = False
-    observer = EventObserver(context=context, monitor=monitor)
+    observer = EventObserver(context=context)
+    observer.monitor = monitor
     index, new_devices = 0, []
     def poll(_timeout):
         nonlocal index
@@ -90,7 +92,7 @@ def catalog() -> dict[str, type[Buffer]]:
 @pytest.fixture
 async def device_manager(mocker, catalog, stream):
     with BufferManager(catalog) as buffers:
-        manager = SmartDeviceManager(buffers=buffers)
+        manager = SmartDeviceManager(buffers)
         uids = {0x0000_01_00000000_00000000 + i for i in range(3)}
         for uid in uids:
             manager.devices[uid] = device = SmartDeviceClient(*stream)
@@ -330,16 +332,6 @@ async def test_serial_disconnect(stream, device):
     result.set_exception(serial.SerialException('connection broken'))
     async with device.communicate() as tasks:
         await asyncio.gather(*tasks)
-
-
-@pytest.mark.asyncio
-async def test_handle_buf_required(device):
-    device.buffer = None
-    async with device.communicate():
-        with pytest.raises(DeviceError):
-            await device.handle_messages()
-        with pytest.raises(DeviceError):
-            await device.poll_buffer()
 
 
 @pytest.mark.asyncio

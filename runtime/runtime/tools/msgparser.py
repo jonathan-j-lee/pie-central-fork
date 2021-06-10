@@ -1,6 +1,6 @@
 import contextlib
 import functools
-from typing import Any
+from typing import Any, Iterator
 
 import click
 import orjson as json
@@ -10,19 +10,19 @@ from ..messaging import ErrorCode, Message, MessageError, MessageType
 
 
 @contextlib.contextmanager
-def indent(depth: int = 2):
+def indent(depth: int = 2) -> Iterator[None]:
     echo, secho = click.echo, click.secho
     try:
 
         @functools.wraps(echo)
-        def indented_echo(*args, **kwargs):
+        def indented_echo(*args: Any, **kwargs: Any) -> None:
             echo(' ' * depth, nl=False)
-            return echo(*args, **kwargs)
+            echo(*args, **kwargs)
 
         @functools.wraps(secho)
-        def indented_secho(*args, **kwargs):
+        def indented_secho(*args: Any, **kwargs: Any) -> None:
             secho(' ' * depth, nl=False)
-            return secho(*args, **kwargs)
+            secho(*args, **kwargs)
 
         click.echo, click.secho = indented_echo, indented_secho
         yield
@@ -30,7 +30,7 @@ def indent(depth: int = 2):
         click.echo, click.secho = echo, secho
 
 
-def _format(buffer: Buffer, message: dict[str, Any]) -> Message:
+def _format(buffer: Buffer, message: dict[str, Any]) -> Iterator[Message]:
     if type_id := message.get('type_id'):
         msg_type = MessageType(type_id)
     else:
@@ -64,7 +64,7 @@ def _format(buffer: Buffer, message: dict[str, Any]) -> Message:
         yield Message.make_error(ErrorCode[message['error']])
 
 
-def format_message(options: dict[str, Any]):
+def format_message(options: dict[str, Any]) -> None:
     for record in options['message']:
         buffer = options['dev_type'].attach()
         buffer.valid = True
@@ -109,7 +109,7 @@ def _parse(buffer: Buffer, message: Message) -> dict[str, Any]:
     return record
 
 
-def _display_message_pretty(record: dict[str, Any]):
+def _display_message_pretty(record: dict[str, Any]) -> None:
     click.secho(
         f'-> Message type: {record.pop("type")} ({hex(record.pop("type_id"))})',
         fg='bright_green',
@@ -141,7 +141,7 @@ def _display_message_pretty(record: dict[str, Any]):
                     click.echo(', '.join(params))
 
 
-def parse_messages(options: dict[str, Any]):
+def parse_messages(options: dict[str, Any]) -> None:
     buffer = options['dev_type'].attach()
     buffer.valid = True
     for encoding in options['message']:

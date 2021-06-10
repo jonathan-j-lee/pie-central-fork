@@ -34,4 +34,7 @@ setup(
         nthreads=4,
         compiler_directives=directives,
     ),
+    package_data={
+        'runtime': ['py.typed'],
+    },
 )

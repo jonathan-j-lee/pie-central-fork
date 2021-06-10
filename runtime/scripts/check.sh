@@ -2,4 +2,5 @@
 
 pipenv run format
 pipenv run lint
-pipenv run fulltest
+pipenv run typecheck
+pipenv run test

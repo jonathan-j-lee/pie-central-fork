@@ -14,7 +14,7 @@ import click
 import orjson as json
 import structlog
 
-from .. import process, rpc
+from .. import log, process, rpc
 from ..buffer import BufferManager, DeviceBufferError, Parameter
 
 __all__ = ['Broker', 'main']
@@ -35,13 +35,9 @@ class Broker(rpc.Handler):
     ctx: click.Context
     update_publisher: rpc.Client
     client: rpc.Client
-    buffers: BufferManager = dataclasses.field(default_factory=BufferManager)
-    uids: set[int] = dataclasses.field(default_factory=set)
-    logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(
-        default_factory=lambda: structlog.get_logger(
-            wrapper_class=structlog.stdlib.AsyncBoundLogger,
-        ),
-    )
+    buffers: BufferManager
+    uids: set[str] = dataclasses.field(default_factory=set)
+    logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(default_factory=log.get_logger)
 
     PYLINT_EXEC: ClassVar[str] = 'pylint'
     MESSAGE_TEMPLATE: ClassVar[str] = (
@@ -54,13 +50,17 @@ class Broker(rpc.Handler):
     ]
     PATCHED_SYMBOLS: ClassVar[frozenset[str]] = frozenset({'Robot', 'Gamepad'})
 
+    @functools.cached_property
+    def _env_prefix(self) -> str:
+        return (self.ctx.auto_envvar_prefix or 'RT').upper()
+
     def get_envvar(self, name: str) -> str:
         """Convert an option name into its corresponding environment variable."""
-        return f'{self.ctx.auto_envvar_prefix}_{name}'.upper()
+        return f'{self._env_prefix}_{name}'.upper()
 
     def get_name(self, envvar: str) -> str:
         """Convert an environment variable into its corresponding option name."""
-        return envvar.lower().removeprefix(f'{self.ctx.auto_envvar_prefix.lower()}_')
+        return envvar.lower().removeprefix(f'{self._env_prefix.lower()}_')
 
     @rpc.route
     async def get_option(self, option: Optional[str] = None) -> Union[Any, dict[str, Any]]:
@@ -102,7 +102,7 @@ class Broker(rpc.Handler):
                     yield str(element)
 
     @rpc.route
-    async def set_option(self, options: dict[str, Any]):
+    async def set_option(self, options: dict[str, Any]) -> None:
         """Set a command-line option to be used when Runtime is next restarted.
 
         Note:
@@ -118,11 +118,11 @@ class Broker(rpc.Handler):
         """Exclude spurious lint messages."""
         if message['symbol'] == 'undefined-variable':
             match = re.match("Undefined variable '(?P<symbol>.+)'", message['msg'])
-            if match.group('symbol') in self.PATCHED_SYMBOLS:
+            if match and match.group('symbol') in self.PATCHED_SYMBOLS:
                 return False
         return True
 
-    def parse_lint_output(self, stdout: str, _stderr: str) -> Iterable[dict]:
+    def parse_lint_output(self, stdout: str, _stderr: str) -> Iterable[dict[str, Union[str, int]]]:
         """Parse raw ``pylint`` output into JSON records.
 
         Arguments:
@@ -144,7 +144,7 @@ class Broker(rpc.Handler):
         .. _Pylint Output:
             https://docs.pylint.org/en/1.6.0/output.html
         """
-        issue_counter = collections.defaultdict(lambda: 0)
+        issue_counter: dict[str, int] = collections.defaultdict(lambda: 0)
         for line in stdout.splitlines():
             with contextlib.suppress(json.JSONDecodeError, KeyError):
                 message = json.loads(line)
@@ -180,13 +180,13 @@ class Broker(rpc.Handler):
     def button_params(self) -> list[Parameter]:
         """Gamepad button parameters."""
         gamepad_type = self.buffers.catalog['gamepad']
-        params = gamepad_type.params.values()
+        params = list(gamepad_type.params.values())
         params = [param for param in params if param.platform_type == ctypes.c_bool]
-        params.sort(key=lambda param: param.index)
+        params.sort(key=lambda param: param.id)
         return params
 
     @rpc.route
-    def update_gamepads(self, update: dict[str, dict[str, Union[int, float]]]):
+    def update_gamepads(self, update: dict[str, dict[str, Union[int, float]]]) -> None:
         """Update gamepad parameters.
 
         Arguments:
@@ -198,10 +198,9 @@ class Broker(rpc.Handler):
                 for joystick in ('left', 'right'):
                     for axis in ('x', 'y'):
                         with contextlib.suppress(KeyError):
-                            param = f'joystick_{joystick}_{axis}'
                             value = params[joystick[0] + axis]
-                            gamepad.set(param, value)
-                bitmap = params.get('btn', 0)
+                            gamepad.set(f'joystick_{joystick}_{axis}', value)
+                bitmap = int(params.get('btn', 0))
                 for i, param in enumerate(self.button_params):
                     gamepad.set(param.name, bool((bitmap >> i) & 0b1))
 
@@ -213,12 +212,12 @@ class Broker(rpc.Handler):
                 update[uid] = self.buffers[int(uid)].get_update()
         return update
 
-    async def send_update(self):
+    async def send_update(self) -> None:
         """Broadcast a Smart Device update."""
         update = await asyncio.to_thread(self.make_update)
         await self.update_publisher.call.update(update, notification=True)
 
-    async def update_uids(self):
+    async def update_uids(self) -> None:
         """Update the set of valid Smart Device UIDs."""
         try:
             new_uids = await self.client.call.list_uids(address=b'device-service')
@@ -228,7 +227,7 @@ class Broker(rpc.Handler):
             await self.logger.error('Broker could not refresh UIDs', exc_info=exc)
 
 
-async def main(ctx, **options):
+async def main(ctx: click.Context, **options: Any) -> None:
     """Async entry point.
 
     Arguments:

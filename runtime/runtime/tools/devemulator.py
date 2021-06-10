@@ -2,9 +2,10 @@ import asyncio
 import contextlib
 import ctypes
 import dataclasses
-from typing import Any, AsyncContextManager, AsyncIterable
+from typing import Any, AsyncIterable, AsyncIterator, NoReturn
 from urllib.parse import urlsplit
 
+import click
 import structlog
 
 from .. import process
@@ -33,14 +34,16 @@ _numeric_types = {
 
 @dataclasses.dataclass
 class SmartDeviceService(SmartDevice):
-    sub_task: asyncio.Future = dataclasses.field(default_factory=asyncio.Future)
+    sub_task: asyncio.Future[NoReturn] = dataclasses.field(
+        default_factory=asyncio.Future[NoReturn],
+    )
 
-    async def _send_sub_update(self):
+    async def _send_sub_update(self, /) -> None:
         messages = await asyncio.to_thread(lambda: list(self.buffer.emit_subscription()))
         for message in messages:
             await self.write_queue.put(message)
 
-    def disable(self):
+    def disable(self, /) -> None:
         with self.buffer.transaction():
             for param in self.buffer.params.values():
                 if param.writeable:
@@ -67,7 +70,7 @@ class SmartDeviceService(SmartDevice):
             async for response in super()._emit_responses(message):
                 yield response
 
-    def _update(self):
+    def _update(self) -> tuple[frozenset[str], dict[str, Any], list[Message]]:
         with self.buffer.transaction():
             read_params, write_params = self.buffer.get_read(), self.buffer.get_write()
             for param in read_params:
@@ -78,15 +81,14 @@ class SmartDeviceService(SmartDevice):
             return read_params, write_params, list(self.buffer.emit_dev_data())
 
     @contextlib.asynccontextmanager
-    async def communicate(self, /) -> AsyncContextManager[set[asyncio.Task]]:
+    async def communicate(self, /) -> AsyncIterator[set[asyncio.Task[NoReturn]]]:
         async with super().communicate() as tasks:
             try:
                 yield tasks
             finally:
                 self.sub_task.cancel()
 
-    async def poll_buffer(self):
-        self._check_buffer()
+    async def poll_buffer(self, /) -> None:
         _, _, messages = await asyncio.to_thread(self._update)
         for message in messages:
             await self.write_queue.put(message)
@@ -97,7 +99,7 @@ async def start_virtual_device(
     buffers: BufferManager,
     uid: int,
     options: dict[str, Any],
-) -> AsyncContextManager[set[asyncio.Task]]:
+) -> AsyncIterator[set[asyncio.Task[NoReturn]]]:
     vsd_addr_parts = urlsplit(options['dev_vsd_addr'])
     reader, writer = await asyncio.open_connection(vsd_addr_parts.hostname, vsd_addr_parts.port)
     buffer = buffers.get_or_create(uid)
@@ -110,7 +112,7 @@ async def start_virtual_device(
         yield tasks
 
 
-async def main(ctx):
+async def main(ctx: click.Context) -> None:
     async with process.Application('dev-emulator', ctx.obj.options) as app:
         buffers = app.make_buffer_manager(shared=False)
         logger = structlog.get_logger()

@@ -6,6 +6,7 @@ import threading
 import types
 
 from runtime import api, process
+from runtime.exception import EmergencyStopException
 from runtime.service.executor import (
     handle_timeout,
     run_once,
@@ -148,6 +149,15 @@ async def test_sync_dispatch(dispatcher):
     auto_counts, teleop_counts, idle_counts = counts
     assert auto_counts == {'autonomous_setup': 1, 'autonomous_main': 5}
     assert teleop_counts, idle_counts == {'teleop_setup': 1, 'teleop_main': 5}
+
+
+@pytest.mark.asyncio
+async def test_estop(dispatcher):
+    service_thread = threading.Thread(target=dispatcher.estop, daemon=True)
+    service_thread.start()
+    with pytest.raises(EmergencyStopException):
+        dispatcher.sync_exec.execute_forever()
+    service_thread.join()
 
 
 @pytest.mark.asyncio

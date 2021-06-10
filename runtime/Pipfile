@@ -23,6 +23,7 @@ PyYAML = '~=5.4'
 [dev-packages]
 black = '~=21.5b'
 Cython = '~=3.0a'
+mypy = '~=0.902'
 pytest = '~=6.2'
 pytest-asyncio = '~=0.15'
 pytest-cov = '~=2.11'
@@ -32,6 +33,8 @@ sphinx = '~=3.5'
 sphinx-autobuild = '~=2020.9'
 sphinx-rtd-theme = '~=0.5'
 sphinxcontrib-tikz = '~=0.4'
+types-PyYAML = '~=0.1'
+types-orjson = '~=0.1'
 
 [scripts]
 build = 'python setup.py build_ext --inplace'
@@ -55,12 +58,13 @@ emulate = """python -m runtime
   emulate-dev
 """
 servedocs = 'make --directory=docs livehtml'
+typecheck = 'mypy --strict --implicit-reexport runtime'
 lint = 'pylint runtime'
 fasttest = 'pytest -m "not slow"'
 test = 'pytest -v'
 format = """bash -c '
-black --color --target-version py39 --line-length 100 --skip-string-normalization runtime &&
-isort --profile black runtime
+black --color --target-version py39 --line-length 100 --skip-string-normalization runtime stubs &&
+isort --profile black runtime stubs
 '"""
 
 [pipenv]

@@ -1,11 +1,13 @@
 """Runtime Logging."""
 
 import asyncio
+import collections.abc
 import contextlib
 import dataclasses
 import functools
 import logging
-from typing import NoReturn, Optional
+import typing
+from typing import Any, Callable, Literal, NoReturn, Optional, Union
 
 import orjson as json
 import structlog
@@ -14,41 +16,54 @@ import structlog.stdlib
 
 from . import rpc
 from .exception import RuntimeBaseException
+from .rpc import get_logger
 
-__all__ = ['get_null_logger', 'LogPublisher', 'configure']
+__all__ = ['get_logger', 'get_null_logger', 'LogPublisher', 'configure']
 
 
-def drop(_logger: structlog.BoundLogger, _method: str, _event: dict):
+Event = collections.abc.MutableMapping[str, Any]
+ProcessorReturnType = Union[Event, str, bytes]
+Processor = Callable[[Any, str, Event], ProcessorReturnType]
+
+
+def drop(_logger: structlog.stdlib.AsyncBoundLogger, _method: str, _event: Event, /) -> NoReturn:
     """A simple :mod:`structlog` processor to drop all events."""
     raise structlog.DropEvent
 
 
 def get_null_logger() -> structlog.stdlib.AsyncBoundLogger:
     """Make a logger that drops all events."""
-    return structlog.get_logger(
+    logger = structlog.get_logger(
         processors=[drop],
         wrapper_class=structlog.stdlib.AsyncBoundLogger,
     )
+    return typing.cast(structlog.stdlib.AsyncBoundLogger, logger)
 
 
 @dataclasses.dataclass
 class LogPublisher(rpc.Client):
     """An RPC client for publishing log records over the network."""
 
-    send_queue: asyncio.Queue[tuple[str, dict]] = dataclasses.field(
+    send_queue: asyncio.Queue[tuple[str, Event]] = dataclasses.field(
         default_factory=lambda: asyncio.Queue(512)
     )
     loop: asyncio.AbstractEventLoop = dataclasses.field(default_factory=asyncio.get_running_loop)
 
-    def __post_init__(self, *args, **kwargs):
-        super().__post_init__(*args, **kwargs)
+    def __post_init__(self) -> None:
+        super().__post_init__()
         self.logger = get_null_logger()
 
-    def __call__(self, logger: structlog.BoundLogger, method: str, event: dict):
+    def __call__(
+        self,
+        logger: structlog.stdlib.AsyncBoundLogger,
+        method: str,
+        event: Event,
+        /,
+    ) -> Event:
         self.loop.call_soon_threadsafe(self.send_queue.put_nowait, (method, dict(event)))
         return event
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> 'LogPublisher':
         result = await super().__aenter__()
         worker = asyncio.create_task(self._send_forever(), name='send')
         self.stack.callback(worker.cancel)
@@ -78,11 +93,16 @@ def get_level_num(level_name: str, default: int = logging.DEBUG) -> int:
     return level if isinstance(level, int) else default
 
 
-def filter_by_level(level: str):
+def filter_by_level(level: str) -> Processor:
     """Build a :mod:`structlog` processor to filter events by log level (severity)."""
     min_level = get_level_num(level)
 
-    def processor(_logger: structlog.BoundLogger, method: str, event: dict):
+    def processor(
+        _logger: structlog.stdlib.AsyncBoundLogger,
+        method: str,
+        event: ProcessorReturnType,
+        /,
+    ) -> ProcessorReturnType:
         if get_level_num(method) < min_level:
             raise structlog.DropEvent
         return event
@@ -90,7 +110,12 @@ def filter_by_level(level: str):
     return processor
 
 
-def add_exception_context(_logger: structlog.BoundLogger, _method: str, event: dict):
+def add_exception_context(
+    _logger: structlog.stdlib.AsyncBoundLogger,
+    _method: str,
+    event: Event,
+    /,
+) -> Event:
     """A processor to add the context of a :class:`RuntimeBaseException` to the event's context.
 
     The event context's entries take priority over those of the exception.
@@ -101,10 +126,15 @@ def add_exception_context(_logger: structlog.BoundLogger, _method: str, event: d
     return event
 
 
-def configure(publisher: Optional[LogPublisher] = None, fmt: str = 'json', level: str = 'INFO'):
+def configure(
+    publisher: Optional[LogPublisher] = None,
+    fmt: Literal['json', 'pretty'] = 'json',
+    level: str = 'INFO',
+) -> None:
     """Configure :mod:`structlog` with the desired log format and filtering."""
     logging.captureWarnings(True)
-    renderers = [publisher] if publisher else []
+    renderers: list[Processor] = [publisher] if publisher else []
+    logger_factory: Callable[..., Union[structlog.PrintLogger, structlog.BytesLogger]]
     if fmt == 'pretty':
         renderers.append(structlog.processors.ExceptionPrettyPrinter())
         renderers.append(structlog.dev.ConsoleRenderer(pad_event=40))

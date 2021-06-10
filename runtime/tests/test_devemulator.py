@@ -42,7 +42,7 @@ def catalog() -> dict[str, type[Buffer]]:
 @pytest.fixture
 async def device_manager(catalog, vsd_addr, catalog_path):
     with BufferManager(catalog, shared=False) as buffers:
-        manager = SmartDeviceManager(buffers=buffers)
+        manager = SmartDeviceManager(buffers)
         open_task = asyncio.create_task(manager.open_virtual_devices(vsd_addr))
         yield manager
         for task in asyncio.all_tasks():
@@ -80,7 +80,7 @@ async def test_ping(device_manager, upstream, downstream):
 
 @pytest.mark.asyncio
 async def test_subscription(device_manager, upstream, downstream):
-    await device_manager.subscribe(0xc_00_00000000_00000000, interval=0.04)
+    await device_manager.subscribe(str(0xc_00_00000000_00000000), interval=0.04)
     await asyncio.sleep(0.02)
     upstream.write('duty_cycle', 0.123)
     await asyncio.sleep(0.1)
@@ -92,23 +92,23 @@ async def test_subscription(device_manager, upstream, downstream):
 
 @pytest.mark.asyncio
 async def test_read(device_manager, upstream, downstream):
-    await device_manager.unsubscribe([0xc_00_00000000_00000000])
+    await device_manager.unsubscribe([str(0xc_00_00000000_00000000)])
     await asyncio.sleep(0.02)
     downstream.update_block.duty_cycle = 0.123
     await asyncio.sleep(0.1)
     assert upstream.get('duty_cycle') != pytest.approx(0.123)
-    await device_manager.read(0xc_00_00000000_00000000, ['duty_cycle'])
+    await device_manager.read(str(0xc_00_00000000_00000000), ['duty_cycle'])
     await asyncio.sleep(0.1)
     assert upstream.get('duty_cycle') == pytest.approx(0.123)
     downstream.update_block.duty_cycle = 0.456
-    await device_manager.read(0xc_00_00000000_00000000)
+    await device_manager.read(str(0xc_00_00000000_00000000))
     await asyncio.sleep(0.1)
     assert upstream.get('duty_cycle') == pytest.approx(0.456)
 
 
 @pytest.mark.asyncio
 async def test_write(device_manager, upstream, downstream):
-    await device_manager.unsubscribe(0xc_00_00000000_00000000)
+    await device_manager.unsubscribe(str(0xc_00_00000000_00000000))
     await asyncio.sleep(0.02)
     upstream.write('duty_cycle', 0.123)
     upstream.write('pid_pos_setpoint', 0.1)
@@ -132,4 +132,4 @@ async def test_disable(device_manager, upstream, downstream):
 
 @pytest.mark.asyncio
 async def test_heartbeat(device_manager, upstream, downstream):
-    assert await device_manager.heartbeat(0xc_00_00000000_00000000) < 0.05
+    assert await device_manager.heartbeat(str(0xc_00_00000000_00000000)) < 0.05

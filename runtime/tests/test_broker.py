@@ -28,7 +28,7 @@ def buffers(catalog):
 
 @pytest.fixture
 async def update_publisher(mocker):
-    publisher = rpc.Client(rpc.SocketNode(zmq.PUB))
+    publisher = rpc.Client(rpc.SocketNode(socket_type=zmq.PUB))
     mocker.patch.object(publisher.call, 'update', autospec=True)
     publisher.call.update.return_value = future = asyncio.Future()
     future.set_result(None)
@@ -37,7 +37,7 @@ async def update_publisher(mocker):
 
 @pytest.fixture
 async def client(mocker):
-    client = rpc.Client(rpc.SocketNode(zmq.DEALER))
+    client = rpc.Client(rpc.SocketNode(socket_type=zmq.DEALER))
     mocker.patch.object(client.call, 'list_uids', autospec=True)
     yield client
 
@@ -50,7 +50,7 @@ async def broker(update_publisher, client, buffers):
         'start',
     ]
     with cli.make_context('cli', args) as ctx:
-        broker = Broker(ctx, update_publisher, client, buffers=buffers)
+        broker = Broker(ctx, update_publisher, client, buffers)
         limit_switch = broker.buffers.get_or_create(0x0000_00_ffffffff_ffffffff)
         limit_switch.set('switch0', True)
         limit_switch.set('switch1', False)

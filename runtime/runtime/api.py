@@ -8,8 +8,7 @@ import asyncio
 import dataclasses
 import enum
 import time
-from numbers import Real
-from typing import Any, Awaitable, Callable, Union
+from typing import Any, Awaitable, Callable, Protocol, Union
 
 import structlog
 
@@ -33,7 +32,6 @@ class StudentAPI(abc.ABC):
     logger = structlog.get_logger(wrapper_class=structlog.stdlib.BoundLogger)
 
 
-@dataclasses.dataclass
 class Actions(StudentAPI):
     """API for performing asynchronous execution.
 
@@ -49,10 +47,8 @@ class Actions(StudentAPI):
     time-sensitive events outside the normal ``autonomous_main`` or ``teleop_main`` functions.
     """
 
-    executor: 'AsyncExecutor'
-
     @staticmethod
-    async def sleep(duration: Real, /):
+    async def sleep(duration: float, /) -> None:
         """Pause the program for some amount of time.
 
         Arguments:
@@ -63,13 +59,20 @@ class Actions(StudentAPI):
         """
         await asyncio.sleep(duration)
 
-    def run(self, action: Action, /, *args: Any, timeout: Real = 30, periodic: bool = False):
+    @abc.abstractmethod
+    def run(
+        self,
+        action: Action,
+        /,
+        *args: Any,
+        timeout: float = 30,
+        periodic: bool = False,
+    ) -> None:
         """Schedule an action to run outside of the ``*_main`` functions."""
-        self.executor.run(action, *args, timeout=timeout, periodic=periodic)
 
+    @abc.abstractmethod
     def is_running(self, action: Action, /) -> bool:
         """Check whether an action is already running."""
-        return self.executor.is_running(action)
 
 
 @dataclasses.dataclass
@@ -85,7 +88,7 @@ class Robot(DeviceAPI):
     def get(self, uid: Union[str, int], param: str, /) -> Any:
         return self.buffers[int(uid)].get(param)
 
-    def write(self, uid: Union[str, int], param: str, value: Any, /):
+    def write(self, uid: Union[str, int], param: str, value: Any, /) -> None:
         self.buffers[int(uid)].write(param, value)
 
     # Legacy API method aliases.
@@ -105,7 +108,7 @@ class Gamepad(DeviceAPI):
 class Field(DeviceAPI):
     """API for interacting with the field and other robots."""
 
-    start: Real = dataclasses.field(default_factory=time.time)
+    start: float = dataclasses.field(default_factory=time.time)
 
     @property
     def _buffer(self, /) -> Buffer:
@@ -117,12 +120,22 @@ class Field(DeviceAPI):
         return Alliance(self._buffer.alliance)
 
     @property
-    def clock(self, /) -> Real:
+    def clock(self, /) -> float:
         """The number of seconds since the current match phase (autonomus/teleop) started."""
         return time.time() - self.start
 
-    def send(self, obj, /):
+    def send(self, obj: Any, /) -> None:
         pass  # TODO
 
     def recv(self, /) -> Any:
         pass  # TODO
+
+
+class StudentCodeModule(Protocol):
+    Alliance: type[Alliance] = Alliance
+    Actions: Actions
+    Robot: Robot
+    Gamepad: Gamepad
+    Field: Field
+    # The ``print`` function is not listed here because Mypy does not yet support replacing
+    # callables: https://github.com/python/mypy/issues/708

@@ -63,15 +63,11 @@ def logger():
     # that they use (with ``asyncio.get_running_loop``), we need to reconstruct these loggers to
     # prevent them from interacting with a closed event loop.
     log.configure(fmt='pretty')
-    log.LogPublisher.logger = log.get_null_logger()
-    rpc.Endpoint.logger = rpc.Router.logger = structlog.get_logger(
-        wrapper_class=structlog.stdlib.AsyncBoundLogger,
-    )
 
 
 @pytest.fixture
 async def router():
-    async with rpc.Router.bind(FRONTEND, BACKEND) as router:
+    async with rpc.Router.bind({FRONTEND}, {BACKEND}) as router:
         yield router
 
 
@@ -89,13 +85,13 @@ async def endpoints(request, router):
         client_type, service_type = other
         common_options = {zmq.SNDTIMEO: 3000}
         client_node = rpc.SocketNode(
-            client_type,
+            socket_type=client_type,
             options=common_options | {zmq.IDENTITY: b'client'},
             connections=(MULTICAST if client_type == zmq.PUB else FRONTEND),
         )
         kwargs = {'bindings': MULTICAST} if service_type == zmq.SUB else {'connections': BACKEND}
         service_node = rpc.SocketNode(
-            service_type,
+            socket_type=service_type,
             options=common_options | {zmq.IDENTITY: b'service'},
             **kwargs,
         )
@@ -110,8 +106,8 @@ async def endpoints(request, router):
 
     client = rpc.Client(node=client_node, concurrency=client_concurrency)
     service = rpc.Service(
-        MockHandler(),
         node=service_node,
+        handler=MockHandler(),
         concurrency=service_concurrency,
     )
     async def wait_for_connection():
@@ -128,21 +124,24 @@ async def endpoints(request, router):
 @pytest.mark.asyncio
 async def test_socket_checks():
     socket_factories = [
-        lambda: rpc.Client(rpc.SocketNode(zmq.REQ)),
-        lambda: rpc.Client(rpc.SocketNode(zmq.SUB)),
-        lambda: rpc.Service(MockHandler(), rpc.SocketNode(zmq.REP)),
-        lambda: rpc.Service(MockHandler(), rpc.SocketNode(zmq.PUB)),
-        lambda: rpc.Router(rpc.SocketNode(zmq.ROUTER), rpc.SocketNode(zmq.DEALER)),
+        lambda: rpc.Client(rpc.SocketNode(socket_type=zmq.REQ)),
+        lambda: rpc.Client(rpc.SocketNode(socket_type=zmq.SUB)),
+        lambda: rpc.Service(node=rpc.SocketNode(socket_type=zmq.REP), handler=MockHandler()),
+        lambda: rpc.Service(node=rpc.SocketNode(socket_type=zmq.PUB), handler=MockHandler()),
+        lambda: rpc.Router(
+            rpc.SocketNode(socket_type=zmq.ROUTER),
+            rpc.SocketNode(socket_type=zmq.DEALER),
+        ),
     ]
     for socket_factory in socket_factories:
         with pytest.raises(rpc.RuntimeRPCError):
             socket_factory()
     with pytest.raises(ValueError):
-        rpc.Client(rpc.SocketNode(zmq.DEALER), concurrency=-1)
+        rpc.Client(rpc.SocketNode(socket_type=zmq.DEALER), concurrency=-1)
     with pytest.raises(ValueError):
         rpc.DatagramNode.from_address('tcp://localhost:8080')
     with pytest.raises(ValueError):
-        await rpc.SocketNode(zmq.PUB).recv()
+        await rpc.SocketNode(socket_type=zmq.PUB).recv()
 
 
 @pytest.mark.asyncio
@@ -213,9 +212,9 @@ async def test_bad_requests(mocker, endpoints):
             await client.call['echo-id']()                                  # No address
     mocker.patch('random.randrange')
     random.randrange.return_value = 0
-    client.requests[0] = asyncio.Future()
-    with pytest.raises(ValueError):
-        await client.call['echo-id'](1, address=service.node.address)
+    with client.requests.new_request():
+        with pytest.raises(ValueError):
+            await client.call['echo-id'](1, address=service.node.address)
 
 
 @pytest.mark.slow
@@ -399,12 +398,12 @@ async def test_multiple_clients(endpoints):
         client2_options = client1.node.options | {zmq.IDENTITY: b'client-2'}
         client3_options = client1.node.options | {zmq.IDENTITY: b'client-3'}
         client2_node = rpc.SocketNode(
-            client1.node.socket_type,
+            socket_type=client1.node.socket_type,
             options=client2_options,
             connections=FRONTEND,
         )
         client3_node = rpc.SocketNode(
-            client1.node.socket_type,
+            socket_type=client1.node.socket_type,
             options=client3_options,
             connections=FRONTEND,
         )
@@ -432,13 +431,21 @@ async def test_multiple_services(endpoints):
     service2_options = service1.node.options | {zmq.IDENTITY: b'service-2'}
     service3_options = service1.node.options | {zmq.IDENTITY: b'service-3'}
     service2 = rpc.Service(
-        service1.handler,
-        rpc.SocketNode(service1.node.socket_type, options=service2_options, connections=BACKEND),
+        node=rpc.SocketNode(
+            socket_type=service1.node.socket_type,
+            options=service2_options,
+            connections=BACKEND,
+        ),
+        handler=service1.handler,
         concurrency=service1.concurrency,
     )
     service3 = rpc.Service(
-        service1.handler,
-        rpc.SocketNode(service1.node.socket_type, options=service3_options, connections=BACKEND),
+        node=rpc.SocketNode(
+            socket_type=service1.node.socket_type,
+            options=service3_options,
+            connections=BACKEND,
+        ),
+        handler=service1.handler,
         concurrency=service1.concurrency,
     )
     service2.node.address, service3.node.address = b'service-2', b'service-3'

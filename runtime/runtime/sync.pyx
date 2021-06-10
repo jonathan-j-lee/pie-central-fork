@@ -15,10 +15,10 @@ __all__ = ['SyncError', 'Mutex']
 
 
 class SyncError(RuntimeBaseException):
-    def __init__(self, message: str, errno: int, **context):
+    def __init__(self, message, errno, **context):
         super().__init__(message, **context, errno=errno)
 
-    def suppress(*errnos: int):
+    def suppress(*errnos):
         try:
             yield
         except SyncError as exc:
@@ -50,8 +50,8 @@ cdef class Mutex:
         unsigned char[::1] buf = None,
         /,
         *,
-        shared: bool = True,
-        recursive: bool = True,
+        shared = True,
+        recursive = True,
     ):
         if buf is None:
             self.mutex = &self.local_mutex
@@ -82,7 +82,7 @@ cdef class Mutex:
         pthread_mutex_destroy(self.mutex)
         pthread_mutexattr_destroy(self.attrs)
 
-    def acquire(self, timeout: Optional[Real] = 5):
+    def acquire(self, timeout=5):
         cdef timespec duration
         cdef int status
         if isinstance(timeout, Real):

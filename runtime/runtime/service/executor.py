@@ -12,17 +12,18 @@ import signal
 import threading
 import time
 import types
+import typing
 import warnings
-from numbers import Real
 from typing import (
     Any,
     Awaitable,
     Callable,
     ClassVar,
+    Iterator,
     NamedTuple,
+    NoReturn,
     Optional,
     Sequence,
-    Union,
 )
 
 import structlog
@@ -45,13 +46,17 @@ class ExecutionError(RuntimeBaseException):
     """General execution error."""
 
 
-def handle_timeout(_signum: int, _stack_frame):
+def handle_timeout(_signum: int, _stack_frame: Optional[types.FrameType]) -> NoReturn:
     """Signal handler that raises a :class:`TimeoutError`."""
     raise TimeoutError('task timed out')
 
 
+def _estop() -> NoReturn:
+    raise EmergencyStopException
+
+
 @contextlib.contextmanager
-def using_timer(timeout: Real, interval: Real = 0, **context):
+def using_timer(timeout: float, interval: float = 0, **context: Any) -> Iterator[None]:
     """Context manager to set, then clear, an interval timer that raises an alarm."""
     signal.signal(signal.SIGALRM, handle_timeout)
     signal.setitimer(signal.ITIMER_REAL, timeout, interval)
@@ -68,7 +73,7 @@ def using_timer(timeout: Real, interval: Real = 0, **context):
         signal.setitimer(signal.ITIMER_REAL, 0)
 
 
-def run_once(func: Callable[..., Any], *args: Any, timeout: Real = 1) -> Any:
+def run_once(func: Callable[..., Any], *args: Any, timeout: float = 1) -> Any:
     """Run a synchronous function once with a timeout.
 
     Raises:
@@ -82,9 +87,9 @@ def run_once(func: Callable[..., Any], *args: Any, timeout: Real = 1) -> Any:
 def run_periodically(
     func: Callable[..., Any],
     *args: Any,
-    timeout: Real = 1,
+    timeout: float = 1,
     predicate: Callable[[], bool] = lambda: True,  # pragma: no cover; trivial default value
-):
+) -> None:
     """Run a synchronous function periodically.
 
     Use this function instead of calling :func:`run_once` many times. The timing will be much more
@@ -120,9 +125,11 @@ class ExecutionRequest(NamedTuple):
         periodic: Whether the callable should be invoked once or repeatedly at a fixed rate.
     """
 
-    func: Callable[..., Union[None, Awaitable[None]]] = lambda: None
+    # Generic named tuples are not yet supported (https://github.com/python/mypy/issues/685), so
+    # we cannot yet specify ``func``'s return type as a type parameter.
+    func: Callable[..., Optional[Awaitable[None]]] = lambda: None
     args: Sequence[Any] = ()
-    timeout: Real = 1
+    timeout: float = 1
     periodic: bool = False
 
 
@@ -136,7 +143,7 @@ class Executor(abc.ABC):
     """Schedule and execute callables with timeouts."""
 
     @abc.abstractmethod
-    def schedule(self, request: ExecutionRequest):
+    def schedule(self, /, request: ExecutionRequest) -> None:
         """Schedule a callable for execution.
 
         Arguments:
@@ -151,16 +158,16 @@ class Executor(abc.ABC):
             they were registered, or they may execute concurrently.
         """
 
-    def cancel(self):
+    def cancel(self, /) -> None:
         """Cancel all current execution."""
         self.schedule(CANCEL_REQUEST)
 
-    def stop(self):
+    def stop(self, /) -> None:
         """Cancel all execution, then unblock :meth:`execute_forever`."""
         self.schedule(STOP_REQUEST)
 
     @abc.abstractmethod
-    def execute_forever(self):
+    def execute_forever(self, /) -> None:
         """Execute callables indefinitely (blocking method) until :meth:`stop` is called."""
 
 
@@ -180,10 +187,10 @@ class SyncExecutor(Executor):
         default_factory=lambda: queue.Queue(128),
     )
 
-    def schedule(self, request: ExecutionRequest):
+    def schedule(self, /, request: ExecutionRequest) -> None:
         self.requests.put(request)
 
-    def execute(self, request: ExecutionRequest):
+    def execute(self, /, request: ExecutionRequest) -> None:
         """Execute a regular request."""
         if not request.periodic:
             run_once(request.func, *request.args, timeout=request.timeout)
@@ -195,7 +202,7 @@ class SyncExecutor(Executor):
                 predicate=self.requests.empty,
             )
 
-    def execute_forever(self):
+    def execute_forever(self, /) -> None:
         if threading.current_thread() is not threading.main_thread():
             raise ExecutionError(
                 'sync executor must be used in the main thread',
@@ -225,7 +232,7 @@ class SyncExecutor(Executor):
 
 
 @dataclasses.dataclass
-class AsyncExecutor(Executor):
+class AsyncExecutor(Executor, api.Actions):
     """An executor that executes coroutine functions.
 
     Attributes:
@@ -244,12 +251,13 @@ class AsyncExecutor(Executor):
     requests: Optional[asyncio.Queue[ExecutionRequest]] = None
     max_actions: int = 128
     requests_size: int = 128
-    running_actions: dict[api.Action, asyncio.Task] = dataclasses.field(default_factory=dict)
+    running_actions: dict[api.Action, asyncio.Task[None]] = dataclasses.field(default_factory=dict)
     configure_loop: Callable[[], None] = lambda: None
 
-    def schedule(self, request: ExecutionRequest):
+    def schedule(self, /, request: ExecutionRequest) -> None:
         if not self.loop or not self.requests:
             raise ExecutionError('async executor is not ready')
+        current_loop: Optional[asyncio.AbstractEventLoop]
         try:
             current_loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -259,22 +267,26 @@ class AsyncExecutor(Executor):
         else:
             self.loop.call_soon_threadsafe(self.requests.put_nowait, request)
 
-    def cancel_actions(self):
+    def cancel_actions(self, /) -> None:
         """Cancel all running actions."""
         for task in list(self.running_actions.values()):
             task.cancel('action cancelled')
 
-    def register_action(self, request: ExecutionRequest):
+    def register_action(self, /, request: ExecutionRequest) -> None:
         """Schedule a regular request as an ``asyncio.Task`` instance."""
+        coro = request.func(*request.args)
+        if not coro:
+            return
         if not request.periodic:
-            coro = asyncio.wait_for(request.func(*request.args), request.timeout)
+            coro = asyncio.wait_for(coro, request.timeout)
         else:
             coro = process.spin(request.func, *request.args, interval=request.timeout)
         task = asyncio.create_task(coro, name='action')
-        self.running_actions[request.func] = task
-        task.add_done_callback(lambda _: self.running_actions.pop(request.func, None))
+        action = typing.cast(api.Action, request.func)
+        self.running_actions[action] = task
+        task.add_done_callback(lambda _: self.running_actions.pop(action, None))
 
-    async def dispatch(self, *, cooldown: Real = 1):
+    async def dispatch(self, /, *, cooldown: float = 1) -> None:
         """Receive and handle requests from the queue."""
         self.configure_loop()
         self.loop = asyncio.get_running_loop()
@@ -309,14 +321,21 @@ class AsyncExecutor(Executor):
                 self.register_action(request)
                 await asyncio.to_thread(logger.info, 'Registered action')
 
-    def execute_forever(self):
+    def execute_forever(self, /) -> None:
         asyncio.run(self.dispatch())
 
-    def run(self, action: api.Action, *args: Any, timeout: Real = 30, periodic: bool = False):
+    def run(
+        self,
+        action: api.Action,
+        /,
+        *args: Any,
+        timeout: float = 30,
+        periodic: bool = False,
+    ) -> None:
         """Student-friendly wrapper around :meth:`AsyncExecutor.schedule`."""
         self.schedule(ExecutionRequest(action, args, timeout, periodic))
 
-    def is_running(self, action: api.Action) -> bool:
+    def is_running(self, action: api.Action, /) -> bool:
         """Check whether an action (coroutine function) is running."""
         return action in self.running_actions
 
@@ -335,7 +354,7 @@ class Dispatcher(rpc.Handler):
 
     buffers: BufferManager
     student_code_name: dataclasses.InitVar[str] = 'studentcode'
-    timeouts: dict[re.Pattern, Real] = dataclasses.field(default_factory=dict)
+    timeouts: dict[re.Pattern[str], float] = dataclasses.field(default_factory=dict)
     student_code: types.ModuleType = dataclasses.field(init=False)
     sync_exec: SyncExecutor = dataclasses.field(default_factory=SyncExecutor)
     async_exec: AsyncExecutor = dataclasses.field(default_factory=AsyncExecutor)
@@ -343,40 +362,38 @@ class Dispatcher(rpc.Handler):
         wrapper_class=structlog.stdlib.AsyncBoundLogger,
     )
 
-    def __post_init__(self, student_code_name: str):
+    def __post_init__(self, /, student_code_name: str) -> None:
         self.student_code = types.ModuleType(student_code_name)
 
     @property
-    def should_import(self) -> bool:
+    def should_import(self, /) -> bool:
         """Whether student code should be imported for the first time."""
         return not hasattr(self.student_code, '__file__')
 
     def _print(
         self,
         /,
-        *values,
+        *values: Any,
         sep: str = ' ',
-        file=None,
-        flush: bool = False,
-    ):  # pylint: disable=unused-argument; function signature matches that of ``print``.
-        message = sep.join(map(str, values))
-        self.logger.sync_bl.info(message, student_print=True)
+    ) -> None:
+        self.logger.sync_bl.info(sep.join(map(str, values)), student_print=True)
 
-    def reload(self):
+    def reload(self, /) -> None:
         """Load student code from disk and monkey-patch in the Runtime API."""
         if self.should_import:
             self.student_code = importlib.import_module(self.student_code.__name__)
         else:
             self.student_code = importlib.reload(self.student_code)
-        self.student_code.Alliance = api.Alliance
-        self.student_code.Actions = api.Actions(self.async_exec)
-        self.student_code.Robot = api.Robot(self.buffers)
-        self.student_code.Gamepad = api.Gamepad(self.buffers)
-        self.student_code.Field = api.Field(self.buffers)
-        self.student_code.print = self._print
+        student_code = typing.cast(api.StudentCodeModule, self.student_code)
+        student_code.Alliance = api.Alliance
+        student_code.Actions = self.async_exec
+        student_code.Robot = api.Robot(self.buffers)
+        student_code.Gamepad = api.Gamepad(self.buffers)
+        student_code.Field = api.Field(self.buffers)
+        student_code.print = self._print  # type: ignore[attr-defined]
         self.logger.sync_bl.info('Student code reloaded', student_code=self.student_code.__name__)
 
-    def prepare_student_code_run(self, requests: list[dict[str, Any]]):
+    def prepare_student_code_run(self, /, requests: list[dict[str, Any]]) -> None:
         """Prepare to run student code.
 
         Reload the student code module, then enqueue execution requests for the module's functions.
@@ -402,13 +419,13 @@ class Dispatcher(rpc.Handler):
             self.sync_exec.schedule(ExecutionRequest(**request))
 
     @rpc.route
-    async def execute(self, requests: list[dict[str, Any]]):
+    async def execute(self, /, requests: list[dict[str, Any]]) -> None:
         """Request student code execution."""
         request = ExecutionRequest(self.prepare_student_code_run, [requests], timeout=1)
         await asyncio.to_thread(self.sync_exec.schedule, request)
 
     @rpc.route
-    async def idle(self):
+    async def idle(self, /) -> None:
         """Suspend all execution (synchronous and asynchronous)."""
         suppress = contextlib.suppress(ExecutionError)
         with suppress:
@@ -417,29 +434,29 @@ class Dispatcher(rpc.Handler):
             await asyncio.to_thread(self.async_exec.cancel)
 
     @rpc.route
-    async def auto(self):
+    async def auto(self, /) -> None:
         """Enter autonomous mode."""
         requests = [{'func': 'autonomous_setup'}, {'func': 'autonomous_main', 'periodic': True}]
         await self.execute(requests)
 
     @rpc.route
-    async def teleop(self):
+    async def teleop(self, /) -> None:
         """Enter teleop mode."""
         requests = [{'func': 'teleop_setup'}, {'func': 'teleop_main', 'periodic': True}]
         await self.execute(requests)
 
     @rpc.route
-    async def estop(self):
+    def estop(self, /) -> None:
         """Raise an emergency stop exception."""
-        raise EmergencyStopException
+        self.sync_exec.schedule(ExecutionRequest(_estop))
 
 
 async def main(
     dispatcher: Dispatcher,
     ready: threading.Event,
     name: str,
-    **options,
-):
+    **options: Any,
+) -> None:
     """Service thread's async entry point."""
     async with process.Application(name, options) as app:
         app.stack.callback(dispatcher.sync_exec.stop)
@@ -453,7 +470,7 @@ async def main(
         )
 
 
-def target(name: str, **options):
+def target(name: str, **options: Any) -> None:
     """The process entry point."""
     with BufferManager(options['dev_catalog']) as buffers:
         dispatcher = Dispatcher(

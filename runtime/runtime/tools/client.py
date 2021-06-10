@@ -1,6 +1,7 @@
 import asyncio
 
 import cbor2
+import click
 import structlog
 
 from .. import process
@@ -25,7 +26,7 @@ DEFAULT_ADDRESSES: dict[str, str] = {
 }
 
 
-async def main(ctx):
+async def main(ctx: click.Context) -> None:
     async with process.Application('cli', ctx.obj.options) as app:
         client = await app.make_client()
         logger = structlog.get_logger(wrapper_class=structlog.stdlib.AsyncBoundLogger)
