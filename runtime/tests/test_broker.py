@@ -50,6 +50,7 @@ async def broker(update_publisher, client, buffers):
         'start',
     ]
     with cli.make_context('cli', args) as ctx:
+        ctx.obj.options.update(ctx.params)
         broker = Broker(ctx, update_publisher, client, buffers)
         limit_switch = broker.buffers.get_or_create(0x0000_00_ffffffff_ffffffff)
         limit_switch.set('switch0', True)

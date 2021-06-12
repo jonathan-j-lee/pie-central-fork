@@ -58,11 +58,8 @@ UDP_ADDR = 'udp://127.0.0.1:6060'
 
 
 @pytest.fixture(autouse=True)
-def logger():
-    # Each test opens and closes a new async event loop. Since these loggers cache the first loop
-    # that they use (with ``asyncio.get_running_loop``), we need to reconstruct these loggers to
-    # prevent them from interacting with a closed event loop.
-    log.configure(fmt='pretty')
+async def logging():
+    log.configure(fmt='pretty', level='debug')
 
 
 @pytest.fixture
@@ -122,7 +119,7 @@ async def endpoints(request, router):
 
 
 @pytest.mark.asyncio
-async def test_socket_checks():
+async def test_checks():
     socket_factories = [
         lambda: rpc.Client(rpc.SocketNode(socket_type=zmq.REQ)),
         lambda: rpc.Client(rpc.SocketNode(socket_type=zmq.SUB)),
@@ -142,6 +139,10 @@ async def test_socket_checks():
         rpc.DatagramNode.from_address('tcp://localhost:8080')
     with pytest.raises(ValueError):
         await rpc.SocketNode(socket_type=zmq.PUB).recv()
+    node = rpc.DatagramNode.from_address(UDP_ADDR, bind=False)
+    node.close()
+    with pytest.raises(rpc.RuntimeRPCError):
+        await node.send([b''])
 
 
 @pytest.mark.asyncio

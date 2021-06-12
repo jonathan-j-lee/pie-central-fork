@@ -41,21 +41,23 @@ build = 'python setup.py build_ext --inplace'
 clean = 'sh -c "rm -rf build runtime/*.cpython-*.so runtime/*.c runtime/*.cpp"'
 client = """python -m runtime
   --debug
-  --log-level info
   --log-format pretty
   client
 """
 dev = """python -m runtime
   --debug
-  --log-level info
   --log-format pretty
   start
 """
 emulate = """python -m runtime
   --debug
-  --log-level info
   --log-format pretty
   emulate-dev
+"""
+pager = """python -m runtime
+  --debug
+  --log-format pretty
+  log-pager
 """
 servedocs = 'make --directory=docs livehtml'
 typecheck = 'mypy --strict --implicit-reexport runtime'

@@ -77,8 +77,10 @@ EndpointType = TypeVar('EndpointType', bound='Endpoint')
 SocketOptions = dict[int, Union[int, bytes]]
 
 
-def get_logger() -> structlog.stdlib.AsyncBoundLogger:
+def get_logger(*factory_args: Any, **context: Any) -> structlog.stdlib.AsyncBoundLogger:
     logger = structlog.get_logger(
+        *factory_args,
+        **context,
         wrapper_class=structlog.stdlib.AsyncBoundLogger,
     )
     return typing.cast(structlog.stdlib.AsyncBoundLogger, logger)
@@ -709,7 +711,7 @@ class Handler:
     """
 
     @functools.cached_property
-    def method_table(self) -> dict[str, types.MethodType]:
+    def _method_table(self) -> dict[str, types.MethodType]:
         """A mapping of method names to (possibly coroutine) bound methods."""
         # Need to use the class to avoid calling `getattr(...)` on this property, which can lead
         # to infinite recursion.
@@ -732,7 +734,7 @@ class Handler:
         Raises:
             RuntimeRPCError: The procedure call does not exist, timed out, or raised an exception.
         """
-        func = self.method_table.get(method)
+        func = self._method_table.get(method)
         if not func:
             raise RuntimeRPCError('no such method exists', method=method)
         try:
@@ -884,7 +886,7 @@ class Router:
                 with empty delimeter frames sandwiched between them.
             send_socket: The sending socket, which simply transposes the sender/recipient ID frames.
         """
-        logger = structlog.get_logger().bind(
+        logger = get_logger().bind(
             recv_socket=_render_id(recv_socket.identity),
             send_socket=_render_id(send_socket.identity),
         )

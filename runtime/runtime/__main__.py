@@ -17,8 +17,9 @@ import zmq
 
 import runtime
 
+from . import log
 from .buffer import Buffer, BufferManager
-from .tools import client, devemulator, msgparser
+from .tools import client, devemulator, logpager, msgparser
 
 
 class OptionGroupCommand(click.Command):
@@ -352,14 +353,14 @@ get_zmq_option = lambda option: getattr(zmq, option.upper())
 @optgroup.group('log')
 @optgroup.option(
     '--log-level',
-    type=click.Choice(['debug', 'info', 'warn', 'error', 'critical'], case_sensitive=False),
-    default='debug',
+    type=click.Choice(log.LEVELS, case_sensitive=False),
+    default='info',
     help='Minimum severity of log records displayed.',
 )
 @optgroup.option(
     '--log-format',
     type=click.Choice(['json', 'pretty'], case_sensitive=False),
-    default='pretty',
+    default='json',
     help='Format of records printed to standard output.',
 )
 @optgroup.option(
@@ -510,6 +511,43 @@ def parse_msg(ctx: click.Context, **options: Any) -> None:
     """Parse a Smart Device message."""
     ctx.obj.options.update(options)
     msgparser.parse_messages(ctx.obj.options)
+
+
+@cli.command()
+@click.option(
+    '--source',
+    type=click.Choice(['stdin', 'remote'], case_sensitive=False),
+    default='remote',
+    help='Where to gather log records from.',
+)
+@click.pass_context
+def log_pager(ctx: click.Context, **options: Any) -> None:
+    """Start a pager for viewing log records.
+
+    The pager collects log records (in jsonlines format) in real time from either Runtime's log
+    frontend or from standard input and writes the formatted records to standard output.
+
+    As a well-behaved shell application, the pager works well in a pipeline with other shell
+    utilities. Using `jq` to perform transformations is a common use case. The pager itself may
+    emit log records to standard error (for example, when encountering invalid JSON).
+
+    In the following example, the first pager subscribes to all messages with the "warning"
+    severity or above and feeds the jsonlines output to a filter that selects records emitted by
+    the "broker" process. The second pager pretty-prints the filtered output:
+
+    \b
+        $ alias rt='python -m runtime'
+        $ rt --log-level warn log-pager \\
+            | jq --unbuffered -c '. | select(.app == "broker")' \\
+            | rt --log-format pretty log-pager --source stdin
+
+    In another example, we collect the first 10 records emitted and store them for replay:
+
+    \b
+        $ head -10 <(rt log-pager) > records.jsonl
+    """
+    ctx.obj.options.update(options)
+    asyncio.run(logpager.main(ctx))
 
 
 if __name__ == '__main__':

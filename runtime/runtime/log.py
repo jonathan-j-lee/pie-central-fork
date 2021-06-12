@@ -6,7 +6,6 @@ import contextlib
 import dataclasses
 import functools
 import logging
-import typing
 from typing import Any, Callable, Literal, NoReturn, Optional, Union
 
 import orjson as json
@@ -16,14 +15,21 @@ import structlog.stdlib
 
 from . import rpc
 from .exception import RuntimeBaseException
-from .rpc import get_logger
 
-__all__ = ['get_logger', 'get_null_logger', 'LogPublisher', 'configure']
+__all__ = [
+    'LEVELS',
+    'get_level_num',
+    'get_logger',
+    'get_null_logger',
+    'LogPublisher',
+    'configure',
+]
 
 
 Event = collections.abc.MutableMapping[str, Any]
 ProcessorReturnType = Union[Event, str, bytes]
 Processor = Callable[[Any, str, Event], ProcessorReturnType]
+LEVELS: list[str] = ['debug', 'info', 'warn', 'error', 'critical']
 
 
 def drop(_logger: structlog.stdlib.AsyncBoundLogger, _method: str, _event: Event, /) -> NoReturn:
@@ -31,13 +37,12 @@ def drop(_logger: structlog.stdlib.AsyncBoundLogger, _method: str, _event: Event
     raise structlog.DropEvent
 
 
+get_logger = rpc.get_logger
+
+
 def get_null_logger() -> structlog.stdlib.AsyncBoundLogger:
     """Make a logger that drops all events."""
-    logger = structlog.get_logger(
-        processors=[drop],
-        wrapper_class=structlog.stdlib.AsyncBoundLogger,
-    )
-    return typing.cast(structlog.stdlib.AsyncBoundLogger, logger)
+    return get_logger(processors=[drop])
 
 
 @dataclasses.dataclass
@@ -55,17 +60,18 @@ class LogPublisher(rpc.Client):
 
     def __call__(
         self,
-        logger: structlog.stdlib.AsyncBoundLogger,
+        _logger: structlog.stdlib.AsyncBoundLogger,
         method: str,
         event: Event,
         /,
     ) -> Event:
-        self.loop.call_soon_threadsafe(self.send_queue.put_nowait, (method, dict(event)))
+        if event.get('transmit', True):
+            self.loop.call_soon_threadsafe(self.send_queue.put_nowait, (method, dict(event)))
         return event
 
     async def __aenter__(self) -> 'LogPublisher':
         result = await super().__aenter__()
-        worker = asyncio.create_task(self._send_forever(), name='send')
+        worker = asyncio.create_task(self._send_forever(), name='log-publish')
         self.stack.callback(worker.cancel)
         return result
 
@@ -138,12 +144,12 @@ def configure(
     if fmt == 'pretty':
         renderers.append(structlog.processors.ExceptionPrettyPrinter())
         renderers.append(structlog.dev.ConsoleRenderer(pad_event=40))
-        logger_factory = structlog.PrintLoggerFactory()
+        logger_factory = structlog.PrintLogger
     else:
         renderers.append(
             structlog.processors.JSONRenderer(serializer=json.dumps),
         )
-        logger_factory = structlog.BytesLoggerFactory()
+        logger_factory = structlog.BytesLogger
 
     structlog.configure(
         cache_logger_on_first_use=True,

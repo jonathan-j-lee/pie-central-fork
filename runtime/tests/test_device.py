@@ -28,6 +28,9 @@ if HAS_UDEV:
 
 @pytest.fixture(autouse=True)
 async def logging():
+    # Each test opens and closes a new async event loop. Since loggers cache the first loop that
+    # they use (with ``asyncio.get_running_loop``), we may need to reconstruct these loggers to
+    # prevent them from interacting with a closed event loop.
     log.configure(fmt='pretty', level='debug')
 
 

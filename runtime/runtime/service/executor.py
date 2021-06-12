@@ -7,7 +7,6 @@ import dataclasses
 import importlib
 import inspect
 import queue
-import re
 import signal
 import threading
 import time
@@ -18,17 +17,17 @@ from typing import (
     Any,
     Awaitable,
     Callable,
-    ClassVar,
     Iterator,
     NamedTuple,
     NoReturn,
     Optional,
+    Pattern,
     Sequence,
 )
 
 import structlog
 
-from .. import api, process, rpc
+from .. import api, log, process, rpc
 from ..buffer import BufferManager
 from ..exception import EmergencyStopException, RuntimeBaseException
 
@@ -186,6 +185,7 @@ class SyncExecutor(Executor):
     requests: queue.Queue[ExecutionRequest] = dataclasses.field(
         default_factory=lambda: queue.Queue(128),
     )
+    logger: structlog.stdlib.BoundLogger = dataclasses.field(default_factory=structlog.get_logger)
 
     def schedule(self, /, request: ExecutionRequest) -> None:
         self.requests.put(request)
@@ -209,17 +209,16 @@ class SyncExecutor(Executor):
                 main_thread=threading.main_thread().ident,
                 current_thread=threading.current_thread().ident,
             )
-        logger = Dispatcher.logger.sync_bl.bind(mode='sync')
-        logger.info('Executor started', thread_id=threading.current_thread().ident)
+        self.logger.info('Executor started', thread_id=threading.current_thread().ident)
         while True:
             request = self.requests.get()
             if request is STOP_REQUEST:
-                logger.info('Executor stopped')
+                self.logger.info('Executor stopped')
                 break
             if request is CANCEL_REQUEST:
-                logger.info('Executor cancelled, idling')
+                self.logger.info('Executor cancelled, idling')
             else:
-                logger.info(
+                self.logger.info(
                     'Executing function',
                     func=request.func.__name__,
                     timeout=request.timeout,
@@ -228,7 +227,7 @@ class SyncExecutor(Executor):
                 try:
                     self.execute(request)
                 except (signal.ItimerError, ExecutionError) as exc:
-                    logger.error('Unable to execute function', exc_info=exc)
+                    self.logger.error('Unable to execute function', exc_info=exc)
 
 
 @dataclasses.dataclass
@@ -253,6 +252,7 @@ class AsyncExecutor(Executor, api.Actions):
     requests_size: int = 128
     running_actions: dict[api.Action, asyncio.Task[None]] = dataclasses.field(default_factory=dict)
     configure_loop: Callable[[], None] = lambda: None
+    logger: structlog.stdlib.BoundLogger = dataclasses.field(default_factory=structlog.get_logger)
 
     def schedule(self, /, request: ExecutionRequest) -> None:
         if not self.loop or not self.requests:
@@ -291,9 +291,8 @@ class AsyncExecutor(Executor, api.Actions):
         self.configure_loop()
         self.loop = asyncio.get_running_loop()
         self.requests = asyncio.Queue(self.requests_size)
-        logger = Dispatcher.logger.sync_bl.bind(mode='async')
         await asyncio.to_thread(
-            logger.info,
+            self.logger.info,
             'Executor started',
             thread_id=threading.current_thread().ident,
         )
@@ -301,16 +300,16 @@ class AsyncExecutor(Executor, api.Actions):
             request = await self.requests.get()
             if request is STOP_REQUEST:
                 self.cancel_actions()
-                await asyncio.to_thread(logger.info, 'Executor stopped')
+                await asyncio.to_thread(self.logger.info, 'Executor stopped')
                 break
             if request is CANCEL_REQUEST:
                 self.cancel_actions()
-                await asyncio.to_thread(logger.info, 'Executor cancelled, idling')
+                await asyncio.to_thread(self.logger.info, 'Executor cancelled, idling')
             elif request.func in self.running_actions:
-                await asyncio.to_thread(logger.warn, 'Action already running')
+                await asyncio.to_thread(self.logger.warn, 'Action already running')
             elif len(self.running_actions) >= self.max_actions:
                 await asyncio.to_thread(
-                    logger.warn,
+                    self.logger.warn,
                     'Max number of actions running',
                     max_actions=self.max_actions,
                 )
@@ -319,7 +318,7 @@ class AsyncExecutor(Executor, api.Actions):
                     self.requests.put_nowait(request)
             else:
                 self.register_action(request)
-                await asyncio.to_thread(logger.info, 'Registered action')
+                await asyncio.to_thread(self.logger.info, 'Registered action')
 
     def execute_forever(self, /) -> None:
         asyncio.run(self.dispatch())
@@ -354,13 +353,11 @@ class Dispatcher(rpc.Handler):
 
     buffers: BufferManager
     student_code_name: dataclasses.InitVar[str] = 'studentcode'
-    timeouts: dict[re.Pattern[str], float] = dataclasses.field(default_factory=dict)
+    timeouts: dict[Pattern[str], float] = dataclasses.field(default_factory=dict)
     student_code: types.ModuleType = dataclasses.field(init=False)
     sync_exec: SyncExecutor = dataclasses.field(default_factory=SyncExecutor)
     async_exec: AsyncExecutor = dataclasses.field(default_factory=AsyncExecutor)
-    logger: ClassVar[structlog.stdlib.AsyncBoundLogger] = structlog.get_logger(
-        wrapper_class=structlog.stdlib.AsyncBoundLogger,
-    )
+    logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(default_factory=log.get_logger)
 
     def __post_init__(self, /, student_code_name: str) -> None:
         self.student_code = types.ModuleType(student_code_name)
@@ -459,10 +456,15 @@ async def main(
 ) -> None:
     """Service thread's async entry point."""
     async with process.Application(name, options) as app:
+        await app.make_log_publisher()
         app.stack.callback(dispatcher.sync_exec.stop)
+        app.stack.callback(dispatcher.async_exec.stop)
         await app.make_service(dispatcher)
+        dispatcher.logger = app.logger.bind()
+        dispatcher.sync_exec.logger = dispatcher.logger.sync_bl.bind(mode='sync')
+        dispatcher.async_exec.logger = dispatcher.logger.sync_bl.bind(mode='async')
         dispatcher.async_exec.configure_loop = app.configure_loop
-        await Dispatcher.logger.info('Execution dispatcher started')
+        await app.logger.info('Execution dispatcher started')
         # Logger has been attached to this thread's event loop.
         await asyncio.to_thread(ready.set)
         await asyncio.gather(

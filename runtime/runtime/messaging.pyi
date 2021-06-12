@@ -1,5 +1,5 @@
 import enum
-from typing import Sized, Union
+from typing import ByteString, Sized, Union
 
 from .exception import RuntimeBaseException
 
@@ -45,7 +45,7 @@ class Message:
     def encode(self) -> bytearray:
         pass
     @staticmethod
-    def decode(buf: Union[bytes, bytearray, memoryview]) -> Message: ...
+    def decode(buf: ByteString) -> Message: ...
     @staticmethod
     def make_ping() -> Message: ...
     @staticmethod

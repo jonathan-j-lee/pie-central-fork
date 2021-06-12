@@ -211,12 +211,12 @@ class SmartDevice(abc.ABC):  # https://github.com/python/mypy/issues/5374
             serial.SerialException: If the serial transport becomes unavailable.
         """
         generic_error = Message.make_error(ErrorCode.GENERIC_ERROR).encode()
-        write_buf = bytearray(Message.MAX_ENCODING_SIZE)
+        write_buf = memoryview(bytearray(Message.MAX_ENCODING_SIZE))
         while True:
             try:
                 message = await self.write_queue.get()
                 size = await asyncio.to_thread(message.encode_into_buf, write_buf)
-                self.writer.write(memoryview(write_buf)[:size])
+                self.writer.write(write_buf[:size])
                 self.writer.write(Message.DELIM)
                 await self.logger.debug('Wrote message', type=message.type.name)
             except MessageError as exc:
@@ -561,9 +561,11 @@ async def main(**options: Any) -> None:
         **options: Command-line options.
     """
     async with process.Application('device', options) as app:
+        await app.make_log_publisher()
         device_manager = SmartDeviceManager(
             app.make_buffer_manager(),
             poll_interval=options['dev_poll_interval'],
+            logger=app.logger.bind(),
         )
         await app.make_service(device_manager)
         await asyncio.gather(

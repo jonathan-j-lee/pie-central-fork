@@ -13,5 +13,7 @@ exclude_lines =
   pragma: no cover
   # Abstract method body
   raise NotImplementedError
+  # Ellipsis
+  \.\.\.
 precision = 1
 show_missing = True

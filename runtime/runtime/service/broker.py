@@ -153,7 +153,7 @@ class Broker(rpc.Handler):
                     issue_counter[message['symbol']] += 1
         self.logger.sync_bl.info(
             'Linted student code',
-            module=self.ctx.params['exec_module'],
+            module=self.ctx.obj.options['exec_module'],
             issues=dict(issue_counter),
         )
 
@@ -168,7 +168,7 @@ class Broker(rpc.Handler):
         shell = await asyncio.create_subprocess_exec(
             self.PYLINT_EXEC,
             *self.PYLINT_OPTIONS,
-            shlex.quote(self.ctx.params['exec_module']),
+            shlex.quote(self.ctx.obj.options['exec_module']),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -235,12 +235,14 @@ async def main(ctx: click.Context, **options: Any) -> None:
     """
     async with process.Application('broker', options) as app:
         await app.make_log_forwarder()
+        await app.make_log_publisher()
         await app.make_router()
         broker = Broker(
             ctx,
             await app.make_update_client(),
             await app.make_client(),
             app.make_buffer_manager(),
+            logger=app.logger.bind(),
         )
         await app.make_service(broker)
         await asyncio.gather(

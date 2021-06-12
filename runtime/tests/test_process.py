@@ -16,8 +16,6 @@ import zmq.asyncio
 from runtime import log, process, rpc
 from runtime.exception import RuntimeBaseException, EmergencyStopException
 
-from test_rpc import logger
-
 
 @pytest.fixture
 async def app():
@@ -40,6 +38,7 @@ async def app():
     }
     async with process.Application('test', options) as app:
         await app.make_log_forwarder()
+        await app.make_log_publisher()
         await app.make_router()
         yield app
     # The log forwarder eventually exits. Because the ports are randomized, tests should not clash.
@@ -176,16 +175,18 @@ async def test_routing(app):
 @pytest.mark.slow
 @pytest.mark.asyncio
 async def test_log_forwarder(app):
+    # Ensure the router connection/logger configuration messages are ignored.
+    await asyncio.sleep(0.1)
     handler = LogHandler()
     subscriber = await app.make_log_subscriber(handler)
-    subscriber.logger = log.get_null_logger()
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.1)
     logger = structlog.get_logger()
     await logger.debug('debug msg')
     await logger.info('info msg', x=1)
+    await logger.info('info msg', x=1, transmit=False)
     await logger.warning('warning msg')
     await logger.error('error msg')
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.1)
     assert subscriber.node.recv_count == 3
     messages = []
     while not handler.queue.empty():

@@ -385,7 +385,7 @@ class DeviceBuffer(Buffer):
         base, block_type = ctypes.addressof(block), type(block)
         for param in block.params:
             field = getattr(block_type, param.name, None)
-            if field is not None:
+            if field is not None:  # pragma: no cover; should always exist
                 param_map.set_param(param.id, base + field.offset, field.size)
         return param_map
 
@@ -588,7 +588,7 @@ class DeviceBuffer(Buffer):
             return float(self.control.interval) / 1000
 
 
-NullDevice = DeviceBuffer.make_type('NullDevice', [])
+NullDevice = DeviceBuffer.make_type('null-device', [])
 DeviceBufferKey = Union[int, DeviceUID]
 BufferKey = Union[tuple[str, int], DeviceBufferKey]
 

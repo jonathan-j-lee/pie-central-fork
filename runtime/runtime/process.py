@@ -99,12 +99,11 @@ async def run_process(process: AsyncProcessType, *, terminate_timeout: float = 2
     """
     if isinstance(process, AsyncProcess) and not process.is_alive():
         process.start()
-    proc_name = getattr(process, 'name', '(anonymous)')
-    logger = structlog.get_logger(
-        wrapper_class=structlog.stdlib.AsyncBoundLogger,
-        proc_name=proc_name,
+    logger = log.get_logger(
+        process=getattr(process, 'name', '(anonymous)'),
         pid=process.pid,
     )
+    await logger.info('Process started')
     try:
         await process.wait()
         await logger.info('Process exited normally', exit_code=process.returncode)
@@ -206,14 +205,11 @@ class Application:
     nodes: dict[str, rpc.Node] = dataclasses.field(default_factory=dict)
     logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(default_factory=log.get_logger)
 
-    def __post_init__(self, /) -> None:
-        self.logger = self.logger.bind(app=self.name)
-
     async def __aenter__(self, /) -> 'Application':
         self.configure_loop()
         await self.stack.__aenter__()
         self.stack.push_async_callback(self._terminate_zmq_context)
-        await self.make_log_publisher()
+        log.configure(fmt=self.options['log_format'], level=self.options['log_level'])
         return self
 
     async def __aexit__(
@@ -274,62 +270,75 @@ class Application:
             forwarder.bind_out(address)
         forwarder.setsockopt_in(zmq.SUBSCRIBE, b'')
         forwarder.start()
+        await asyncio.sleep(0.05)
         return forwarder
 
-    @enter_async_context
     async def make_log_publisher(self, /) -> log.LogPublisher:
         # pylint: disable=unexpected-keyword-arg; pylint does not recognize dataclass.
         node = rpc.SocketNode(
             socket_type=zmq.PUB,
             connections=frozenset({get_connection(self.options['log_backend'])}),
         )
-        publisher = log.LogPublisher(node)
+        publisher = await self.stack.enter_async_context(log.LogPublisher(node))
         log.configure(publisher, fmt=self.options['log_format'], level=self.options['log_level'])
-        self.logger = self.logger.bind()
+        self.logger = self.logger.bind(app=self.name)
+        await asyncio.sleep(0.05)
         await self.logger.info(
-            'Logging configured',
+            'Log publisher configured',
             fmt=self.options['log_format'],
-            level=self.options['log_level'],
+            min_level=self.options['log_level'],
         )
         return publisher
 
     async def make_log_subscriber(self, /, handler: rpc.Handler) -> rpc.Service:
         # pylint: disable=unexpected-keyword-arg; pylint does not recognize dataclass.
+        min_level = log.get_level_num(self.options['log_level'])
+        subscriptions = {level for level in log.LEVELS if log.get_level_num(level) >= min_level}
         node = rpc.SocketNode(
             socket_type=zmq.SUB,
             connections=frozenset({get_connection(self.options['log_frontend'])}),
+            subscriptions=subscriptions,
         )
-        return await self.make_service(handler, node)
+        return await self.make_service(handler, node, logger=log.get_null_logger())
 
     @enter_async_context
     async def make_client(self, node: Optional[rpc.Node] = None) -> rpc.Client:
+        name = f'{self.name}-client'
         if not node:
             # pylint: disable=unexpected-keyword-arg; pylint does not recognize dataclass.
             options = dict(self.options['client_option'])
-            options.setdefault(zmq.IDENTITY, f'{self.name}-client'.encode())
+            options.setdefault(zmq.IDENTITY, name.encode())
             node = rpc.SocketNode(
                 socket_type=zmq.DEALER,
                 connections=frozenset({get_connection(self.options['router_frontend'])}),
                 options=options,
             )
-        return rpc.Client(node)
+        return rpc.Client(node, logger=self.logger.bind(name=name))
 
     @enter_async_context
     async def make_service(
         self,
         handler: rpc.Handler,
         node: Optional[rpc.Node] = None,
+        logger: Optional[structlog.stdlib.AsyncBoundLogger] = None,
     ) -> rpc.Service:
+        name = f'{self.name}-service'
         if not node:
             # pylint: disable=unexpected-keyword-arg; pylint does not recognize dataclass.
             options = dict(self.options['service_option'])
-            options.setdefault(zmq.IDENTITY, f'{self.name}-service'.encode())
+            options.setdefault(zmq.IDENTITY, name.encode())
             node = rpc.SocketNode(
                 socket_type=zmq.DEALER,
                 connections=frozenset({get_connection(self.options['router_backend'])}),
                 options=options,
             )
-        return rpc.Service(node=node, handler=handler, concurrency=self.options['service_workers'])
+        logger = logger or self.logger
+        return rpc.Service(
+            node=node,
+            handler=handler,
+            concurrency=self.options['service_workers'],
+            logger=logger.bind(name=name),
+        )
 
     async def make_update_client(self, /) -> rpc.Client:
         node = rpc.DatagramNode.from_address(self.options['update_addr'], bind=False)
