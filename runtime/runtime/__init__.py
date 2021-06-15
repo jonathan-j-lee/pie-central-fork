@@ -10,13 +10,12 @@ __version__ = '0.0.1-alpha'
 
 async def main(ctx: click.Context) -> None:
     try:
-        broker_task = asyncio.create_task(broker.main(ctx, **ctx.obj.options), name='broker')
-        await asyncio.sleep(0.05)
-        await asyncio.gather(
-            broker_task,
+        tasks = {
+            asyncio.create_task(broker.main(ctx, **ctx.obj.options), name='broker'),
             process.run_process(
                 process.AsyncProcess(
-                    target=lambda: asyncio.run(device.main(**ctx.obj.options)),
+                    target=device.target,
+                    kwargs=ctx.obj.options,
                     name='device',
                 ),
             ),
@@ -36,6 +35,8 @@ async def main(ctx: click.Context) -> None:
                     name='challenge',
                 ),
             ),
-        )
+        }
+        await asyncio.sleep(0.05)
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     finally:
         buffer.BufferManager.unlink_all()

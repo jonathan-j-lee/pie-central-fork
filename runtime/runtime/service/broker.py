@@ -8,13 +8,14 @@ import dataclasses
 import functools
 import re
 import shlex
+import typing
 from typing import Any, ClassVar, Iterable, Optional, Union
 
 import click
 import orjson as json
 import structlog
 
-from .. import log, process, rpc
+from .. import api, log, process, rpc
 from ..buffer import BufferManager, DeviceBufferError, Parameter
 
 __all__ = ['Broker', 'main']
@@ -48,7 +49,9 @@ class Broker(rpc.Handler):
         f"--msg-template='{MESSAGE_TEMPLATE}'",
         '--disable=missing-module-docstring,missing-function-docstring',
     ]
-    PATCHED_SYMBOLS: ClassVar[frozenset[str]] = frozenset({'Robot', 'Gamepad'})
+    PATCHED_SYMBOLS: ClassVar[frozenset[str]] = frozenset(
+        typing.get_type_hints(api.StudentCodeModule),
+    )
 
     @functools.cached_property
     def _env_prefix(self) -> str:
@@ -208,7 +211,7 @@ class Broker(rpc.Handler):
         """Build a Smart Device update."""
         update = {}
         for uid in self.uids:
-            with contextlib.suppress(DeviceBufferError):
+            with contextlib.suppress(KeyError, DeviceBufferError):
                 update[uid] = self.buffers[int(uid)].get_update()
         return update
 
@@ -220,7 +223,7 @@ class Broker(rpc.Handler):
     async def update_uids(self) -> None:
         """Update the set of valid Smart Device UIDs."""
         try:
-            new_uids = await self.client.call.list_uids(address=b'device-service')
+            new_uids = await self.client.call.list_uids(address=b'device-service', timeout=0.2)
             self.uids.clear()
             self.uids.update(new_uids)
         except asyncio.TimeoutError as exc:
@@ -245,6 +248,7 @@ async def main(ctx: click.Context, **options: Any) -> None:
             logger=app.logger.bind(),
         )
         await app.make_service(broker)
+        await app.make_control_service(broker)
         await asyncio.gather(
             app.report_health(),
             process.spin(broker.send_update, interval=options['update_interval']),

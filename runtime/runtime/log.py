@@ -1,12 +1,11 @@
 """Runtime Logging."""
 
 import asyncio
-import collections.abc
 import contextlib
 import dataclasses
 import functools
 import logging
-from typing import Any, Callable, Literal, NoReturn, Optional, Union
+from typing import Any, Callable, Literal, MutableMapping, NoReturn, Optional, Union
 
 import orjson as json
 import structlog
@@ -26,7 +25,7 @@ __all__ = [
 ]
 
 
-Event = collections.abc.MutableMapping[str, Any]
+Event = MutableMapping[str, Any]
 ProcessorReturnType = Union[Event, str, bytes]
 Processor = Callable[[Any, str, Event], ProcessorReturnType]
 LEVELS: list[str] = ['debug', 'info', 'warn', 'error', 'critical']

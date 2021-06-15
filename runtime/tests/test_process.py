@@ -88,8 +88,8 @@ async def test_process_run():
     assert len(multiprocessing.active_children()) == 0
 
 
-def indefinite_target(handle_terminate):
-    signal.signal(signal.SIGTERM, handle_terminate)
+def indefinite_target(handle_termination):
+    signal.signal(signal.SIGTERM, handle_termination)
     while True:
         time.sleep(1)
 
@@ -143,13 +143,14 @@ async def test_loop_default_executor(app):
 
 @pytest.mark.asyncio
 async def test_loop_exc_handler(mocker, app):
-    logger = mocker.patch('structlog.stdlib.AsyncBoundLogger.error')
+    logger = mocker.patch('structlog.stdlib.BoundLogger.error')
     loop = asyncio.get_running_loop()
     loop.call_exception_handler({'message': 'fail'})
     await asyncio.sleep(0.02)
     logger.assert_called_once_with('fail')
     logger.reset_mock()
-    loop.call_exception_handler({'message': 'fail', 'future': asyncio.Future()})
+    future = asyncio.get_running_loop().create_future()
+    loop.call_exception_handler({'message': 'fail', 'future': future})
     await asyncio.sleep(0.02)
     logger.assert_called_once_with('fail', done=False)
     logger.reset_mock()

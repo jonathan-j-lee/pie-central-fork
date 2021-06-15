@@ -5,6 +5,7 @@ import collections
 import contextlib
 import dataclasses
 import functools
+import multiprocessing
 import re
 from pathlib import Path
 from typing import Any, Callable, Iterator, NamedTuple, Optional, TypeVar, Union
@@ -82,7 +83,7 @@ class Option(click.Option):
 
 
 FC = TypeVar('FC', Callable[..., Any], click.Command)
-Callback = Callable[[click.Context, click.Parameter, Any], Any]
+ParameterCallback = Callable[[click.Context, click.Parameter, Any], Any]
 
 
 class OptionGroupFactory:
@@ -98,7 +99,7 @@ class OptionGroupFactory:
 
 
 @functools.lru_cache(maxsize=64)
-def make_converter(convert: Callable[[Any], Any]) -> Callback:
+def make_converter(convert: Callable[[Any], Any]) -> ParameterCallback:
     """Make a :mod:`click` callback that applies a conversion to each option value.
 
     Works with options provided multiple times (where ``multiple=True``).
@@ -122,7 +123,11 @@ def make_converter(convert: Callable[[Any], Any]) -> Callback:
     return callback
 
 
-def make_multipart_parser(*converters: Callable[[str], Any], delimeter: str = ':') -> Callback:
+def make_multipart_parser(
+    *converters: Callable[[str], Any],
+    delimeter: str = ':',
+    match_exact: bool = True,
+) -> ParameterCallback:
     """Make a :mod:`click` callback that parses a tuple-like multipart option.
 
     Examples:
@@ -134,7 +139,7 @@ def make_multipart_parser(*converters: Callable[[str], Any], delimeter: str = ':
         >>> convert(None, None, '1')
         Traceback (most recent call last):
           ...
-        click.exceptions.BadParameter: not enough parts provided
+        click.exceptions.BadParameter: not enough or too many parts provided
         >>> convert(None, None, '1:2')
         (1, 2)
     """
@@ -142,9 +147,9 @@ def make_multipart_parser(*converters: Callable[[str], Any], delimeter: str = ':
         raise ValueError('not enough converters')
 
     def convert(element: str) -> Iterator[Any]:
-        components = element.rsplit(delimeter, maxsplit=len(converters) - 1)
-        if len(components) != len(converters):
-            raise click.BadParameter('not enough parts provided')
+        components = element.split(delimeter, maxsplit=len(converters) - 1)
+        if match_exact and len(components) != len(converters):
+            raise click.BadParameter('not enough or too many parts provided')
         for i, (converter, component) in enumerate(zip(converters, components)):
             try:
                 yield converter(component)
@@ -234,13 +239,12 @@ def parse_uid(value: str) -> int:
     )
 
 
-def load_catalog(path: Union[str, Path]) -> dict[str, type[Buffer]]:
+def load_yaml(path: Union[str, Path]) -> Any:
     try:
         with Path(path).open() as stream:
-            catalog = yaml.load(stream, Loader=yaml.SafeLoader)
-        return BufferManager.make_catalog(catalog)
+            return yaml.load(stream, Loader=yaml.SafeLoader)
     except yaml.YAMLError as exc:
-        message = f'Unable to parse device catalog ({path})'
+        message = f'Unable to parse YAML ({path})'
         mark = getattr(exc, 'problem_mark', None)
         if mark:
             # The PyYAML docs recommend this pattern: https://pyyaml.org/wiki/PyYAMLDocumentation
@@ -296,7 +300,7 @@ get_zmq_option = lambda option: getattr(zmq, option.upper())
     '--dev-catalog',
     type=click.Path(dir_okay=False, exists=True),
     default=(Path(__file__).parent / 'catalog.yaml'),
-    callback=make_converter(load_catalog),
+    callback=make_converter(load_yaml),
     show_default=True,
     help='Device catalog file.',
 )
@@ -432,7 +436,7 @@ def cli(ctx: click.Context, **options: Any) -> None:
 
 @cli.command()
 @click.pass_context
-def start(ctx: click.Context, **options: Any) -> None:
+def server(ctx: click.Context, **options: Any) -> None:
     """
     Start the Runtime daemon.
     """
@@ -458,7 +462,12 @@ def client_cli(ctx: click.Context, **options: Any) -> None:
 
 
 @cli.command()
-@click.argument('uid', callback=make_converter(parse_uid), nargs=-1)
+@click.argument(
+    'device',
+    metavar='[UID[:PARAMS]]...',
+    callback=make_multipart_parser(parse_uid, json.loads, match_exact=False),
+    nargs=-1,
+)
 @click.pass_context
 def emulate_dev(ctx: click.Context, **options: Any) -> None:
     """Emulate Smart Devices."""
@@ -471,7 +480,7 @@ def get_buf_type(
     _param: click.Parameter,
     value: str,
 ) -> type[Buffer]:
-    catalog: dict[str, type[Buffer]] = ctx.obj.options['dev_catalog']
+    catalog: dict[str, type[Buffer]] = BufferManager.make_catalog(ctx.obj.options['dev_catalog'])
     with contextlib.suppress(KeyError):
         return catalog[value]
     not_found = click.BadParameter(
@@ -551,4 +560,5 @@ def log_pager(ctx: click.Context, **options: Any) -> None:
 
 
 if __name__ == '__main__':
+    multiprocessing.set_start_method('spawn')
     cli(prog_name=f'python -m {__package__}')  # pylint: disable=no-value-for-parameter

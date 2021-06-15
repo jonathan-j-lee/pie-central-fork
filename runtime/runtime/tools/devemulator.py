@@ -1,40 +1,23 @@
 import asyncio
 import contextlib
-import ctypes
 import dataclasses
-from typing import Any, AsyncIterable, AsyncIterator, NoReturn
+from typing import Any, AsyncIterable, AsyncIterator, NoReturn, Optional
 from urllib.parse import urlsplit
 
 import click
 
 from .. import process
-from ..buffer import BufferManager, DeviceUID
+from ..buffer import BufferManager, DeviceBufferError, DeviceUID
 from ..messaging import Message, MessageType
 from ..service.device import SmartDevice
-
-_numeric_types = {
-    ctypes.c_float,
-    ctypes.c_double,
-    ctypes.c_longdouble,
-    ctypes.c_byte,
-    ctypes.c_short,
-    ctypes.c_int,
-    ctypes.c_long,
-    ctypes.c_longlong,
-    ctypes.c_ubyte,
-    ctypes.c_ushort,
-    ctypes.c_uint,
-    ctypes.c_ulong,
-    ctypes.c_ulonglong,
-    ctypes.c_size_t,
-    ctypes.c_ssize_t,
-}
 
 
 @dataclasses.dataclass
 class SmartDeviceService(SmartDevice):
     sub_task: asyncio.Future[NoReturn] = dataclasses.field(
-        default_factory=asyncio.Future[NoReturn],
+        default_factory=lambda: asyncio.get_running_loop().create_future(),
+        init=False,
+        repr=False,
     )
 
     async def _send_sub_update(self, /) -> None:
@@ -46,10 +29,8 @@ class SmartDeviceService(SmartDevice):
         with self.buffer.transaction():
             for param in self.buffer.params.values():
                 if param.writeable:
-                    if param.platform_type in _numeric_types:
-                        self.buffer.write(param.name, 0)
-                    elif param.platform_type is ctypes.c_bool:
-                        self.buffer.write(param.name, False)
+                    with contextlib.suppress(DeviceBufferError):
+                        self.buffer.write(param.name, param.default)
 
     async def _emit_responses(self, message: Message, /) -> AsyncIterable[Message]:
         if message.type in {MessageType.PING, MessageType.SUB_REQ}:
@@ -98,12 +79,15 @@ async def start_virtual_device(
     buffers: BufferManager,
     uid: int,
     options: dict[str, Any],
+    params: Optional[dict[str, Any]] = None,
     **kwargs: Any,
 ) -> AsyncIterator[set[asyncio.Task[NoReturn]]]:
     vsd_addr_parts = urlsplit(options['dev_vsd_addr'])
     reader, writer = await asyncio.open_connection(vsd_addr_parts.hostname, vsd_addr_parts.port)
     buffer = buffers.get_or_create(uid)
     buffer.uid = DeviceUID.from_int(uid)
+    for param, value in (params or {}).items():
+        buffer.set(param, value)
     device = SmartDeviceService(reader, writer, buffer, **kwargs)
     async with device.communicate() as tasks:
         poll = process.spin(device.poll_buffer, interval=options['dev_poll_interval'])
@@ -118,8 +102,17 @@ async def main(ctx: click.Context) -> None:
         buffers = app.make_buffer_manager(shared=False)
         tasks = set()
         try:
-            for uid in app.options['uid']:
-                vsd = start_virtual_device(buffers, uid, app.options, logger=app.logger.bind())
+            for uid, *parts in app.options['device']:
+                params = {}
+                if parts:
+                    params, *_ = parts
+                vsd = start_virtual_device(
+                    buffers,
+                    uid,
+                    app.options,
+                    params,
+                    logger=app.logger.bind(),
+                )
                 tasks.update(await app.stack.enter_async_context(vsd))
             await asyncio.gather(*tasks)
         except ConnectionRefusedError as exc:

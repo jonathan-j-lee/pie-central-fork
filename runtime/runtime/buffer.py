@@ -20,6 +20,8 @@ from typing import (
     ContextManager,
     Iterable,
     Iterator,
+    Mapping,
+    MutableMapping,
     NamedTuple,
     Optional,
     TypeVar,
@@ -39,6 +41,33 @@ __all__ = [
     'DeviceBuffer',
     'NullDevice',
 ]
+
+# List: https://docs.python.org/3/library/ctypes.html#fundamental-data-types
+_SIMPLE_TYPES: frozenset[type] = frozenset(
+    {
+        ctypes.c_bool,
+        ctypes.c_char,
+        ctypes.c_wchar,
+        ctypes.c_ubyte,
+        ctypes.c_byte,
+        ctypes.c_short,
+        ctypes.c_ushort,
+        ctypes.c_int,
+        ctypes.c_uint,
+        ctypes.c_long,
+        ctypes.c_ulong,
+        ctypes.c_longlong,
+        ctypes.c_ulonglong,
+        ctypes.c_size_t,
+        ctypes.c_ssize_t,
+        ctypes.c_float,
+        ctypes.c_double,
+        ctypes.c_longdouble,
+        ctypes.c_char_p,
+        ctypes.c_wchar_p,
+        ctypes.c_void_p,
+    }
+)
 
 
 class DeviceBufferError(RuntimeBaseException):
@@ -93,6 +122,17 @@ class Parameter(NamedTuple):
         if value > self.upper:
             warnings.warn(f'{self.name} value exceeded upperbound ({value} > {self.upper})')
         return max(self.lower, min(self.upper, value))
+
+    @property
+    def default(self) -> Any:
+        ctype = self.platform_type
+        if ctype not in _SIMPLE_TYPES:
+            raise DeviceBufferError(
+                'structured or vector parameters have no default',
+                name=self.name,
+                index=self.id,
+            )
+        return ctype().value
 
 
 WriteableBuffer = TypeVar('WriteableBuffer', memoryview, bytearray)
@@ -290,7 +330,7 @@ class Buffer(BaseStructure):
             shm, create_success = SharedMemory(name, create=create, size=size), True
         except FileNotFoundError as exc:
             raise DeviceBufferError(
-                'Cannot attach to nonexistent shared memory',
+                'cannot attach to nonexistent shared memory',
                 name=name,
                 create=create,
                 type=cls.__name__,
@@ -336,7 +376,7 @@ class Buffer(BaseStructure):
         """
         with self.mutex:
             if not self.valid_flag:
-                raise DeviceBufferError('buffer is marked as invalid')
+                raise DeviceBufferError('device does not exist (buffer marked as invalid)')
             yield
 
     @with_transaction
@@ -344,7 +384,10 @@ class Buffer(BaseStructure):
         try:
             return getattr(self.update_block, param)
         except AttributeError as exc:
-            raise DeviceBufferError('parameter is not readable', param=param) from exc
+            raise DeviceBufferError(
+                'parameter does not exist or is not readable',
+                param=param,
+            ) from exc
 
     @with_transaction
     def set(self, param: str, value: Any, /) -> None:
@@ -356,7 +399,10 @@ class Buffer(BaseStructure):
 
     def _set(self, block: ParameterBlock, param_name: str, value: Any, /) -> None:
         if not hasattr(block, param_name):
-            raise DeviceBufferError('parameter is not writeable', param=param_name)
+            raise DeviceBufferError(
+                'parameter does not exist or is not writeable',
+                param=param_name,
+            )
         param = self.params[param_name]
         if param.platform_type in (ctypes.c_float, ctypes.c_double):
             value = param.clamp(value)
@@ -597,19 +643,24 @@ BufferKey = Union[tuple[str, int], DeviceBufferKey]
 class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
     """Manage the lifecycle of a collection of buffers."""
 
-    catalog: collections.abc.Mapping[str, type[Buffer]]
-    buffers: dict[tuple[str, int], Buffer] = dataclasses.field(default_factory=dict)
+    catalog: Mapping[str, type[Buffer]]
+    buffers: MutableMapping[tuple[str, int], Buffer] = dataclasses.field(default_factory=dict)
     stack: contextlib.ExitStack = dataclasses.field(default_factory=contextlib.ExitStack)
     shared: bool = True
-    device_ids: dict[int, str] = dataclasses.field(default_factory=dict, init=False, repr=False)
+    device_ids: Mapping[int, str] = dataclasses.field(init=False, repr=False)
 
     def __post_init__(self) -> None:
+        self.device_ids = self._make_device_ids()
+
+    def _make_device_ids(self) -> Mapping[int, str]:
+        device_ids = {}
         for type_name, buf_type in self.catalog.items():
             device_id = getattr(buf_type, 'device_id', None)
             if device_id is not None:
-                if device_id in self.device_ids:
+                if device_id in device_ids:
                     raise DeviceBufferError('duplicate Smart Device ID', device_id=device_id)
-                self.device_ids[device_id] = type_name
+                device_ids[device_id] = type_name
+        return device_ids
 
     def __enter__(self, /) -> 'BufferManager':
         self.stack.__enter__()
@@ -625,7 +676,10 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
         return self.stack.__exit__(exc_type, exc, traceback)
 
     def __getitem__(self, key: BufferKey, /) -> Buffer:
-        return self.get_or_create(key, create=False)
+        try:
+            return self.get_or_create(key, create=False)
+        except DeviceBufferError as exc:
+            raise KeyError(str(exc)) from exc
 
     def __iter__(self, /) -> Iterator[BufferKey]:
         return iter(self.buffers)
@@ -633,26 +687,28 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
     def __len__(self, /) -> int:
         return len(self.buffers)
 
-    def _normalize_key(self, key: BufferKey, /) -> tuple[str, int]:
+    def normalize_key(self, key: BufferKey, /) -> tuple[str, int]:
         if isinstance(key, int):
-            return self._normalize_key(DeviceUID.from_int(key))
+            return self.normalize_key(DeviceUID.from_int(key))
         if isinstance(key, DeviceUID):
-            try:
-                return self.device_ids[key.device_id], int(key)
-            except KeyError as exc:
-                raise DeviceBufferError('type not found', device_id=key.device_id) from exc
+            return self.device_ids[key.device_id], int(key)
         return key
 
     @typing.overload
-    def get_or_create(self, key: DeviceBufferKey, /, *, create: bool = True) -> DeviceBuffer:
+    def get_or_create(self, key: DeviceBufferKey, /, *, create: bool = ...) -> DeviceBuffer:
         ...
 
     @typing.overload
-    def get_or_create(self, key: BufferKey, /, *, create: bool = True) -> Buffer:
+    def get_or_create(self, key: BufferKey, /, *, create: bool = ...) -> Buffer:
         ...
 
     def get_or_create(self, key: BufferKey, /, *, create: bool = True) -> Buffer:
-        type_name, uid = key = self._normalize_key(key)
+        """
+        Raises:
+            KeyError: The device ID or type name does not exist.
+            DeviceBufferError: ``create=False`` was provided, but the buffer does not exist.
+        """
+        type_name, uid = key = self.normalize_key(key)
         buffer = self.buffers.get(key)
         if not buffer:
             buffer_type = self.catalog[type_name]
@@ -661,11 +717,10 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
                     buffer_type.open(f'rt-{type_name}-{uid}', create=create),
                 )
             else:
-                if create:
-                    buffer = buffer_type.attach()
-                    buffer.valid = True
-                else:
-                    raise DeviceBufferError('local buffer not found', type=type_name, uid=uid)
+                if not create:
+                    raise DeviceBufferError('local buffer not found', type=type_name, uid=str(uid))
+                buffer = buffer_type.attach()
+                buffer.valid = True
             self.buffers[key] = buffer
             self.stack.callback(self.buffers.pop, key)
         return buffer

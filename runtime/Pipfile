@@ -47,8 +47,9 @@ client = """python -m runtime
 dev = """python -m runtime
   --debug
   --log-format pretty
-  start
+  server
 """
+prod = 'python -m runtime server'
 emulate = """python -m runtime
   --debug
   --log-format pretty

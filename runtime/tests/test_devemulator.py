@@ -53,7 +53,7 @@ async def device_manager(catalog, vsd_addr, catalog_path):
 
 @pytest.fixture
 async def upstream(device_manager, downstream):
-    await asyncio.sleep(0.02)
+    await asyncio.sleep(0.03)
     yield device_manager.devices[0xc_00_00000000_00000000].buffer
 
 
@@ -74,14 +74,14 @@ async def test_list_uids(device_manager, upstream, downstream):
 async def test_ping(device_manager, upstream, downstream):
     downstream.control.uid = DeviceUID.from_int(0xc_01_00000000_00000000)
     await device_manager.ping()
-    await asyncio.sleep(0.02)
+    await asyncio.sleep(0.03)
     assert int(upstream.uid) == 0xc_01_00000000_00000000
 
 
 @pytest.mark.asyncio
 async def test_subscription(device_manager, upstream, downstream):
     await device_manager.subscribe(str(0xc_00_00000000_00000000), interval=0.04)
-    await asyncio.sleep(0.02)
+    await asyncio.sleep(0.03)
     upstream.write('duty_cycle', 0.123)
     await asyncio.sleep(0.1)
     assert upstream.get('duty_cycle') == downstream.get('duty_cycle') == pytest.approx(0.123)
@@ -93,7 +93,7 @@ async def test_subscription(device_manager, upstream, downstream):
 @pytest.mark.asyncio
 async def test_read(device_manager, upstream, downstream):
     await device_manager.unsubscribe([str(0xc_00_00000000_00000000)])
-    await asyncio.sleep(0.02)
+    await asyncio.sleep(0.03)
     downstream.update_block.duty_cycle = 0.123
     await asyncio.sleep(0.1)
     assert upstream.get('duty_cycle') != pytest.approx(0.123)
@@ -109,7 +109,7 @@ async def test_read(device_manager, upstream, downstream):
 @pytest.mark.asyncio
 async def test_write(device_manager, upstream, downstream):
     await device_manager.unsubscribe(str(0xc_00_00000000_00000000))
-    await asyncio.sleep(0.02)
+    await asyncio.sleep(0.03)
     upstream.write('duty_cycle', 0.123)
     upstream.write('pid_pos_setpoint', 0.1)
     await asyncio.sleep(0.1)

@@ -100,7 +100,7 @@ async def device_manager(mocker, catalog, stream):
         for uid in uids:
             manager.devices[uid] = device = SmartDeviceClient(*stream)
             for method in ('ping', 'disable', 'subscribe', 'unsubscribe', 'read', 'heartbeat'):
-                result = asyncio.Future()
+                result = asyncio.get_running_loop().create_future()
                 mocker.patch.object(device, method, autospec=True).return_value = result
                 result.set_result(None)
         yield manager
@@ -117,11 +117,12 @@ async def device(stream, device_manager):
 
 def make_reads(*packets):
     reads = []
+    loop = asyncio.get_running_loop()
     for packet in packets:
-        read = asyncio.Future()
+        read = loop.create_future()
         read.set_result(packet + b'\x00')
         reads.append(read)
-    reads.append(asyncio.Future())
+    reads.append(loop.create_future())
     return reads
 
 
@@ -312,7 +313,7 @@ async def test_heartbeat(stream, device):
         heartbeat_id = message.read_hb_req()
         assert 0 <= heartbeat_id < 256
         writer.write.reset_mock()
-        reader.readuntil.return_value = result = asyncio.Future()
+        reader.readuntil.return_value = result = asyncio.get_running_loop().create_future()
         result.set_result(Message.make_hb_res(heartbeat_id))
         await device.heartbeat(heartbeat_id=heartbeat_id, timeout=0.1)
         writer.write.assert_has_calls([call(req_buf), call(b'\x00')])
@@ -331,7 +332,7 @@ async def test_heartbeat_dup_id(device):
 @pytest.mark.asyncio
 async def test_serial_disconnect(stream, device):
     reader, _ = stream
-    reader.readuntil.return_value = result = asyncio.Future()
+    reader.readuntil.return_value = result = asyncio.get_running_loop().create_future()
     result.set_exception(serial.SerialException('connection broken'))
     async with device.communicate() as tasks:
         await asyncio.gather(*tasks)

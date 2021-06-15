@@ -8,7 +8,7 @@ import zmq
 
 import runtime
 from runtime import rpc
-from runtime.__main__ import cli, load_catalog
+from runtime.__main__ import cli, load_yaml
 from runtime.buffer import BufferManager
 from runtime.service.broker import Broker
 
@@ -16,7 +16,7 @@ from runtime.service.broker import Broker
 @pytest.fixture(scope='module')
 def catalog():
     catalog_path = Path(runtime.__file__).parent / 'catalog.yaml'
-    yield load_catalog(catalog_path)
+    yield BufferManager.make_catalog(load_yaml(catalog_path))
 
 
 @pytest.fixture
@@ -30,7 +30,7 @@ def buffers(catalog):
 async def update_publisher(mocker):
     publisher = rpc.Client(rpc.SocketNode(socket_type=zmq.PUB))
     mocker.patch.object(publisher.call, 'update', autospec=True)
-    publisher.call.update.return_value = future = asyncio.Future()
+    publisher.call.update.return_value = future = asyncio.get_running_loop().create_future()
     future.set_result(None)
     yield publisher
 
@@ -47,7 +47,7 @@ async def broker(update_publisher, client, buffers):
     args = [
         '--exec-module=testcode.lint',
         '--dev-name=left_motor:309480287454862199079567360',
-        'start',
+        'server',
     ]
     with cli.make_context('cli', args) as ctx:
         ctx.obj.options.update(ctx.params)
@@ -133,7 +133,7 @@ async def test_gamepad_update(broker):
 async def test_send_update(broker):
     await broker.send_update()
     broker.update_publisher.call.update.assert_called_with({}, notification=True)
-    broker.client.call.list_uids.return_value = future = asyncio.Future()
+    broker.client.call.list_uids.return_value = future = asyncio.get_running_loop().create_future()
     future.set_result([str(0x0_00_ffffffff_ffffffff)])
     await broker.update_uids()
     await broker.send_update()
@@ -141,7 +141,7 @@ async def test_send_update(broker):
         {str(0x0000_00_ffffffff_ffffffff): {'switch0': True, 'switch1': False, 'switch2': True}},
         notification=True,
     )
-    broker.client.call.list_uids.return_value = future = asyncio.Future()
+    broker.client.call.list_uids.return_value = future = asyncio.get_running_loop().create_future()
     future.set_result([
         str(0x0000_00_ffffffff_ffffffff),
         str(0x0000_ff_ffffffff_ffffffff),

@@ -8,6 +8,9 @@ import contextlib
 import dataclasses
 import functools
 import multiprocessing
+import signal
+import socket
+import struct
 import threading
 import types
 from concurrent.futures import ThreadPoolExecutor
@@ -63,20 +66,27 @@ class AsyncProcess(multiprocessing.Process, AsyncProcessType):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         kwargs.setdefault('daemon', True)
         super().__init__(*args, **kwargs)
-        self.exited = asyncio.Event()
+        self.exited: Optional[asyncio.Event] = None
 
     async def wait(self, /) -> Optional[int]:
+        if not self.exited:
+            raise ValueError('must start process before waiting')
         await self.exited.wait()
         return self.returncode
 
-    def handle_exit(self, /) -> None:
+    def _handle_exit(self, /) -> None:
         """Callback invoked when the process has exited."""
         asyncio.get_running_loop().remove_reader(self.sentinel)
-        self.exited.set()
+        if self.exited:
+            self.exited.set()
 
     def start(self, /) -> None:
         super().start()
-        asyncio.get_running_loop().add_reader(self.sentinel, self.handle_exit)
+        # All the attributes of a ``multiprocessing.Process`` are apparently pickled with the
+        # 'spawn' start method, so we must create the ``exited`` event after the process is
+        # started, since ``asyncio.Event`` cannot be pickled (is attached to an event loop).
+        self.exited = asyncio.Event()
+        asyncio.get_running_loop().add_reader(self.sentinel, self._handle_exit)
 
     @property
     def returncode(self, /) -> Optional[int]:
@@ -114,6 +124,7 @@ async def run_process(process: AsyncProcessType, *, terminate_timeout: float = 2
             await logger.info('Terminated process cleanly', exit_code=process.returncode)
         except asyncio.TimeoutError:
             process.kill()
+            await process.wait()
             await logger.error('Killed process')
     if process.returncode == EmergencyStopException.EXIT_CODE:
         await logger.critical('Received emergency stop', exit_code=process.returncode)
@@ -218,17 +229,35 @@ class Application:
         exc: Optional[BaseException],
         traceback: Optional[types.TracebackType],
     ) -> Optional[bool]:
-        return await self.stack.__aexit__(exc_type, exc, traceback)
+        hide_exc = await self.stack.__aexit__(exc_type, exc, traceback)
+        if exc_type and issubclass(exc_type, asyncio.CancelledError):
+            await self.logger.info('Application is exiting')
+            return True
+        return hide_exc
 
     async def _terminate_zmq_context(self) -> None:
         zmq.asyncio.Context.instance().term()
-        await self.logger.info('ZMQ context terminated')
+        await self.logger.debug('ZMQ context terminated')
 
     def configure_loop(self) -> None:
         loop = asyncio.get_running_loop()
         loop.set_debug(self.options['debug'])
         loop.set_default_executor(self.executor)
         loop.set_exception_handler(self.handle_exception)
+        current_task = asyncio.current_task()
+        current_thread = threading.current_thread()
+        current_thread.name = f'{self.name}-service'
+        if current_thread is threading.main_thread() and current_task:
+            for signum in {signal.SIGINT, signal.SIGTERM}:
+                # ``asyncio.run`` will cancel all outstanding tasks and ensure they run to
+                # completion. Cancelling all tasks here, not just the main task, removes the
+                # outstanding tasks from ``asyncio.all_tasks`` and prevents ``asyncio.run`` from
+                # waiting on them.
+                loop.add_signal_handler(
+                    signum,
+                    current_task.cancel,
+                    f'received signal {signum}: {signal.strsignal(signum)}',
+                )
 
     @functools.cached_property
     def executor(self) -> ThreadPoolExecutor:
@@ -260,7 +289,13 @@ class Application:
             log_context['done'] = future.done()
             if isinstance(future, asyncio.Task):
                 log_context['task_name'] = future.get_name()
-        loop.create_task(self.logger.error(context['message'], **log_context))
+        loop.create_task(
+            asyncio.to_thread(
+                self.logger.sync_bl.error,
+                context['message'],
+                **log_context,
+            ),
+        )
 
     async def make_log_forwarder(self) -> zmq.devices.Device:
         forwarder = zmq.devices.ThreadDevice(zmq.FORWARDER, zmq.SUB, zmq.PUB)
@@ -318,6 +353,7 @@ class Application:
     @enter_async_context
     async def make_service(
         self,
+        /,
         handler: rpc.Handler,
         node: Optional[rpc.Node] = None,
         logger: Optional[structlog.stdlib.AsyncBoundLogger] = None,
@@ -344,6 +380,20 @@ class Application:
         node = rpc.DatagramNode.from_address(self.options['update_addr'], bind=False)
         return await self.make_client(node)
 
+    async def make_update_service(self, /, handler: rpc.Handler) -> rpc.Service:
+        node = rpc.DatagramNode.from_address(self.options['update_addr'], bind=True)
+        membership = struct.pack('4sl', socket.inet_aton(node.host), socket.INADDR_ANY)
+        node.options = {
+            (socket.SOL_SOCKET, socket.SO_BROADCAST, 1),
+            (socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1),
+            (socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership),
+        }
+        return await self.make_service(handler, node)
+
+    async def make_control_client(self, /) -> rpc.Client:
+        node = rpc.DatagramNode.from_address(self.options['control_addr'], bind=False)
+        return await self.make_client(node)
+
     async def make_control_service(self, /, handler: rpc.Handler) -> rpc.Service:
         node = rpc.DatagramNode.from_address(self.options['control_addr'], bind=True)
         return await self.make_service(handler, node)
@@ -353,5 +403,6 @@ class Application:
         return rpc.Router.bind(self.options['router_frontend'], self.options['router_backend'])
 
     def make_buffer_manager(self, /, *args: Any, **kwargs: Any) -> BufferManager:
-        buffers = BufferManager(self.options['dev_catalog'], *args, **kwargs)
+        catalog = BufferManager.make_catalog(self.options['dev_catalog'])
+        buffers = BufferManager(catalog, *args, **kwargs)
         return self.stack.enter_context(buffers)

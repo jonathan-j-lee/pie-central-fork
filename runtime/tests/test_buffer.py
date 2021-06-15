@@ -362,9 +362,9 @@ def test_key_equivalence(buffer_manager):
 
 
 def test_buffer_access_error(buffer_manager):
-    with pytest.raises(DeviceBufferError):
+    with pytest.raises(KeyError):
         _ = buffer_manager[0x80_00_00000000_00000000]
-    with pytest.raises(DeviceBufferError):
+    with pytest.raises(KeyError):
         buffer_manager.get_or_create(0x81_00_00000000_00000000)
     assert len(buffer_manager) == 0
 

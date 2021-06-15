@@ -22,6 +22,7 @@ DEFAULT_ADDRESSES: dict[str, str] = {
     'auto': 'executor-service',
     'teleop': 'executor-service',
     'estop': 'executor-service',
+    'execute': 'challenge-service',
 }
 
 

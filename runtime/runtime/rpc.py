@@ -200,17 +200,25 @@ class Node(abc.ABC):  # https://github.com/python/mypy/issues/5374
             raise RuntimeRPCError('node transport reopened') from exc
 
 
+SocketOptionType = tuple[int, int, Union[int, bytes]]
+
+
 @dataclasses.dataclass
 class DatagramNode(Node, asyncio.DatagramProtocol):
     """A wrapper around asyncio's datagram .
 
     Attributes:
-        options: Keyword arguments to :meth:`asyncio.AbstractEventLoop.create_datagram_endpoint`.
+        host: Hostname.
+        port: Port number.
+        bind: Whether to bind the socket to a local address or connect to a remote one.
+        options: Socket options.
         transport: The datagram transport created.
-        protocol: The datagram protocol created.
     """
 
-    options: dict[str, Any] = dataclasses.field(default_factory=dict)
+    host: str = ''
+    port: int = 8000
+    bind: bool = True
+    options: Collection[SocketOptionType] = frozenset()
     transport: Optional[asyncio.DatagramTransport] = None
 
     def datagram_received(self, data: bytes, addr: Any) -> None:
@@ -230,8 +238,15 @@ class DatagramNode(Node, asyncio.DatagramProtocol):
 
     async def open(self, /) -> None:
         loop = asyncio.get_running_loop()
-        transport, _ = await loop.create_datagram_endpoint(lambda: self, **self.options)
+        kwargs: dict[str, Any] = {
+            ('local_addr' if self.bind else 'remote_addr'): (self.host, self.port),
+            'reuse_port': True,
+        }
+        transport, _ = await loop.create_datagram_endpoint(lambda: self, **kwargs)
         self.transport = typing.cast(asyncio.DatagramTransport, transport)
+        sock = self.transport.get_extra_info('socket')
+        for level, option, value in self.options:
+            sock.setsockopt(level, option, value)
 
     def close(self, /) -> None:
         if self.transport:
@@ -246,7 +261,14 @@ class DatagramNode(Node, asyncio.DatagramProtocol):
         return True
 
     @classmethod
-    def from_address(cls, address: str, bind: bool = True, **options: Any) -> 'DatagramNode':
+    def from_address(
+        cls,
+        /,
+        address: str,
+        *,
+        bind: bool = True,
+        options: Collection[SocketOptionType] = frozenset(),
+    ) -> 'DatagramNode':
         """Build a datagram node from an address.
 
         Arguments:
@@ -259,12 +281,14 @@ class DatagramNode(Node, asyncio.DatagramProtocol):
             ValueError: If the address is not a valid UDP address.
         """
         components = urlsplit(address)
-        if components.scheme != 'udp':
+        if components.scheme != 'udp' or not components.hostname or not components.port:
             raise ValueError('must provide a UDP address')
-        address_option_name = 'local_addr' if bind else 'remote_addr'
-        options.setdefault(address_option_name, (components.hostname, components.port))
-        options.setdefault('reuse_port', True)
-        return DatagramNode(options=options)
+        return DatagramNode(
+            host=components.hostname,
+            port=components.port,
+            bind=bind,
+            options=options,
+        )
 
 
 @dataclasses.dataclass
@@ -286,7 +310,7 @@ class SocketNode(Node):
     subscriptions: set[str] = dataclasses.field(default_factory=set)
     socket: zmq.asyncio.Socket = dataclasses.field(init=False, repr=False)
     recv_task: asyncio.Future[NoReturn] = dataclasses.field(
-        default_factory=asyncio.Future[NoReturn],
+        default_factory=lambda: asyncio.get_running_loop().create_future(),
         init=False,
         repr=False,
     )
@@ -556,13 +580,17 @@ class RequestTracker(Generic[ResponseType]):
             request_id = self.generate_uid()
         elif request_id in self.futures:
             raise ValueError('request ID already exists')
-        self.futures[request_id] = asyncio.Future()
+        self.futures[request_id] = asyncio.get_running_loop().create_future()
         try:
             yield request_id, self.futures[request_id]
         finally:
             self.futures.pop(request_id, None)
 
-    def register_response(self, request_id: int, result: ResponseType) -> None:
+    def register_response(
+        self,
+        request_id: int,
+        result: Union[BaseException, ResponseType],
+    ) -> None:
         future = self.futures[request_id]
         if isinstance(result, BaseException):
             future.set_exception(result)
@@ -818,7 +846,7 @@ class Router:
     frontend: SocketNode
     backend: SocketNode
     route_task: asyncio.Future[tuple[NoReturn, NoReturn]] = dataclasses.field(
-        default_factory=asyncio.Future[tuple[NoReturn, NoReturn]],
+        default_factory=lambda: asyncio.get_running_loop().create_future(),
         init=False,
         repr=False,
     )

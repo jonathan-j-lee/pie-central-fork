@@ -23,6 +23,7 @@ from urllib.parse import urlsplit
 import serial
 import serial_asyncio as aioserial
 import structlog
+import uvloop
 from serial.tools import list_ports
 
 from .. import log, process, rpc
@@ -351,11 +352,10 @@ class SmartDeviceClient(SmartDevice):
         """
         with self.buffer.transaction():
             uid = int(self.buffer.uid)
-            self.logger = self.logger.bind(uid=uid)
+            self.logger = self.logger.bind(uid=str(uid))
             self.logger.sync_bl.info(
                 'Received subscription response',
                 type=type(self.buffer).__name__,
-                uid=uid,
                 subscription=sorted(self.buffer.subscription),
                 interval=self.buffer.interval,
             )
@@ -515,6 +515,9 @@ class SmartDeviceManager(rpc.Handler):
         device = SmartDeviceClient(reader, writer, logger=self.logger.bind(port=port_name))
         async with device.communicate() as tasks:
             uid = int(await asyncio.wait_for(device.discover(self.buffers), self.discovery_timeout))
+            if uid in self.devices:
+                await self.logger.error('Device already exists (duplicate UID)', uid=str(uid))
+                return
             self.devices[uid] = device
             await device.subscribe()
             poll = process.spin(device.poll_buffer, interval=self.poll_interval)
@@ -551,6 +554,7 @@ class SmartDeviceManager(rpc.Handler):
             reuse_port=True,
         )
         async with server:
+            await self.logger.info('Opening virtual connections', address=vsd_addr)
             await server.serve_forever()
 
 
@@ -573,3 +577,8 @@ async def main(**options: Any) -> None:
             device_manager.open_serial_devices(baudrate=options['dev_baud_rate']),
             device_manager.open_virtual_devices(options['dev_vsd_addr']),
         )
+
+
+def target(**options: Any) -> None:
+    uvloop.install()
+    asyncio.run(main(**options))
