@@ -1,11 +1,9 @@
 import asyncio
-import dataclasses
-import functools
 import multiprocessing
 import random
 import signal
-import threading
 import time
+from dataclasses import dataclass, field
 from unittest.mock import ANY
 
 import pytest
@@ -13,8 +11,8 @@ import structlog
 import zmq
 import zmq.asyncio
 
-from runtime import log, process, rpc
-from runtime.exception import RuntimeBaseException, EmergencyStopException
+from runtime import process, remote
+from runtime.exception import EmergencyStopException, RuntimeBaseException
 
 
 @pytest.fixture
@@ -41,34 +39,35 @@ async def app():
         await app.make_log_publisher()
         await app.make_router()
         yield app
-    # The log forwarder eventually exits. Because the ports are randomized, tests should not clash.
+    # The log forwarder eventually exits.
+    # Because the ports are randomized, tests should not clash.
 
 
-class MathHandler(rpc.Handler):
-    @rpc.route
+class MathHandler(remote.Handler):
+    @remote.route
     async def add(self, a: int, b: int) -> int:
         return a + b
 
 
-@dataclasses.dataclass
-class LogHandler(rpc.Handler):
-    queue: asyncio.Queue[tuple[str, dict]] = dataclasses.field(default_factory=asyncio.Queue)
+@dataclass
+class LogHandler(remote.Handler):
+    queue: asyncio.Queue[tuple[str, dict]] = field(default_factory=asyncio.Queue)
 
-    @rpc.route
+    @remote.route
     async def debug(self, event):
         await self.queue.put(event)
 
-    @rpc.route
+    @remote.route
     async def info(self, event):
         await self.queue.put(event)
 
-    @rpc.route
+    @remote.route
     async def warning(self, event):
         await self.queue.put(event)
 
 
 def test_runtime_exc_render():
-    exc = RuntimeBaseException('disconnect', error_code=0xff, device='limit-switch')
+    exc = RuntimeBaseException('disconnect', error_code=0xFF, device='limit-switch')
     exc_dup = eval(repr(exc))
     assert exc.context == exc_dup.context
 
@@ -78,8 +77,11 @@ async def test_process_run():
     def target(ready, done):
         ready.set()
         done.wait()
+
     ready, done = multiprocessing.Event(), multiprocessing.Event()
     proc = process.AsyncProcess(target=target, args=(ready, done))
+    with pytest.raises(ValueError):
+        await proc.wait()
     proc = asyncio.create_task(process.run_process(proc))
     await asyncio.to_thread(ready.wait)
     assert len(multiprocessing.active_children()) == 1
@@ -97,12 +99,12 @@ def indefinite_target(handle_termination):
 @pytest.mark.slow
 @pytest.mark.asyncio
 async def test_process_terminate():
-    proc = process.AsyncProcess(target=indefinite_target, args=(lambda *_: exit(0xf),))
+    proc = process.AsyncProcess(target=indefinite_target, args=(lambda *_: exit(0xF),))
     proc = asyncio.create_task(process.run_process(proc))
     with pytest.raises(asyncio.TimeoutError):
         await asyncio.wait_for(proc, 0.3)
     await asyncio.sleep(0.1)
-    assert await proc == 0xf
+    assert await proc == 0xF
     assert len(multiprocessing.active_children()) == 0
 
 
@@ -121,6 +123,7 @@ async def test_process_kill():
 async def test_process_estop():
     def target():
         raise EmergencyStopException
+
     proc = process.AsyncProcess(target=target)
     proc.start()
     with pytest.raises(EmergencyStopException):
@@ -154,8 +157,10 @@ async def test_loop_exc_handler(mocker, app):
     await asyncio.sleep(0.02)
     logger.assert_called_once_with('fail', done=False)
     logger.reset_mock()
+
     async def error():
         raise ValueError
+
     asyncio.create_task(error(), name='raises-error')
     await asyncio.sleep(0.02)
     logger.assert_called_once_with(
@@ -201,14 +206,14 @@ async def test_log_forwarder(app):
 @pytest.mark.asyncio
 async def test_update(app):
     client = await app.make_update_client()
-    node = rpc.DatagramNode.from_address(app.options['update_addr'], bind=True)
+    node = remote.DatagramNode.from_address(app.options['update_addr'], bind=True)
     service = await app.make_service(MathHandler(), node)
     assert await client.call.add(1, 2) == 3
 
 
 @pytest.mark.asyncio
 async def test_control(app):
-    node = rpc.DatagramNode.from_address(app.options['control_addr'], bind=False)
+    node = remote.DatagramNode.from_address(app.options['control_addr'], bind=False)
     client = await app.make_client(node)
     service = await app.make_control_service(MathHandler())
     assert await client.call.add(1, 2) == 3

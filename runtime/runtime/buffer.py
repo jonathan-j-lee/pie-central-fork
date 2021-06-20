@@ -3,7 +3,6 @@
 import collections.abc
 import contextlib
 import ctypes
-import dataclasses
 import functools
 import operator
 import re
@@ -11,6 +10,7 @@ import time
 import types
 import typing
 import warnings
+from dataclasses import dataclass, field
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import (
@@ -88,11 +88,11 @@ class Parameter(NamedTuple):
 
     @property
     def platform_type(self) -> type:
-        """Return a ``ctype`` that has the correct width to hold this parameter's values.
+        """A ``ctype`` that has the correct width to hold this parameter's values.
 
-        The type widths of Runtime's platform and the peripheral's platform may not match. This
-        method performs the conversion to ensure the space allocated in the buffer is exactly the
-        right size as the bytes emitted by the peripheral.
+        The type widths of Runtime's platform and the peripheral's platform may not
+        match. This method performs the conversion to ensure the space allocated in the
+        buffer is exactly the right size as the bytes emitted by the peripheral.
         """
         return ctypes.c_float if self.ctype is ctypes.c_double else self.ctype
 
@@ -116,11 +116,11 @@ class Parameter(NamedTuple):
         return typing.cast(type, ctype)
 
     def clamp(self, value: float) -> float:
-        """Ensure a parameter value is between the parameter's lower and upper limits."""
+        """Ensure a real value is between the parameter's lower and upper limits."""
         if value < self.lower:
-            warnings.warn(f'{self.name} value exceeded lowerbound ({value} < {self.lower})')
+            warnings.warn(f'{self.name} exceeded lowerbound ({value} < {self.lower})')
         if value > self.upper:
-            warnings.warn(f'{self.name} value exceeded upperbound ({value} > {self.upper})')
+            warnings.warn(f'{self.name} exceeded upperbound ({value} > {self.upper})')
         return max(self.lower, min(self.upper, value))
 
     @property
@@ -142,10 +142,10 @@ class BaseStructure(ctypes.LittleEndianStructure):
     """Ensure all buffers have the same endianness."""
 
     @classmethod
-    def get_field_view(cls, base_view: WriteableBuffer, field_name: str) -> WriteableBuffer:
+    def get_view(cls, base_view: WriteableBuffer, field_name: str) -> WriteableBuffer:
         """Get a memory view of a field from the structure's memory view."""
-        field = getattr(cls, field_name)
-        return base_view[field.offset : field.offset + field.size]
+        struct_field = getattr(cls, field_name)
+        return base_view[struct_field.offset : struct_field.offset + struct_field.size]
 
 
 @functools.lru_cache(maxsize=64)
@@ -171,7 +171,8 @@ class DeviceUID(BaseStructure):
     """A unique device identifier.
 
     Examples:
-        >>> assert int(DeviceUID(0xffff, 0xee, 0xc0debeef_deadbeef)) == 0xffff_ee_c0debeef_deadbeef
+        >>> uid = DeviceUID(0xffff, 0xee, 0xc0debeef_deadbeef)
+        >>> assert int(uid) == 0xffff_ee_c0debeef_deadbeef
         >>> uid = DeviceUID.from_int(0xffff_ee_c0debeef_deadbeef)
         >>> hex(uid.device_id)
         '0xffff'
@@ -197,10 +198,10 @@ class DeviceUID(BaseStructure):
     @classmethod
     def from_int(cls, uid: int) -> 'DeviceUID':
         """Parse a device UID in integer format into its constituent fields."""
-        random, uid = uid & make_bitmask(8 * cls.random.size), uid >> 8 * cls.random.size
+        rand, uid = uid & make_bitmask(8 * cls.random.size), uid >> 8 * cls.random.size
         year, uid = uid & make_bitmask(8 * cls.year.size), uid >> 8 * cls.year.size
         device_id = uid & make_bitmask(8 * cls.device_id.size)
-        return DeviceUID(device_id, year, random)
+        return DeviceUID(device_id, year, rand)
 
 
 class DeviceMetricsBlock(BaseStructure):
@@ -226,7 +227,7 @@ class DeviceControlBlock(BaseStructure):
         ('last_write', _timestamp_type),
         ('last_update', _timestamp_type),
     ]
-    interval_spec: Parameter = Parameter('interval', ctypes.c_uint16, -1, lower=40, upper=250)
+    interval_spec: Parameter = Parameter('interval', ctypes.c_uint16, -1, 40, 250)
 
 
 class ParameterBlock(BaseStructure):
@@ -255,16 +256,20 @@ DeviceBufferType = TypeVar('DeviceBufferType', bound='DeviceBuffer')
 class Buffer(BaseStructure):
     """A structure for holding peripheral data.
 
-    A buffer consists of two substructures: an _update_ block for holding current parameter values
-    (as read from the peripheral), and a _write_ block for parameter values to be written to the
-    peripheral.
+    A buffer consists of two substructures: an _update_ block for holding current
+    parameter values (as read from the peripheral), and a _write_ block for parameter
+    values to be written to the peripheral.
     """
 
     params: dict[str, Parameter]
     mutex: ContextManager[None] = contextlib.nullcontext()
 
     @classmethod
-    def attach(cls: type[BufferType], buf: Optional[WriteableBuffer] = None, /) -> BufferType:
+    def attach(
+        cls: type[BufferType],
+        buf: Optional[WriteableBuffer] = None,
+        /,
+    ) -> BufferType:
         if buf is None:
             return cls.attach(bytearray(ctypes.sizeof(cls)))
         structure = cls.from_buffer(buf)
@@ -306,24 +311,24 @@ class Buffer(BaseStructure):
 
         Arguments:
             name: The shared memory object's name.
-            create: Whether to attempt to create a new shared memory object. If ``True`` but the
-                object already exists, :meth:`open` silently attaches to the existing object.
+            create: Whether to attempt to create a new shared memory object. If ``True``
+                but the object already exists, :meth:`open` silently attaches to the
+                existing object.
 
         Returns:
-            A context manager that automatically closes the shared memory object when the exit
-            handler runs. The object is *not* unlinked, meaning other processes may still access
-            the object. To finally destroy the object, you must call :meth:`Buffer.unlink` on this
-            object's name.
+            A context manager that automatically closes the shared memory object when
+            the exit handler runs. The object is *not* unlinked, meaning other processes
+            may still access the object. To finally destroy the object, you must call
+            :meth:`Buffer.unlink` on this object's name.
 
         Raises:
-            DeviceBufferError: If ``create=False`` but the shared memory object does not exist.
+            DeviceBufferError: If ``create=False``, but the object does not exist.
 
         Note:
-            When two processes attempt to create this buffer simultaneously,
-            there is a small chance that the buffer that loses out yields its
-            view before the other process initializes the mutex. This behavior
-            is OK, since attempting to acquire an uninitialized mutex should
-            raise a ``SyncError`` with EINVAL.
+            When two processes attempt to create this buffer simultaneously, there is a
+            small chance that the buffer that loses out yields its view before the other
+            process initializes the mutex. This behavior is OK, since attempting to
+            acquire an uninitialized mutex should raise a ``SyncError`` with EINVAL.
         """
         size = Mutex.SIZE + ctypes.sizeof(cls)
         try:
@@ -350,8 +355,8 @@ class Buffer(BaseStructure):
             if create:
                 buffer.valid = False
             buffer.buf.release()
-            # pylint: disable=protected-access; there's not really a good solution without this
-            if isinstance(buffer._objects, dict):  # pragma: no cover; if ``None``, nothing to do
+            # pylint: disable=protected-access; no good alternative solution
+            if isinstance(buffer._objects, dict):  # pragma: no cover
                 buffer._objects.clear()
             shm.close()
 
@@ -359,7 +364,7 @@ class Buffer(BaseStructure):
     def unlink(cls, name: str) -> None:
         """Destroy a shared memory object.
 
-        The exact behavior depends on the platform. See :meth:`SharedMemory.unlink` for details.
+        The exact behavior depends on the platform. See :meth:`SharedMemory.unlink`.
         """
         with contextlib.suppress(FileNotFoundError):
             shm = SharedMemory(name)
@@ -370,13 +375,13 @@ class Buffer(BaseStructure):
     def transaction(self, /) -> Iterator[None]:
         """Acquire the buffer's mutex and check its valid bit.
 
-        All methods already use this reentrant context manager to guarantee consistency, but this
-        context manager may also be used to group transactions into a larger atomic transaction.
-        This avoids acquiring and releasing the mutex repeatedly.
+        All methods already use this reentrant context manager to guarantee consistency,
+        but this context manager may also be used to group transactions into a larger
+        atomic transaction. This avoids acquiring and releasing the mutex repeatedly.
         """
         with self.mutex:
             if not self.valid_flag:
-                raise DeviceBufferError('device does not exist (buffer marked as invalid)')
+                raise DeviceBufferError('device does not exist (marked as invalid)')
             yield
 
     @with_transaction
@@ -410,7 +415,7 @@ class Buffer(BaseStructure):
 
     @property
     def valid(self, /) -> bool:
-        """Whether this buffer represents a device actively sending and receiving data."""
+        """Whether this buffer represents an active device."""
         with self.mutex:
             return self.valid_flag
 
@@ -430,9 +435,10 @@ class DeviceBuffer(Buffer):
         param_map = ParameterMap()
         base, block_type = ctypes.addressof(block), type(block)
         for param in block.params:
-            field = getattr(block_type, param.name, None)
-            if field is not None:  # pragma: no cover; should always exist
-                param_map.set_param(param.id, base + field.offset, field.size)
+            struct_field = getattr(block_type, param.name, None)
+            if struct_field is not None:  # pragma: no cover; should always exist
+                offset = base + struct_field.offset
+                param_map.set_param(param.id, offset, struct_field.size)
         return param_map
 
     @functools.cached_property
@@ -452,7 +458,9 @@ class DeviceBuffer(Buffer):
         **attrs: Any,
     ) -> type[DeviceBufferType]:
         if len(params) > Message.MAX_PARAMS:
-            raise ValueError(f'Smart Devices may only have up to {Message.MAX_PARAMS} params')
+            raise ValueError(
+                f'Smart Devices may only have up to {Message.MAX_PARAMS} params'
+            )
         return super().make_type(
             name,
             params,
@@ -464,7 +472,8 @@ class DeviceBuffer(Buffer):
 
     @classmethod
     def _from_bitmap(cls, bitmap: int, /) -> frozenset[Parameter]:
-        return frozenset(param for param in cls.params.values() if (bitmap >> param.id) & 0b1)
+        params = cls.params.values()
+        return frozenset(param for param in params if (bitmap >> param.id) & 0b1)
 
     @classmethod
     def _to_bitmap(cls, params: Collection[str], /) -> int:
@@ -473,7 +482,8 @@ class DeviceBuffer(Buffer):
 
     @functools.cached_property
     def _read_mask(self, /) -> int:
-        return self._to_bitmap([param.name for param in self.params.values() if param.readable])
+        params = self.params.values()
+        return self._to_bitmap([param.name for param in params if param.readable])
 
     @with_transaction
     def set(self, param: str, value: Any, /) -> None:
@@ -521,7 +531,8 @@ class DeviceBuffer(Buffer):
 
     @with_transaction
     def emit_dev_data(self, /) -> Iterable[Message]:
-        # Subscribed parameters will be read soon anyway. This optimization deduplicates updates.
+        # Subscribed parameters will be read soon anyway.
+        # This optimization deduplicates updates.
         self.control.update &= Message.ALL_PARAMS ^ self.control.subscription
         if self.control.update:
             yield from self._emit(
@@ -570,7 +581,8 @@ class DeviceBuffer(Buffer):
 
     @with_transaction
     def get_write(self, /) -> dict[str, Any]:
-        params = set(param for param in self._from_bitmap(self.control.write) if param.writeable)
+        params = self._from_bitmap(self.control.write)
+        params = frozenset(param for param in params if param.writeable)
         self.control.write = Message.NO_PARAMS
         return {param.name: getattr(self.write_block, param.name) for param in params}
 
@@ -594,16 +606,21 @@ class DeviceBuffer(Buffer):
             subscription, self.control.interval = message.read_sub_req()
             self.control.subscription = subscription & self._read_mask
             if self.control.interval > 0:
-                self.control.interval = self.control.interval_spec.clamp(self.control.interval)
+                interval = self.control.interval_spec.clamp(self.control.interval)
+                self.control.interval = interval
         elif message.type is MessageType.SUB_RES:
-            self.control.subscription, self.control.interval, uid = message.read_sub_res()
+            (
+                self.control.subscription,
+                self.control.interval,
+                uid,
+            ) = message.read_sub_res()
             self.control.uid = DeviceUID(*uid)
 
     @property
     def uid(self) -> DeviceUID:
         with self.transaction():
-            buf = self.get_field_view(self.buf, 'control')
-            buf = self.control.get_field_view(buf, 'uid')
+            buf = self.get_view(self.buf, 'control')
+            buf = self.control.get_view(buf, 'uid')
             return DeviceUID.from_buffer_copy(buf)
 
     @uid.setter
@@ -616,7 +633,8 @@ class DeviceBuffer(Buffer):
     @property
     def subscription(self) -> frozenset[str]:
         with self.transaction():
-            return frozenset(param.name for param in self._from_bitmap(self.control.subscription))
+            params = self._from_bitmap(self.control.subscription)
+            return frozenset(param.name for param in params)
 
     @property
     def last_write(self) -> float:
@@ -637,17 +655,18 @@ class DeviceBuffer(Buffer):
 NullDevice = DeviceBuffer.make_type('null-device', [])
 DeviceBufferKey = Union[int, DeviceUID]
 BufferKey = Union[tuple[str, int], DeviceBufferKey]
+Catalog = Mapping[str, type[Buffer]]
 
 
-@dataclasses.dataclass
+@dataclass
 class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
     """Manage the lifecycle of a collection of buffers."""
 
-    catalog: Mapping[str, type[Buffer]]
-    buffers: MutableMapping[tuple[str, int], Buffer] = dataclasses.field(default_factory=dict)
-    stack: contextlib.ExitStack = dataclasses.field(default_factory=contextlib.ExitStack)
+    catalog: Catalog
+    buffers: MutableMapping[tuple[str, int], Buffer] = field(default_factory=dict)
+    stack: contextlib.ExitStack = field(default_factory=contextlib.ExitStack)
     shared: bool = True
-    device_ids: Mapping[int, str] = dataclasses.field(init=False, repr=False)
+    device_ids: Mapping[int, str] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.device_ids = self._make_device_ids()
@@ -658,7 +677,10 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
             device_id = getattr(buf_type, 'device_id', None)
             if device_id is not None:
                 if device_id in device_ids:
-                    raise DeviceBufferError('duplicate Smart Device ID', device_id=device_id)
+                    raise DeviceBufferError(
+                        'duplicate Smart Device ID',
+                        device_id=device_id,
+                    )
                 device_ids[device_id] = type_name
         return device_ids
 
@@ -695,7 +717,13 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
         return key
 
     @typing.overload
-    def get_or_create(self, key: DeviceBufferKey, /, *, create: bool = ...) -> DeviceBuffer:
+    def get_or_create(
+        self,
+        key: DeviceBufferKey,
+        /,
+        *,
+        create: bool = ...,
+    ) -> DeviceBuffer:
         ...
 
     @typing.overload
@@ -706,7 +734,7 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
         """
         Raises:
             KeyError: The device ID or type name does not exist.
-            DeviceBufferError: ``create=False`` was provided, but the buffer does not exist.
+            DeviceBufferError: If ``create=False``, but the buffer does not exist.
         """
         type_name, uid = key = self.normalize_key(key)
         buffer = self.buffers.get(key)
@@ -718,7 +746,11 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
                 )
             else:
                 if not create:
-                    raise DeviceBufferError('local buffer not found', type=type_name, uid=str(uid))
+                    raise DeviceBufferError(
+                        'local buffer not found',
+                        type=type_name,
+                        uid=str(uid),
+                    )
                 buffer = buffer_type.attach()
                 buffer.valid = True
             self.buffers[key] = buffer
@@ -738,7 +770,7 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
             yield Parameter(**param)
 
     @classmethod
-    def make_catalog(cls, catalog: dict[str, dict[str, Any]]) -> dict[str, type[Buffer]]:
+    def make_catalog(cls, catalog: dict[str, dict[str, Any]]) -> Catalog:
         catalog_types = {}
         for type_name, attrs in catalog.items():
             params = list(cls._make_params(attrs))

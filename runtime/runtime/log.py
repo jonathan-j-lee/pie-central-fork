@@ -2,17 +2,18 @@
 
 import asyncio
 import contextlib
-import dataclasses
 import functools
 import logging
+from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, MutableMapping, NoReturn, Optional, Union
 
 import orjson as json
 import structlog
 import structlog.processors
-import structlog.stdlib
+from structlog.stdlib import AsyncBoundLogger as AsyncLogger
+from structlog.stdlib import BoundLogger as Logger
 
-from . import rpc
+from . import remote
 from .exception import RuntimeBaseException
 
 __all__ = [
@@ -31,41 +32,37 @@ Processor = Callable[[Any, str, Event], ProcessorReturnType]
 LEVELS: list[str] = ['debug', 'info', 'warn', 'error', 'critical']
 
 
-def drop(_logger: structlog.stdlib.AsyncBoundLogger, _method: str, _event: Event, /) -> NoReturn:
+def drop(_logger: AsyncLogger, _method: str, _event: Event, /) -> NoReturn:
     """A simple :mod:`structlog` processor to drop all events."""
     raise structlog.DropEvent
 
 
-get_logger = rpc.get_logger
+get_logger = remote.get_logger
 
 
-def get_null_logger() -> structlog.stdlib.AsyncBoundLogger:
+def get_null_logger() -> AsyncLogger:
     """Make a logger that drops all events."""
     return get_logger(processors=[drop])
 
 
-@dataclasses.dataclass
-class LogPublisher(rpc.Client):
+@dataclass
+class LogPublisher(remote.Client):
     """An RPC client for publishing log records over the network."""
 
-    send_queue: asyncio.Queue[tuple[str, Event]] = dataclasses.field(
-        default_factory=lambda: asyncio.Queue(512)
+    send_queue: asyncio.Queue[tuple[str, Event]] = field(
+        default_factory=lambda: asyncio.Queue(512),
     )
-    loop: asyncio.AbstractEventLoop = dataclasses.field(default_factory=asyncio.get_running_loop)
+    loop: asyncio.AbstractEventLoop = field(default_factory=asyncio.get_running_loop)
 
     def __post_init__(self) -> None:
         super().__post_init__()
         self.logger = get_null_logger()
 
-    def __call__(
-        self,
-        _logger: structlog.stdlib.AsyncBoundLogger,
-        method: str,
-        event: Event,
-        /,
-    ) -> Event:
+    def __call__(self, _logger: AsyncLogger, method: str, event: Event, /) -> Event:
         if event.get('transmit', True):
-            self.loop.call_soon_threadsafe(self.send_queue.put_nowait, (method, dict(event)))
+            self.loop.call_soon_threadsafe(
+                self.send_queue.put_nowait, (method, dict(event))
+            )
         return event
 
     async def __aenter__(self) -> 'LogPublisher':
@@ -103,7 +100,7 @@ def filter_by_level(level: str) -> Processor:
     min_level = get_level_num(level)
 
     def processor(
-        _logger: structlog.stdlib.AsyncBoundLogger,
+        _logger: AsyncLogger,
         method: str,
         event: ProcessorReturnType,
         /,
@@ -115,13 +112,8 @@ def filter_by_level(level: str) -> Processor:
     return processor
 
 
-def add_exception_context(
-    _logger: structlog.stdlib.AsyncBoundLogger,
-    _method: str,
-    event: Event,
-    /,
-) -> Event:
-    """A processor to add the context of a :class:`RuntimeBaseException` to the event's context.
+def add_exception_context(_logger: AsyncLogger, _method: str, event: Event, /) -> Event:
+    """A processor to add the context of a :class:`RuntimeBaseException` to the event.
 
     The event context's entries take priority over those of the exception.
     """
@@ -152,7 +144,7 @@ def configure(
 
     structlog.configure(
         cache_logger_on_first_use=True,
-        wrapper_class=structlog.stdlib.AsyncBoundLogger,
+        wrapper_class=AsyncLogger,
         processors=[
             structlog.threadlocal.merge_threadlocal_context,
             structlog.processors.add_log_level,

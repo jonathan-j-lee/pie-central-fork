@@ -1,20 +1,17 @@
-"""Remote Procedure Calls (RPC).
+"""Remote (Procedure) Calls.
 
-In this object-oriented context, RPC is synonymous with remote method invocation (RMI).
+Much like :mod:`asyncio`'s transports and protocols, this module is divided into
+low-level and high-level APIs:
 
-Much like :mod:`asyncio`'s transports and protocols, this module is divided into low-level and
-high-level APIs:
-
-    * The low-level API, :class:`Node` and its descendents, deal with transporting discrete binary
-      messages and managing the underlying transport.
-    * The high-level API, :class:`Endpoint` and its descendents, implement request/response
-      semantics. Most consumers should use the high-level API.
+    * The low-level API, :class:`Node` and its implementations, deal with transporting
+      discrete binary messages and managing the underlying transport.
+    * The high-level API, :class:`Endpoint` and its implementations, implement
+      request/response semantics. Most consumers should use the high-level API.
 """
 
 import abc
 import asyncio
 import contextlib
-import dataclasses
 import enum
 import functools
 import inspect
@@ -22,6 +19,7 @@ import random
 import socket
 import types
 import typing
+from dataclasses import dataclass, field
 from typing import (
     Any,
     AsyncIterator,
@@ -46,7 +44,7 @@ import zmq.asyncio
 from .exception import RuntimeBaseException
 
 __all__ = [
-    'RuntimeRPCError',
+    'RemoteCallError',
     'MessageType',
     'DatagramNode',
     'SocketNode',
@@ -56,7 +54,7 @@ __all__ = [
 ]
 
 
-class RuntimeRPCError(RuntimeBaseException):
+class RemoteCallError(RuntimeBaseException):
     """General RPC error."""
 
 
@@ -87,16 +85,16 @@ def get_logger(*factory_args: Any, **context: Any) -> structlog.stdlib.AsyncBoun
     return typing.cast(structlog.stdlib.AsyncBoundLogger, logger)
 
 
-@dataclasses.dataclass  # type: ignore[misc]
+@dataclass  # type: ignore[misc]
 class Node(abc.ABC):  # https://github.com/python/mypy/issues/5374
     """An abstraction for a transceiver of discrete binary messages.
 
-    A node wraps an underlying transport, such as a UDP endpoint, that it can repeatedly open,
-    close, and reopen. :class:`Node` supports the async context manager protocol (reentrant and
-    reusable) for automatically managing the transport.
+    A node wraps an underlying transport, such as a UDP endpoint, that it can repeatedly
+    open, close, and reopen. :class:`Node` supports the async context manager protocol
+    (reentrant and reusable) for automatically managing the transport.
 
-    When the transport is open, a node can send to and receive messages from one or more peers
-    concurrently.
+    When the transport is open, a node can send to and receive messages from one or more
+    peers concurrently.
 
     State diagram::
 
@@ -110,7 +108,7 @@ class Node(abc.ABC):  # https://github.com/python/mypy/issues/5374
         recv_count: The number of messages received since the transport was opened.
     """
 
-    recv_queue: asyncio.Queue[Segments] = dataclasses.field(
+    recv_queue: asyncio.Queue[Segments] = field(
         default_factory=lambda: asyncio.Queue(128),
     )
     send_count: int = 0
@@ -136,25 +134,25 @@ class Node(abc.ABC):  # https://github.com/python/mypy/issues/5374
         """Send a message.
 
         Arguments:
-            parts: Zero or more data segments. The semantics of these segments are opaque.
-            address: The destination's address. The type depends on the underlying transport.
+            parts: Zero or more data segments. Their semantics are opaque.
+            address: The destination's address. Its type depends on the transport.
 
         Raises:
-            RuntimeRPCError: If the operation fails. May reopen the internal transport.
+            RemoteCallError: If the operation fails. May reopen the internal transport.
         """
 
     async def recv(self) -> Segments:
         """Receive a message.
 
         Returns:
-            A list of zero or more data segments and an address, which is transport-dependent.
+            Zero or more data segments and an address, which is transport-dependent.
 
         Raises:
             ValueError: If the transport cannot receive messages.
 
         Note:
-            Asking the transport directly for messages may be problematic if it is reopened or does
-            not support concurrent waiters.
+            Asking the transport directly for messages may be problematic if it is
+            reopened or does not support concurrent waiters.
         """
         if not self.can_recv:
             raise ValueError('transport does not support recv')
@@ -188,23 +186,23 @@ class Node(abc.ABC):  # https://github.com/python/mypy/issues/5374
             *exc_types: Exception types to catch.
 
         Raises:
-            RuntimeRPCError: If the transport is reopened.
+            RemoteCallError: If the transport is reopened.
         """
         if self.closed:
-            raise RuntimeRPCError('transport is closed')
+            raise RemoteCallError('transport is closed')
         exc_types = exc_types or (Exception,)
         try:
             yield
         except exc_types as exc:
             self.close()
             await self.open()
-            raise RuntimeRPCError('node transport reopened') from exc
+            raise RemoteCallError('node transport reopened') from exc
 
 
 SocketOptionType = tuple[int, int, Union[int, bytes]]
 
 
-@dataclasses.dataclass
+@dataclass
 class DatagramNode(Node, asyncio.DatagramProtocol):
     """A wrapper around asyncio's datagram .
 
@@ -229,9 +227,13 @@ class DatagramNode(Node, asyncio.DatagramProtocol):
     def connection_lost(self, exc: Optional[Exception]) -> None:
         self.close()
 
-    async def send(self, parts: list[bytes], address: Optional[tuple[str, int]] = None) -> None:
+    async def send(
+        self,
+        parts: list[bytes],
+        address: Optional[tuple[str, int]] = None,
+    ) -> None:
         if not self.transport:
-            raise RuntimeRPCError('transport is not yet open')
+            raise RemoteCallError('transport is not yet open')
         async with self.maybe_reopen():
             for part in parts:
                 self.transport.sendto(part, addr=address)
@@ -275,7 +277,8 @@ class DatagramNode(Node, asyncio.DatagramProtocol):
 
         Arguments:
             address: The address to parse, in the form "udp://[hostname[:port]]".
-            bind: True if this is a local address (socket is bound). False for a remote address.
+            bind: True if this is a local address (socket is bound). False for a remote
+                address (socket connects).
             options: Keyword options passed to
                 :meth:`asyncio.AbstractEventLoop.create_datagram_endpoint`.
 
@@ -293,36 +296,38 @@ class DatagramNode(Node, asyncio.DatagramProtocol):
         )
 
 
-@dataclasses.dataclass
+@dataclass
 class SocketNode(Node):
     """A wrapper around :class:`zmq.asyncio.Socket` for handling timeouts.
 
-    When the underlying socket of a :class:`BaseSocket` times out, the socket is closed and rebuilt
-    to reset socket's internal state. For example, a ``REQ`` socket may become stuck in the
-    "listening" state indefinitely if the message it sent gets lost.
+    When the underlying socket of a :class:`BaseSocket` times out, the socket is closed
+    and rebuilt to reset socket's internal state. For example, a ``REQ`` socket may
+    become stuck in the "listening" state indefinitely if the message it sent gets lost.
 
     .. _ZMQ Socket Options:
         http://api.zeromq.org/4-1:zmq-setsockopt
     """
 
     socket_type: int = zmq.DEALER
-    options: SocketOptions = dataclasses.field(default_factory=dict)
+    options: SocketOptions = field(default_factory=dict)
     bindings: frozenset[str] = frozenset()
     connections: frozenset[str] = frozenset()
-    subscriptions: set[str] = dataclasses.field(default_factory=set)
-    socket: zmq.asyncio.Socket = dataclasses.field(init=False, repr=False)
-    recv_task: asyncio.Future[NoReturn] = dataclasses.field(
+    subscriptions: set[str] = field(default_factory=set)
+    socket: zmq.asyncio.Socket = field(init=False, repr=False)
+    recv_task: asyncio.Future[NoReturn] = field(
         default_factory=lambda: asyncio.get_running_loop().create_future(),
         init=False,
         repr=False,
     )
 
     def __post_init__(self) -> None:
+        # TODO: remove this type coercion
         for attr in ('bindings', 'connections', 'subscriptions'):
             value = getattr(self, attr)
             if isinstance(value, str):
                 setattr(self, attr, {value})
-        self.bindings, self.connections = frozenset(self.bindings), frozenset(self.connections)
+        self.bindings = frozenset(self.bindings)
+        self.connections = frozenset(self.connections)
         if self.socket_type == zmq.SUB and not self.subscriptions:
             self.subscriptions.add('')
         if self.socket_type == zmq.DEALER:
@@ -337,7 +342,7 @@ class SocketNode(Node):
 
     async def send(self, parts: list[bytes], address: Optional[bytes] = None) -> None:
         if not address:
-            raise RuntimeRPCError('must provide an address')
+            raise RemoteCallError('must provide an address')
         async with self.maybe_reopen(zmq.error.Again):
             await self.socket.send_multipart([address, *parts])
         self.send_count += 1
@@ -345,7 +350,7 @@ class SocketNode(Node):
     async def _recv_forever(self) -> NoReturn:
         """Receive messages indefinitely and enqueue them."""
         while True:
-            with contextlib.suppress(RuntimeRPCError):
+            with contextlib.suppress(RemoteCallError):
                 async with self.maybe_reopen(zmq.error.Again):
                     sender_id, *frames = await self.socket.recv_multipart()
                     if self.socket_type == zmq.SUB:
@@ -398,9 +403,9 @@ class SocketNode(Node):
 
 
 def _check_type(node: Node, *allowed_types: int) -> None:
-    """Raise a :class:`RuntimeRPCError` if this socket type is not allowed."""
+    """Raise a :class:`RemoteCallError` if this socket type is not allowed."""
     if isinstance(node, SocketNode) and node.socket_type not in allowed_types:
-        raise RuntimeRPCError(
+        raise RemoteCallError(
             'socket type not allowed',
             socket_type=node.socket_type,
             allowed_types=allowed_types,
@@ -429,7 +434,7 @@ Method = Callable[..., Any]
 
 
 class RemoteMethod(Protocol):
-    __rpc__: str
+    __remote__: str
 
     def __call__(self, /, *args: Any, **kwargs: Any) -> Any:
         ...
@@ -451,46 +456,47 @@ def route(
     """Decorator for marking a bound method as an RPC target.
 
     Arguments:
-        method_or_name: Either the method to be registered or the name it should be registered
-            under. If the former, registered name defaults to the method name.
-        name: The name exposed to the RPC dispatcher. Useful for names that are not valid
-            Python identifiers. Defaults to the method name.
+        method_or_name: Either the method to be registered or the name it should be
+            registered under. If the former, the method name is used.
+        name: The name exposed to the RPC dispatcher. Useful for names that are not
+            valid Python identifiers. Defaults to the method name.
 
     Returns:
-        Either an identity decorator (if the method name was provided) or the method provided.
+        Either an identity decorator (if a name was provided) or the method provided.
     """
     if isinstance(method_or_name, str):
 
         def decorator(method: Callable[..., Any]) -> RemoteMethod:
             remote_method = typing.cast(RemoteMethod, method)
-            remote_method.__rpc__ = typing.cast(str, method_or_name)
+            remote_method.__remote__ = typing.cast(str, method_or_name)
             return remote_method
 
         return decorator
     remote_method = typing.cast(RemoteMethod, method_or_name)
-    remote_method.__rpc__ = method_or_name.__name__
+    remote_method.__remote__ = method_or_name.__name__
     return remote_method
 
 
-@dataclasses.dataclass  # type: ignore[misc]
+@dataclass  # type: ignore[misc]
 class Endpoint(abc.ABC):  # https://github.com/python/mypy/issues/5374
     """A source or destination of messages.
 
-    An :class:`Endpoint` has a number of workers (instances of :class:`asyncio.Task`) that listen
-    for and process incoming messages. This allows for request pipelining. Once all workers are
-    busy processing messages, the underlying ZMQ socket buffers any additional messages.
+    An :class:`Endpoint` has a number of workers (instances of :class:`asyncio.Task`)
+    that listen for and process incoming messages. This allows for request pipelining.
+    Once all workers are busy processing messages, the underlying ZMQ socket buffers any
+    additional messages.
 
     Attributes:
-        node: The message transceiver. Not all node/endpoint configurations are compatible.
+        node: The message transceiver. Not all node/endpoint pairs are compatible.
         concurrency: The number of workers.
         logger: A logger instance.
-        stack: An async exit stack for automatically cancelling workers and closing the node.
+        stack: An exit stack for automatically cancelling workers and closing the node.
     """
 
     node: Node
     concurrency: int = 1
-    stack: contextlib.AsyncExitStack = dataclasses.field(default_factory=contextlib.AsyncExitStack)
-    logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(default_factory=get_logger)
+    stack: contextlib.AsyncExitStack = field(default_factory=contextlib.AsyncExitStack)
+    logger: structlog.stdlib.AsyncBoundLogger = field(default_factory=get_logger)
 
     def __post_init__(self) -> None:
         if self.concurrency < 0:
@@ -500,7 +506,7 @@ class Endpoint(abc.ABC):  # https://github.com/python/mypy/issues/5374
         await self.stack.__aenter__()
         self.node = await self.stack.enter_async_context(self.node)
         for _ in range(self.concurrency):
-            worker = asyncio.create_task(self.process_messages_forever(), name='process-msg')
+            worker = asyncio.create_task(self._process_forever(), name='process-msg')
             self.stack.callback(worker.cancel)
         return self
 
@@ -512,7 +518,7 @@ class Endpoint(abc.ABC):  # https://github.com/python/mypy/issues/5374
     ) -> Optional[bool]:
         return await self.stack.__aexit__(exc_type, exc, traceback)
 
-    async def process_messages_forever(self, /, *, cooldown: float = 0.01) -> NoReturn:
+    async def _process_forever(self, /, *, cooldown: float = 0.01) -> NoReturn:
         """Receive messages indefinitely and process them."""
         logger = self.logger.bind()
         while True:
@@ -521,34 +527,38 @@ class Endpoint(abc.ABC):  # https://github.com/python/mypy/issues/5374
                 payload, *_ = frames
                 message_type, *message = await decode(payload)
                 message_type = MessageType(message_type)
-                await logger.debug('Endpoint received message', message_type=message_type.name)
+                await logger.debug(
+                    'Endpoint received message', message_type=message_type.name
+                )
                 await self.handle_message(address, message_type, *message)
-            except (ValueError, cbor2.CBORDecodeError, RuntimeRPCError) as exc:
+            except (ValueError, cbor2.CBORDecodeError, RemoteCallError) as exc:
                 await logger.error('Endpoint failed to process message', exc_info=exc)
                 await asyncio.sleep(cooldown)
 
     @abc.abstractmethod
-    async def handle_message(self, address: Any, message_type: MessageType, *message: Any) -> None:
+    async def handle_message(
+        self, address: Any, message_type: MessageType, *message: Any
+    ) -> None:
         """Process a message.
 
         Arguments:
-            address: The address of the message's sender, if available. The semantics depend on the
-                node. Pass this argument directly to :meth:`Node.send`.
+            address: The address of the message's sender, if available. The semantics
+                depend on the node. Pass this argument directly to :meth:`Node.send`.
             message_type: The message type.
-            *message: Other message parts. The message type determines the parts' format.
+            *message: Other message parts. The message type determines the format.
 
         Raises:
             ValueError: If the endpoint could not unpack part of the message.
-            RuntimeRPCError: If the endpoint was otherwise unable to process the message.
+            RemoteCallError: If the endpoint could not otherwise process the message.
         """
 
 
 ResponseType = TypeVar('ResponseType')
 
 
-@dataclasses.dataclass
+@dataclass
 class RequestTracker(Generic[ResponseType]):
-    futures: dict[int, asyncio.Future[ResponseType]] = dataclasses.field(default_factory=dict)
+    futures: dict[int, asyncio.Future[ResponseType]] = field(default_factory=dict)
     lower: int = 0
     upper: int = 1 << 32
 
@@ -562,10 +572,10 @@ class RequestTracker(Generic[ResponseType]):
             attempts: The maximum number of times to try to generate an ID.
 
         Raises:
-            ValueError: If the tracker could not generate a unique ID. If the ID space is
-                sufficiently large, this error is exceedingly rare. Increasing the number of
-                attempts or decreasing the number of in-flight requests should increase the
-                probability of a unique ID.
+            ValueError: If the tracker could not generate a unique ID. If the ID space
+                is sufficiently large, this error is exceedingly rare. Increasing the
+                number of attempts or decreasing the number of in-flight requests should
+                increase the probability of a unique ID.
         """
         for _ in range(attempts):
             request_id = self.generate_id()
@@ -603,7 +613,7 @@ class RequestTracker(Generic[ResponseType]):
 Call = Callable[..., Awaitable[Any]]
 
 
-@dataclasses.dataclass
+@dataclass
 class CallFactory:
     """
     A wrapper class around the call factory.
@@ -613,10 +623,11 @@ class CallFactory:
     """
 
     issue_call: Call
-    cached_partial: Callable[[str], Call] = dataclasses.field(init=False, repr=False)
+    cached_partial: Callable[[str], Call] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        self.cached_partial: Callable[[str], Call] = functools.lru_cache(maxsize=128)(self._partial)
+        make_cached = functools.lru_cache(maxsize=128)
+        self.cached_partial: Callable[[str], Call] = make_cached(self._partial)
 
     def _partial(self, method: str) -> Call:
         return functools.partial(self.issue_call, method)
@@ -628,19 +639,19 @@ class CallFactory:
         return self.cached_partial(method)
 
 
-@dataclasses.dataclass
+@dataclass
 class Client(Endpoint):
     """Issue RPC requests.
 
-    A request is matched to its response with a message ID, a 32-bit integer unique among in-flight
-    requests at any given time.
+    A request is matched to its response with a message ID, a 32-bit integer unique
+    among in-flight requests at any given time.
 
     Attributes:
-        requests: A mapping of in-flight message IDs to futures. Each future represents the outcome
-            of a call.
+        requests: A mapping of in-flight message IDs to futures. Each future represents
+            the outcome of a call.
     """
 
-    requests: RequestTracker[Any] = dataclasses.field(default_factory=RequestTracker)
+    requests: RequestTracker[Any] = field(default_factory=RequestTracker)
 
     def __post_init__(self) -> None:
         _check_type(self.node, zmq.PUB, zmq.DEALER)
@@ -648,9 +659,14 @@ class Client(Endpoint):
             self.concurrency = 0
         super().__post_init__()
 
-    async def handle_message(self, address: Any, message_type: MessageType, *message: Any) -> None:
+    async def handle_message(
+        self,
+        address: Any,
+        message_type: MessageType,
+        *message: Any,
+    ) -> None:
         if message_type is not MessageType.RESPONSE:
-            raise RuntimeRPCError(
+            raise RemoteCallError(
                 'client only receives RESPONSE messages',
                 message_type=message_type,
                 message_parts=message,
@@ -658,11 +674,11 @@ class Client(Endpoint):
         message_id, error, result = message
         if isinstance(error, list):
             error_message, context = error
-            result = RuntimeRPCError(error_message, **context)
+            result = RemoteCallError(error_message, **context)
         try:
             self.requests.register_response(message_id, result)
         except KeyError as exc:
-            raise RuntimeRPCError(
+            raise RemoteCallError(
                 'client received unexpected response',
                 message_id=message_id,
             ) from exc
@@ -681,19 +697,19 @@ class Client(Endpoint):
             method: Method name.
             *args: Method arguments.
             address: A transport-dependent address.
-            notification: False iff this call requires a response. Has no effect for nodes that
-                cannot receive data, which can *only* send notifications.
+            notification: False iff this call requires a response. Has no effect for
+                nodes that cannot receive data, which can *only* send notifications.
             timeout: Maximum duration (in seconds) to wait for a response.
 
         Note:
-            Notification calls will not raise an exception client-side if the server fails, even
-            if the node supports duplex communication.
+            Notification calls will not raise an exception client-side if the server
+            fails, even if the node supports duplex communication.
 
         Raises:
-            asyncio.TimeoutError: The request was successfully sent, but the response never arrived
-                in time.
+            asyncio.TimeoutError: The request was successfully sent, but the response
+                never arrived in time.
             ValueError: If the request tracker could not generate a unique message ID.
-            RuntimeRPCError: If the service returned an error.
+            RemoteCallError: If the service returned an error.
             cbor2.CBOREncodeError: If the arguments were not serializable.
         """
         if not self.node.can_recv:
@@ -706,12 +722,12 @@ class Client(Endpoint):
             notification=notification,
         )
         if notification:
-            message = [MessageType.NOTIFICATION.value, method, args]
-            await self.node.send([await encode(message)], address=address)
+            request = [MessageType.NOTIFICATION.value, method, args]
+            await self.node.send([await encode(request)], address=address)
         else:
             with self.requests.new_request() as (message_id, result):
-                message = [MessageType.REQUEST.value, message_id, method, args]
-                await self.node.send([await encode(message)], address=address)
+                request = [MessageType.REQUEST.value, message_id, method, args]
+                await self.node.send([await encode(request)], address=address)
                 return await asyncio.wait_for(result, timeout)
 
     @functools.cached_property
@@ -729,7 +745,10 @@ class Client(Endpoint):
 
 
 class Handler:
-    """Define a handler by subclassing :class:`Handler` and applying the :func:`route` decorator:
+    """An object whose bound methods are exposed to remote callers.
+
+    Define a handler by subclassing :class:`Handler` and applying the :func:`route`
+    decorator:
 
     >>> class CustomHandler(Handler):
     ...     @route
@@ -743,16 +762,17 @@ class Handler:
     @functools.cached_property
     def _method_table(self) -> dict[str, types.MethodType]:
         """A mapping of method names to (possibly coroutine) bound methods."""
-        # Need to use the class to avoid calling `getattr(...)` on this property, which can lead
-        # to infinite recursion.
+        # Need to use the class to avoid calling `getattr(...)` on this property.
+        # Accessing bound methods directly can lead to infinite recursion.
         funcs = inspect.getmembers(self.__class__, inspect.isfunction)
-        funcs = [(attr, func) for attr, func in funcs if hasattr(func, '__rpc__')]
-        return {func.__rpc__: getattr(self, attr) for attr, func in funcs}
+        funcs = [(attr, func) for attr, func in funcs if hasattr(func, '__remote__')]
+        return {func.__remote__: getattr(self, attr) for attr, func in funcs}
 
     async def dispatch(self, method: str, *args: Any, timeout: float = 30) -> Any:
         """Dispatch a remote procedure call.
 
-        If the method is synchronous (possibly blocking), the default executor performs the call.
+        If the method is synchronous (possibly blocking), the default executor performs
+        the call.
 
         Arguments:
             method: The procedure name.
@@ -762,11 +782,12 @@ class Handler:
             The procedure's result, which must be CBOR-serializable.
 
         Raises:
-            RuntimeRPCError: The procedure call does not exist, timed out, or raised an exception.
+            RemoteCallError: The procedure call does not exist, timed out, or raised an
+                exception.
         """
         func = self._method_table.get(method)
         if not func:
-            raise RuntimeRPCError('no such method exists', method=method)
+            raise RemoteCallError('no such method exists', method=method)
         try:
             if inspect.iscoroutinefunction(func):
                 call = func(*args)
@@ -774,12 +795,12 @@ class Handler:
                 call = asyncio.to_thread(func, *args)
             return await asyncio.wait_for(call, timeout)
         except asyncio.TimeoutError as exc:
-            raise RuntimeRPCError('method timed out', timeout=timeout) from exc
+            raise RemoteCallError('method timed out', timeout=timeout) from exc
         except Exception as exc:
-            raise RuntimeRPCError('method produced an error') from exc
+            raise RemoteCallError('method produced an error') from exc
 
 
-@dataclasses.dataclass
+@dataclass
 class Service(Endpoint):
     """Responds to RPC requests.
 
@@ -788,13 +809,15 @@ class Service(Endpoint):
         timeout: Maximum duration (in seconds) to execute methods for.
     """
 
-    handler: Handler = dataclasses.field(default_factory=Handler)
+    handler: Handler = field(default_factory=Handler)
     timeout: float = 30
 
     def __post_init__(self) -> None:
         _check_type(self.node, zmq.SUB, zmq.DEALER)
 
-    async def handle_message(self, address: Any, message_type: MessageType, *message: Any) -> None:
+    async def handle_message(
+        self, address: Any, message_type: MessageType, *message: Any
+    ) -> None:
         if message_type is MessageType.REQUEST:
             message_id, method, args = message
         elif message_type is MessageType.NOTIFICATION:
@@ -808,7 +831,7 @@ class Service(Endpoint):
         try:
             result = await self.handler.dispatch(method, *args, timeout=self.timeout)
             error = None
-        except RuntimeRPCError as exc:
+        except RemoteCallError as exc:
             result, error = None, [str(exc), exc.context]
             await self.logger.error(
                 'Service was unable to execute call',
@@ -817,8 +840,8 @@ class Service(Endpoint):
                 exc_info=exc,
             )
         if message_type is MessageType.REQUEST:
-            payload = await encode([MessageType.RESPONSE.value, message_id, error, result])
-            await self.node.send([payload], address=address)
+            response = [MessageType.RESPONSE.value, message_id, error, result]
+            await self.node.send([await encode(response)], address=address)
 
 
 def _render_id(identity: bytes) -> str:
@@ -829,28 +852,30 @@ def _render_id(identity: bytes) -> str:
     return identity.hex()
 
 
-@dataclasses.dataclass
+@dataclass
 class Router:
-    """Routes messages between :class:`Client`s and :class:`Service`s that use ZMQ sockets.
+    """Routes messages between :class:`Client`s and :class:`Service`s that use sockets.
 
-    Routers are stateless, duplex, and symmetric (*i.e.*, require the same format and exhibit the
-    same behavior on both ends).
+    Routers are stateless, duplex, and symmetric (*i.e.*, require the same format and
+    exhibit the same behavior on both ends).
 
     Routers have no error handling and may silently drop messages if the destination is
-    unreachable. Clients must rely on timeouts to determine when to consider a request failed.
+    unreachable. Clients must rely on timeouts to determine when to consider a request
+    failed.
 
     The payloads themselves are opaque to the router and are not deserialized.
 
     Attributes:
         frontend: A ``ROUTER`` socket clients connect to.
         backend: A ``ROUTER`` socket services connect to.
-        route_task: The background task performing the routing. :class:`Router` implements the
-            async context manager protocol, which automatically schedules and cancels this task.
+        route_task: The background task performing the routing. :class:`Router`
+            implements the async context manager protocol, which automatically schedules
+            and cancels this task.
     """
 
     frontend: SocketNode
     backend: SocketNode
-    route_task: asyncio.Future[tuple[NoReturn, NoReturn]] = dataclasses.field(
+    route_task: asyncio.Future[tuple[NoReturn, NoReturn]] = field(
         default_factory=lambda: asyncio.get_running_loop().create_future(),
         init=False,
         repr=False,
@@ -864,8 +889,12 @@ class Router:
         await self.frontend.__aenter__()
         await self.backend.__aenter__()
         self.route_task = asyncio.gather(
-            asyncio.create_task(self.route(self.frontend, self.backend), name='route-requests'),
-            asyncio.create_task(self.route(self.backend, self.frontend), name='route-responses'),
+            asyncio.create_task(
+                self.route(self.frontend, self.backend), name='route-requests'
+            ),
+            asyncio.create_task(
+                self.route(self.backend, self.frontend), name='route-responses'
+            ),
         )
         return self
 
@@ -889,9 +918,10 @@ class Router:
         frontend_options: Optional[SocketOptions] = None,
         backend_options: Optional[SocketOptions] = None,
     ) -> 'Router':
-        """Construct a :class:`Router` whose ends are bound to the provided addresses."""
-        # pylint: disable=unexpected-keyword-arg; pylint does not recognize dataclass.
-        frontend_options, backend_options = frontend_options or {}, backend_options or {}
+        """Construct a :class:`Router` bound to the provided addresses."""
+        # pylint: disable=unexpected-keyword-arg; dataclass not recognized
+        frontend_options = frontend_options or {}
+        backend_options = backend_options or {}
         frontend_options.setdefault(zmq.IDENTITY, b'router-frontend')
         backend_options.setdefault(zmq.IDENTITY, b'router-backend')
         return Router(
@@ -910,14 +940,16 @@ class Router:
     async def route(self, recv_socket: SocketNode, send_socket: SocketNode) -> NoReturn:
         """Route messages in one direction.
 
-        A :class:`Router` is duplex, but the frame format and implementation for each direction
-        are identical.
+        A :class:`Router` is duplex, but the frame format and implementation for each
+        direction are identical.
 
         Arguments:
-            recv_socket: The receiving socket, which indefinitely reads five-frame messages
-                consisting of the sender's ZMQ identity, the recipient's identity, and the payload,
-                with empty delimeter frames sandwiched between them.
-            send_socket: The sending socket, which simply transposes the sender/recipient ID frames.
+            recv_socket: The receiving socket, which indefinitely reads five-frame
+                messages consisting of the sender's ZMQ identity, the recipient's
+                identity, and the payload, with empty delimeter frames sandwiched
+                between them.
+            send_socket: The sending socket, which simply transposes the
+                sender/recipient ID frames.
         """
         logger = get_logger().bind(
             recv_socket=_render_id(recv_socket.identity),
@@ -940,8 +972,11 @@ class Router:
                     recipient_id=_render_id(recipient_id),
                 )
                 if sender_id == recipient_id:
-                    await logger.warn('Loopback not allowed', sender_id=_render_id(sender_id))
+                    await logger.warn(
+                        'Loopback not allowed',
+                        sender_id=_render_id(sender_id),
+                    )
                     continue
                 await send_socket.send([sender_id, payload], address=recipient_id)
-            except (ValueError, RuntimeRPCError) as exc:
+            except (ValueError, RemoteCallError) as exc:
                 await logger.error('Router failed to route message', exc_info=exc)

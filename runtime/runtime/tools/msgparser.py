@@ -62,6 +62,7 @@ def _format(buffer: Buffer, message: dict[str, Any]) -> Iterator[Message]:
         yield Message.make_hb_res(message['heartbeat_id'])
     else:
         yield Message.make_error(ErrorCode[message['error']])
+    # TODO: support error_code
 
 
 def format_message(options: dict[str, Any]) -> None:

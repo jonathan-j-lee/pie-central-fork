@@ -62,12 +62,20 @@ pager = """python -m runtime
 """
 servedocs = 'make --directory=docs livehtml'
 typecheck = 'mypy --strict --implicit-reexport runtime'
-lint = 'pylint runtime'
+lint = """bash -c '
+pylint runtime;
+pylint \\
+  --disable=redefined-outer-name \\
+  --disable=missing-module-docstring \\
+  --disable=missing-class-docstring \\
+  --disable=missing-function-docstring \\
+  tests/*.py
+'"""
 fasttest = 'pytest -m "not slow"'
 test = 'pytest -v'
 format = """bash -c '
-black --color --target-version py39 --line-length 100 --skip-string-normalization runtime stubs &&
-isort --profile black runtime stubs
+black --color --target-version py39 --skip-string-normalization runtime stubs tests/*.py &&
+isort --profile black runtime stubs tests/*.py
 '"""
 
 [pipenv]

@@ -1,14 +1,14 @@
 """Student API.
 
-Most of these interfaces are just thin wrappers around :class:`runtime.buffer.BufferManager`.
+Most of these interfaces are just wrappers around :class:`runtime.buffer.BufferManager`.
 """
 
 import abc
 import asyncio
-import dataclasses
 import enum
 import functools
 import time
+from dataclasses import dataclass, field
 from typing import (
     Any,
     Awaitable,
@@ -21,8 +21,7 @@ from typing import (
     Union,
 )
 
-import structlog
-
+from . import log
 from .buffer import Buffer, BufferKey, BufferManager, DeviceBufferError
 
 __all__ = ['safe', 'Alliance', 'Actions', 'Robot', 'Gamepad', 'Field']
@@ -51,9 +50,10 @@ class Actions(StudentAPI):
         ...     await Actions.sleep(1)
         ...     Robot.set(SERVO_UID, 'servo0', 0.5)
 
-    In this example, the robot's servo rotates 45 degrees counterclockwise from the motor's center,
-    waits one second, and then rotates 90 degrees clockwise. Actions are useful for triggering
-    time-sensitive events outside the normal ``autonomous_main`` or ``teleop_main`` functions.
+    In this example, the robot's servo rotates 45 degrees counterclockwise from the
+    motor's center, waits one second, and then rotates 90 degrees clockwise. Actions are
+    useful for triggering time-sensitive events outside the normal ``autonomous_main``
+    or ``teleop_main`` functions.
     """
 
     @staticmethod
@@ -84,12 +84,12 @@ class Actions(StudentAPI):
         """Check whether an action is already running."""
 
 
-@dataclasses.dataclass
+@dataclass
 class DeviceAPI(StudentAPI):
     """Base type for all APIs that access shared memory buffers."""
 
     buffers: BufferManager
-    logger: structlog.stdlib.BoundLogger
+    logger: log.Logger
 
     def _get_default(self, type_name: str, param: str) -> Any:
         buf_type = self.buffers.catalog[type_name]
@@ -119,18 +119,18 @@ def safe(method: Callable[..., RT]) -> Callable[..., Optional[RT]]:
     def wrapper(self: DeviceAPI, /, *args: Any, **kwargs: Any) -> Optional[RT]:
         try:
             return method(self, *args, **kwargs)
-        except Exception as exc:  # pylint: disable=broad-except; student-facing function
+        except Exception as exc:  # pylint: disable=broad-except; student-facing method
             self.logger.error(f'{method.__name__}(...) raised an error', exc_info=exc)
             return None
 
     return wrapper
 
 
-@dataclasses.dataclass
+@dataclass
 class Robot(DeviceAPI):
     """API for interacting with Smart Devices."""
 
-    names: Mapping[str, int] = dataclasses.field(default_factory=dict)
+    names: Mapping[str, int] = field(default_factory=dict)
 
     def _translate_uid(self, uid: Union[str, int]) -> int:
         if isinstance(uid, str):
@@ -156,7 +156,7 @@ class Robot(DeviceAPI):
     set_value = write
 
 
-@dataclasses.dataclass
+@dataclass
 class Gamepad(DeviceAPI):
     enabled: bool = True
 
@@ -166,7 +166,11 @@ class Gamepad(DeviceAPI):
     def get(self, param: str, index: int = 0, /) -> Any:
         if not self.enabled:
             default = self._get_default(self.TYPE_NAME, param)
-            self.logger.error('Gamepad is not enabled in autonomous', param=param, index=0)
+            self.logger.error(
+                'Gamepad is not enabled in autonomous',
+                param=param,
+                index=index,
+            )
             return default
         return self._get((self.TYPE_NAME, index), param)
 
@@ -174,11 +178,11 @@ class Gamepad(DeviceAPI):
     get_value = get
 
 
-@dataclasses.dataclass
+@dataclass
 class Field(DeviceAPI):
     """API for interacting with the field and other robots."""
 
-    start: float = dataclasses.field(default_factory=time.time)
+    start: float = field(default_factory=time.time)
 
     @property
     def _buffer(self, /) -> Buffer:
@@ -191,7 +195,7 @@ class Field(DeviceAPI):
         return Alliance(self._buffer.alliance)
 
     def clock(self, /) -> float:
-        """The number of seconds since the current match phase (autonomus/teleop) started."""
+        """The number of seconds since autonomus or teleop started."""
         return time.time() - self.start
 
     @safe
@@ -209,5 +213,5 @@ class StudentCodeModule(Protocol):
     Robot: Robot
     Gamepad: Gamepad
     Field: Field
-    # The ``print`` function is not listed here because Mypy does not yet support replacing
-    # callables: https://github.com/python/mypy/issues/708
+    # The ``print`` function is not listed here because Mypy does not yet support
+    # replacing callables: https://github.com/python/mypy/issues/708

@@ -1,23 +1,23 @@
 import asyncio
 import collections
 import contextlib
-import dataclasses
 import functools
 import sys
-from typing import Any
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import orjson as json
 import pytest
 
-from runtime import process, rpc
+from runtime import process, remote
 
 
-@dataclasses.dataclass
-class DeviceUpdateHandler(rpc.Handler):
-    updates: list[dict] = dataclasses.field(default_factory=list)
+@dataclass
+class DeviceUpdateHandler(remote.Handler):
+    updates: list[dict] = field(default_factory=list)
 
-    @rpc.route
+    @remote.route
     async def update(self, data: dict[str, dict[str, Any]]):
         self.updates.append(data)
 
@@ -33,9 +33,10 @@ async def runtime_cli(*args, **kwargs):
         *args,
         **kwargs,
     )
-    # To ensure the root runtime process reaps (possibly kills) its child processes, we set the
-    # root process's timeout above the default value. Otherwise, we may get a race where the root
-    # process is killed before its child is killed, leaking the child process.
+    # To ensure the root runtime process reaps (possibly kills) its child processes, we
+    # set the root process's timeout above the default value. Otherwise, we may get a
+    # race where the root process is killed before its child is killed, leaking the
+    # child process.
     task = asyncio.create_task(
         process.run_process(subprocess, terminate_timeout=3),
         name='runtime',
@@ -68,15 +69,15 @@ def event_loop(request):
     loop.close()
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture(autouse=True, scope='module')
 async def pager():
     async with runtime_cli('--log-format', 'pretty', 'log-pager'):
         await asyncio.sleep(0.2)
         yield
 
 
-@pytest.fixture(scope='module')
-async def server(app):
+@pytest.fixture(autouse=True, scope='module')
+async def server(pager):
     async with runtime_cli('server', stdout=asyncio.subprocess.DEVNULL):
         await asyncio.sleep(0.6)
         yield
@@ -92,13 +93,14 @@ async def devices(server):
         0x4_00_00000000_00000000,
         0x5_00_00000000_00000000,
         0x7_00_00000000_00000000,
-        0xa_00_00000000_00000000,
-        0xb_00_00000000_00000000,
-        0xc_00_00000000_00000000,
-        0xc_00_00000000_00000001,
-        0xd_00_00000000_00000000,
+        0xA_00_00000000_00000000,
+        0xB_00_00000000_00000000,
+        0xC_00_00000000_00000000,
+        0xC_00_00000000_00000001,
+        0xD_00_00000000_00000000,
     ]
-    async with runtime_cli('emulate-dev', *map(str, uids), stdout=asyncio.subprocess.DEVNULL):
+    cli = runtime_cli('emulate-dev', *map(str, uids), stdout=asyncio.subprocess.DEVNULL)
+    async with cli:
         await asyncio.sleep(0.2)
         yield
 
@@ -171,17 +173,32 @@ def assert_descending(sequence):
     assert_ascending(sequence[::-1])
 
 
+def remove_indented_blocks(lines, *, level: int = 2):
+    indent = ' ' * level
+    return [line for line in lines if line and not line.startswith(indent)]
+
+
 @pytest.mark.asyncio
-async def test_autonomous(pager, server, devices, update_handler):
+async def test_help():
+    async with runtime_cli('--help', stdout=asyncio.subprocess.PIPE) as (_, subprocess):
+        stdout, _ = await subprocess.communicate()
+        help_text = stdout.decode().splitlines()
+    with (Path(__file__).parent / 'cli-help.txt').open() as cli_help:
+        help_template = [line.strip('\n') for line in cli_help.readlines()]
+    assert remove_indented_blocks(help_text) == remove_indented_blocks(help_template)
+
+
+@pytest.mark.asyncio
+async def test_autonomous(devices, update_handler):
     async with runtime_cli('client', 'auto') as (task, _):
         await task
     await asyncio.sleep(2.5)
     updates = list(update_handler.updates)
     params = get_params(updates)
-    left_cycle = params[str(0xc_00_00000000_00000000), 'duty_cycle']
-    right_cycle = params[str(0xc_00_00000000_00000001), 'duty_cycle']
-    assert len(left_cycle) > 0.5*len(updates)
-    assert len(right_cycle) > 0.5*len(updates)
+    left_cycle = params[str(0xC_00_00000000_00000000), 'duty_cycle']
+    right_cycle = params[str(0xC_00_00000000_00000001), 'duty_cycle']
+    assert len(left_cycle) > 0.5 * len(updates)
+    assert len(right_cycle) > 0.5 * len(updates)
     assert_ascending(left_cycle)
     assert_descending(right_cycle)
     assert max(left_cycle) > 0.9
@@ -191,7 +208,7 @@ async def test_autonomous(pager, server, devices, update_handler):
 
 
 @pytest.mark.asyncio
-async def test_teleop(pager, server, devices, update_handler, control_client):
+async def test_teleop(devices, update_handler, control_client):
     async with runtime_cli('client', 'teleop') as (task, _):
         await task
     duty_cycle = 0
@@ -211,33 +228,33 @@ async def test_teleop(pager, server, devices, update_handler, control_client):
     await asyncio.sleep(0.2)  # Wait for the last updates to come in.
     updates = list(update_handler.updates)
     params = get_params(updates)
-    left_cycle = strip(params[str(0xc_00_00000000_00000000), 'duty_cycle'])
-    right_cycle = strip(params[str(0xc_00_00000000_00000001), 'duty_cycle'])
+    left_cycle = strip(params[str(0xC_00_00000000_00000000), 'duty_cycle'])
+    right_cycle = strip(params[str(0xC_00_00000000_00000001), 'duty_cycle'])
     assert_ascending(left_cycle)
     assert_descending(right_cycle)
     assert max(left_cycle) > 0.9
     assert min(left_cycle) < 0.6
     assert min(right_cycle) < -0.9
     assert max(right_cycle) > -0.6
-    left_deadband = params[str(0xc_00_00000000_00000000), 'deadband']
+    left_deadband = params[str(0xC_00_00000000_00000000), 'deadband']
     assert min(left_deadband) == pytest.approx(0)
     assert max(left_deadband) == pytest.approx(0.1)
 
 
 @pytest.mark.asyncio
-async def test_challenge(pager, server):
+async def test_challenge():
     requests = [{'func': 'fib', 'args': [20]}, {'func': 'fib', 'args': [21]}]
     assert await runtime_client('execute', requests, True) == [6765, 10946]
 
 
 @pytest.mark.asyncio
-async def test_live_student_code(pager, server, move_module):
+async def test_live_student_code(move_module):
     requests = [{'func': 'challenge', 'args': [1]}]
     assert await runtime_client('execute', requests, True) == [2]
 
 
 @pytest.mark.asyncio
-async def test_device_disconnect(pager, server):
+async def test_device_disconnect():
     start_limit_switch = functools.partial(
         runtime_cli,
         'emulate-dev',

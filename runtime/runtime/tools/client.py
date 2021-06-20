@@ -1,10 +1,6 @@
-import asyncio
-
-import cbor2
 import click
 
 from .. import process
-from ..rpc import RuntimeRPCError
 
 DEFAULT_ADDRESSES: dict[str, str] = {
     'get_option': 'broker-service',
@@ -41,5 +37,5 @@ async def main(ctx: click.Context) -> None:
                 notification=app.options['notification'],
             )
             await app.logger.info('Remote call succeeded', result=result)
-        except (asyncio.TimeoutError, ValueError, RuntimeRPCError, cbor2.CBOREncodeError) as exc:
+        except Exception as exc:
             await app.logger.error('Remote call failed', exc_info=exc)

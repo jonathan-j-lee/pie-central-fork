@@ -3,13 +3,12 @@ from pathlib import Path
 
 import click
 import pytest
-import structlog
 import zmq
 
 import runtime
-from runtime import rpc
-from runtime.__main__ import cli, load_yaml
+from runtime import remote
 from runtime.buffer import BufferManager
+from runtime.cli import cli, load_yaml
 from runtime.service.broker import Broker
 
 
@@ -28,16 +27,17 @@ def buffers(catalog):
 
 @pytest.fixture
 async def update_publisher(mocker):
-    publisher = rpc.Client(rpc.SocketNode(socket_type=zmq.PUB))
+    publisher = remote.Client(remote.SocketNode(socket_type=zmq.PUB))
     mocker.patch.object(publisher.call, 'update', autospec=True)
-    publisher.call.update.return_value = future = asyncio.get_running_loop().create_future()
+    future = asyncio.get_running_loop().create_future()
+    publisher.call.update.return_value = future
     future.set_result(None)
     yield publisher
 
 
 @pytest.fixture
 async def client(mocker):
-    client = rpc.Client(rpc.SocketNode(socket_type=zmq.DEALER))
+    client = remote.Client(remote.SocketNode(socket_type=zmq.DEALER))
     mocker.patch.object(client.call, 'list_uids', autospec=True)
     yield client
 
@@ -52,12 +52,12 @@ async def broker(update_publisher, client, buffers):
     with cli.make_context('cli', args) as ctx:
         ctx.obj.options.update(ctx.params)
         broker = Broker(ctx, update_publisher, client, buffers)
-        limit_switch = broker.buffers.get_or_create(0x0000_00_ffffffff_ffffffff)
+        limit_switch = broker.buffers.get_or_create(0x0000_00_FFFFFFFF_FFFFFFFF)
         limit_switch.set('switch0', True)
         limit_switch.set('switch1', False)
         limit_switch.set('switch2', True)
         broker.buffers.stack.close()
-        broker.buffers[0x0000_00_ffffffff_ffffffff].valid = True
+        broker.buffers[0x0000_00_FFFFFFFF_FFFFFFFF].valid = True
         yield broker
 
 
@@ -69,7 +69,8 @@ async def test_option(broker):
     options = await broker.get_option()
     assert options['exec_module'] == 'testcode'
     assert options['router_backend'] == ['ipc:///tmp/rt.sock']
-    await broker.set_option({'router_backend': [], 'help': True, 'version': True, 'debug': False})
+    options = {'router_backend': [], 'help': True, 'version': True, 'debug': False}
+    await broker.set_option(options)
     router_backends = sorted(await broker.get_option('router_frontend'))
     assert router_backends == sorted({'tcp://*:6000', 'ipc:///tmp/rt-rpc.sock'})
     with pytest.raises(click.BadParameter):
@@ -133,23 +134,30 @@ async def test_gamepad_update(broker):
 async def test_send_update(broker):
     await broker.send_update()
     broker.update_publisher.call.update.assert_called_with({}, notification=True)
-    broker.client.call.list_uids.return_value = future = asyncio.get_running_loop().create_future()
-    future.set_result([str(0x0_00_ffffffff_ffffffff)])
+    future = asyncio.get_running_loop().create_future()
+    broker.client.call.list_uids.return_value = future
+    future.set_result([str(0x0_00_FFFFFFFF_FFFFFFFF)])
+    await broker.update_uids()
+    await broker.send_update()
+    update = {
+        str(0x0000_00_FFFFFFFF_FFFFFFFF): {
+            'switch0': True,
+            'switch1': False,
+            'switch2': True,
+        },
+    }
+    broker.update_publisher.call.update.assert_called_with(update, notification=True)
+    future = asyncio.get_running_loop().create_future()
+    broker.client.call.list_uids.return_value = future
+    uids = [
+        str(0x0000_00_FFFFFFFF_FFFFFFFF),
+        str(0x0000_FF_FFFFFFFF_FFFFFFFF),
+        str(0xFFFF_FF_FFFFFFFF_FFFFFFFF),
+    ]
+    future.set_result(uids)
     await broker.update_uids()
     await broker.send_update()
     broker.update_publisher.call.update.assert_called_with(
-        {str(0x0000_00_ffffffff_ffffffff): {'switch0': True, 'switch1': False, 'switch2': True}},
-        notification=True,
-    )
-    broker.client.call.list_uids.return_value = future = asyncio.get_running_loop().create_future()
-    future.set_result([
-        str(0x0000_00_ffffffff_ffffffff),
-        str(0x0000_ff_ffffffff_ffffffff),
-        str(0xffff_ff_ffffffff_ffffffff),
-    ])
-    await broker.update_uids()
-    await broker.send_update()
-    broker.update_publisher.call.update.assert_called_with(
-        {str(0x0000_00_ffffffff_ffffffff): {}},
+        {str(0x0000_00_FFFFFFFF_FFFFFFFF): {}},
         notification=True,
     )

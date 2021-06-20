@@ -3,7 +3,6 @@
 import abc
 import asyncio
 import contextlib
-import dataclasses
 import functools
 import importlib
 import inspect
@@ -14,6 +13,7 @@ import time
 import types
 import typing
 import warnings
+from dataclasses import InitVar, dataclass, field
 from typing import (
     Any,
     Awaitable,
@@ -30,7 +30,7 @@ from typing import (
 import structlog
 import uvloop
 
-from .. import api, log, process, rpc
+from .. import api, log, process, remote
 from ..buffer import BufferManager
 from ..exception import EmergencyStopException, RuntimeBaseException
 
@@ -116,13 +116,13 @@ def run_periodically(
     func: Callable[..., Any],
     *args: Any,
     timeout: float = 1,
-    predicate: Callable[[], bool] = lambda: True,  # pragma: no cover; trivial default value
+    predicate: Callable[[], bool] = lambda: True,  # pragma: no cover; trivial default
 ) -> None:
     """Run a synchronous function periodically.
 
-    Use this function instead of calling :func:`run_once` many times. The timing will be much more
-    regular and experience less clock drift since this function takes advantage of built-in
-    interval timer functionality.
+    Use this function instead of calling :func:`run_once` many times. The timing will be
+    much more regular and experience less clock drift since this function takes
+    advantage of built-in interval timer functionality.
 
     Raises:
         signal.ItimerError: If the timer was unable to be set.
@@ -132,8 +132,8 @@ def run_periodically(
         while predicate():
             try:
                 func(*args)
-                # Sleep for the rest of the interval to ensure a ``TimeoutError`` is raised, which
-                # is the expected behavior.
+                # Sleep for the rest of the interval to ensure a ``TimeoutError`` is
+                # raised, which is the expected behavior.
                 time.sleep(timeout)
             except TimeoutError:
                 pass
@@ -147,14 +147,16 @@ class ExecutionRequest(NamedTuple):
     Attributes:
         func: The callable. May or may be a coroutine function.
         args: Positonal arguments to pass to :attr:`func`.
-        timeout: If the request is not periodic, the timeout is the maximum number of seconds the
-            callable should run for. If the request is periodic, the timeout is the interval
-            between invocations.
-        periodic: Whether the callable should be invoked once or repeatedly at a fixed rate.
+        timeout: If the request is not periodic, the timeout is the maximum number of
+            seconds the callable should run for. If the request is periodic, the timeout
+            is the interval between invocations.
+        periodic: Whether the callable should be invoked once or repeatedly at a fixed
+            rate.
     """
 
-    # Generic named tuples are not yet supported (https://github.com/python/mypy/issues/685), so
-    # we cannot yet specify ``func``'s return type as a type parameter.
+    # Generic named tuples are not yet supported, so we cannot yet specify ``func``'s
+    # return type as a type parameter.
+    # https://github.com/python/mypy/issues/685
     func: Callable[..., Optional[Awaitable[None]]] = lambda: None
     args: Sequence[Any] = ()
     timeout: float = 1
@@ -172,7 +174,7 @@ class ExecutionRequest(NamedTuple):
 
 
 # Sentinel values representing cancellation/stop requests.
-# You must compare requests against these constants by *identity*, not value.
+# Must compare requests against these constants by *identity*, not value.
 CANCEL_REQUEST = ExecutionRequest()
 STOP_REQUEST = ExecutionRequest()
 
@@ -191,9 +193,10 @@ class Executor(abc.ABC):
             ExecutionError: If the callable was unable to be scheduled.
 
         Note:
-            This method should be thread-safe but is allowed to block. The order in which callables
-            are registered may or may not be meaningful. They may be executed in the order in which
-            they were registered, or they may execute concurrently.
+            This method should be thread-safe but is allowed to block. The order in
+            which callables are registered may or may not be meaningful. They may be
+            executed in the order in which they were registered, or they may execute
+            concurrently.
         """
 
     def cancel(self, /) -> None:
@@ -206,25 +209,25 @@ class Executor(abc.ABC):
 
     @abc.abstractmethod
     def execute_forever(self, /) -> None:
-        """Execute callables indefinitely (blocking method) until :meth:`stop` is called."""
+        """Execute callables indefinitely (blocking) until :meth:`stop` is called."""
 
 
-@dataclasses.dataclass
+@dataclass
 class SyncExecutor(Executor):
-    """An executor that executes synchronous functions, using alarm signals for timeouts.
+    """An executor that executes synchronous functions, using alarms for timeouts.
 
-    A synchronous executor may only run in the main thread because the main thread executes signal
-    handlers. Synchronous handlers rely on the ``SIGALRM`` handler to raise an exception that will
-    interrupt code that reaches a timeout.
+    A synchronous executor may only run in the main thread because the main thread
+    executes signal handlers. Synchronous handlers rely on the ``SIGALRM`` handler to
+    raise an exception that will interrupt code that reaches a timeout.
 
     Attributes:
         requests: A synchronous queue of execution requests.
     """
 
-    requests: queue.Queue[ExecutionRequest] = dataclasses.field(
+    requests: queue.Queue[ExecutionRequest] = field(
         default_factory=lambda: queue.Queue(128),
     )
-    logger: structlog.stdlib.BoundLogger = dataclasses.field(default_factory=structlog.get_logger)
+    logger: log.Logger = field(default_factory=structlog.get_logger)
 
     def schedule(self, /, request: ExecutionRequest) -> None:
         self.requests.put(request)
@@ -270,7 +273,7 @@ class SyncExecutor(Executor):
                     request.set_result(exc)
 
 
-@dataclasses.dataclass
+@dataclass
 class AsyncExecutor(Executor, api.Actions):
     """An executor that executes coroutine functions.
 
@@ -279,9 +282,10 @@ class AsyncExecutor(Executor, api.Actions):
         requests: An async queue of execution requests.
         max_actions: The maximum number of concurrently running tasks.
         requests_size: The size of the requests queue.
-        running_actions: Maps coroutine functions to their running task instances. For resource
-            contention reasons, only one task instance may exist at a time per coroutine function.
-            Once a task completes, its entry is removed from this mapping.
+        running_actions: Maps coroutine functions to their running task instances. For
+            resource contention reasons, only one task instance may exist at a time per
+            coroutine function. Once a task completes, its entry is removed from this
+            mapping.
         debug: ``asyncio`` debug flag.
         executor: ``asyncio`` executor for dispatching synchronous tasks.
     """
@@ -290,9 +294,11 @@ class AsyncExecutor(Executor, api.Actions):
     requests: Optional[asyncio.Queue[ExecutionRequest]] = None
     max_actions: int = 128
     requests_size: int = 128
-    running_actions: dict[api.Action, asyncio.Task[None]] = dataclasses.field(default_factory=dict)
+    running_actions: dict[api.Action, asyncio.Task[None]] = field(
+        default_factory=dict,
+    )
     configure_loop: Callable[[], None] = lambda: None
-    logger: structlog.stdlib.BoundLogger = dataclasses.field(default_factory=structlog.get_logger)
+    logger: log.Logger = field(default_factory=structlog.get_logger)
 
     def schedule(self, /, request: ExecutionRequest) -> None:
         if not self.loop or not self.requests:
@@ -314,9 +320,13 @@ class AsyncExecutor(Executor, api.Actions):
         self.running_actions.pop(action, None)
         try:
             request.set_result(future.result())
-        except Exception as exc:  # pylint: disable=broad-except; exception is not suppressed.
+        except Exception as exc:  # pylint: disable=broad-except; exception handled
             asyncio.get_running_loop().create_task(
-                asyncio.to_thread(self.logger.error, 'Action produced an error', exc_info=exc),
+                asyncio.to_thread(
+                    self.logger.error,
+                    'Action produced an error',
+                    exc_info=exc,
+                )
             )
             request.set_result(exc)
 
@@ -389,27 +399,28 @@ class AsyncExecutor(Executor, api.Actions):
         return action in self.running_actions
 
 
-@dataclasses.dataclass
-class Dispatcher(rpc.Handler):
+@dataclass
+class Dispatcher(remote.Handler):
     """An RPC handler to forward execution requests to the executors.
 
     Attributes:
-        timeouts: Maps patterns that match function names to the timeout duration (in seconds).
+        timeouts: Maps function name patterns to a timeout duration (in seconds).
         student_code: Student code module.
-        sync_exec: An synchronous executor for executing the ``*_setup`` and ``*_main`` functions.
+        sync_exec: An synchronous executor for executing the ``*_setup`` and ``*_main``
+            functions.
         async_exec: An asynchronous executor for executing actions.
         buffers: Buffer manager.
     """
 
     buffers: BufferManager
-    student_code_name: dataclasses.InitVar[str] = 'studentcode'
-    timeouts: Mapping[Pattern[str], float] = dataclasses.field(default_factory=dict)
-    names: Mapping[str, int] = dataclasses.field(default_factory=dict)
-    student_code: types.ModuleType = dataclasses.field(init=False)
-    sync_exec: SyncExecutor = dataclasses.field(default_factory=SyncExecutor)
-    async_exec: AsyncExecutor = dataclasses.field(default_factory=AsyncExecutor)
-    client: Optional[rpc.Client] = None
-    logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(default_factory=log.get_logger)
+    student_code_name: InitVar[str] = 'studentcode'
+    timeouts: Mapping[Pattern[str], float] = field(default_factory=dict)
+    names: Mapping[str, int] = field(default_factory=dict)
+    student_code: types.ModuleType = field(init=False)
+    sync_exec: SyncExecutor = field(default_factory=SyncExecutor)
+    async_exec: AsyncExecutor = field(default_factory=AsyncExecutor)
+    client: Optional[remote.Client] = None
+    logger: log.AsyncLogger = field(default_factory=log.get_logger)
 
     def __post_init__(self, /, student_code_name: str) -> None:
         self.student_code = types.ModuleType(student_code_name)
@@ -444,7 +455,8 @@ class Dispatcher(rpc.Handler):
         )
         student_code.Field = api.Field(self.buffers, self.logger.sync_bl)
         student_code.print = self._print  # type: ignore[attr-defined]
-        self.logger.sync_bl.info('Student code reloaded', student_code=self.student_code.__name__)
+        module_name = self.student_code.__name__
+        self.logger.sync_bl.info('Student code reloaded', student_code=module_name)
 
     def prepare_student_code_run(
         self,
@@ -454,20 +466,25 @@ class Dispatcher(rpc.Handler):
     ) -> None:
         """Prepare to run student code.
 
-        Reload the student code module, then enqueue execution requests for the module's functions.
+        Reload the student code module, then enqueue execution requests for the module's
+        functions.
 
         Arguments:
-            requests: A list of keyword arguments to :class:`ExecutionRequest`. However, the
-                ``func`` argument should be a string naming a function in the student code module.
-                Also, if ``timeout`` is not present, this method matches each function name against
-                patterns in :attr:`timeouts` to find the timeout.
+            requests: A list of keyword arguments to :class:`ExecutionRequest`. However,
+                the ``func`` argument should be a string naming a function in the
+                student code module. Also, if ``timeout`` is not present, this method
+                matches each function name against patterns in :attr:`timeouts` to find
+                the timeout.
         """
         self.reload(enable_gamepads=enable_gamepads)
         for request in requests:
             func_name = request['func']
             request['func'] = func = getattr(self.student_code, func_name, None)
             if not callable(func) or inspect.iscoroutinefunction(func):
-                self.logger.sync_bl.error('Must provide a regular function', func=func_name)
+                self.logger.sync_bl.error(
+                    'Must provide a regular function',
+                    func=func_name,
+                )
                 continue
             if 'timeout' not in request:
                 for pattern, timeout in self.timeouts.items():
@@ -476,7 +493,7 @@ class Dispatcher(rpc.Handler):
                         break
             self.sync_exec.schedule(ExecutionRequest(**request))
 
-    @rpc.route
+    @remote.route
     async def execute(
         self,
         /,
@@ -497,7 +514,7 @@ class Dispatcher(rpc.Handler):
         )
         return list(await asyncio.gather(*futures)) if block else []
 
-    @rpc.route
+    @remote.route
     async def idle(self, /) -> None:
         """Suspend all execution (synchronous and asynchronous)."""
         suppress = contextlib.suppress(ExecutionError)
@@ -508,19 +525,22 @@ class Dispatcher(rpc.Handler):
         if self.client:
             await self.client.call.disable(address=b'device-service')
 
-    @rpc.route
+    @remote.route
     async def auto(self, /) -> None:
         """Enter autonomous mode."""
-        requests = [{'func': 'autonomous_setup'}, {'func': 'autonomous_main', 'periodic': True}]
+        requests = [
+            {'func': 'autonomous_setup'},
+            {'func': 'autonomous_main', 'periodic': True},
+        ]
         await self.execute(requests, enable_gamepads=False)
 
-    @rpc.route
+    @remote.route
     async def teleop(self, /) -> None:
         """Enter teleop mode."""
         requests = [{'func': 'teleop_setup'}, {'func': 'teleop_main', 'periodic': True}]
         await self.execute(requests)
 
-    @rpc.route
+    @remote.route
     def estop(self, /) -> None:
         """Raise an emergency stop exception."""
         self.sync_exec.schedule(ExecutionRequest(_estop))

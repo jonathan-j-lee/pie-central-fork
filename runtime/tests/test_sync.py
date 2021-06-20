@@ -1,10 +1,12 @@
 import ctypes
 import errno
 import multiprocessing
-from multiprocessing.shared_memory import SharedMemory
 import time
+from multiprocessing.shared_memory import SharedMemory
+
 import pytest
-from runtime.sync import SyncError, Mutex
+
+from runtime.sync import Mutex, SyncError
 
 
 @pytest.fixture
@@ -29,6 +31,7 @@ def shared_mutex():
 @pytest.fixture
 def locking_peer(shared_mutex):
     acquired, done = multiprocessing.Event(), multiprocessing.Event()
+
     def target(acquired, done):
         shm = SharedMemory('mutex')
         mutex = Mutex(shm.buf)
@@ -36,6 +39,7 @@ def locking_peer(shared_mutex):
             acquired.set()
             done.wait(3)
         shm.close()
+
     peer = multiprocessing.Process(target=target, args=(acquired, done), daemon=True)
     peer.start()
     acquired.wait(3)
@@ -88,6 +92,7 @@ def test_nonowner_release(shared_mutex, locking_peer):
 @pytest.mark.slow
 def test_contention(shared_mutex):
     increments, process_count, delay = 50, 4, 0.01
+
     def target(counter, barrier):
         shm = SharedMemory('mutex')
         mutex = Mutex(shm.buf)
@@ -99,14 +104,20 @@ def test_contention(shared_mutex):
                 counter.value = value + 1
         barrier.wait(10)
         shm.close()
+
     counter = multiprocessing.Value(ctypes.c_uint64, lock=False)
     barrier = multiprocessing.Barrier(process_count + 1, action=lambda: barrier.reset())
-    children = [multiprocessing.Process(target=target, args=(counter, barrier), daemon=True)
-                for _ in range(process_count)]
-    for child in children:
+    children = []
+    for _ in range(process_count):
+        child = multiprocessing.Process(
+            target=target,
+            args=(counter, barrier),
+            daemon=True,
+        )
         child.start()
+        children.append(child)
     barrier.wait(1)
     barrier.wait(10)
-    assert counter.value == increments*process_count
+    assert counter.value == increments * process_count
     for child in children:
         child.join()

@@ -3,9 +3,9 @@
 import abc
 import asyncio
 import contextlib
-import dataclasses
 import glob
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
     Any,
@@ -22,11 +22,10 @@ from urllib.parse import urlsplit
 
 import serial
 import serial_asyncio as aioserial
-import structlog
 import uvloop
 from serial.tools import list_ports
 
-from .. import log, process, rpc
+from .. import log, process, remote
 from ..buffer import BufferManager, DeviceBuffer, DeviceUID, NullDevice
 from ..exception import RuntimeBaseException
 from ..messaging import ErrorCode, Message, MessageError, MessageType
@@ -61,20 +60,20 @@ class SmartDeviceObserver(abc.ABC):
 if HAS_UDEV:  # pragma: no cover; platform-dependent
     __all__.append('EventObserver')
 
-    @dataclasses.dataclass
+    @dataclass
     class EventObserver(SmartDeviceObserver):
         """Detect Smart Devices using Linux's udev.
 
         Attributes:
-            devices: A queue of batches of detected devices. The devices are batched to reduce
-                expensive calls to :func:`list_ports.comports`.
+            devices: A queue of batches of detected devices. The devices are batched to
+                reduce expensive calls to :func:`list_ports.comports`.
         """
 
-        devices: asyncio.Queue[list[pyudev.Device]] = dataclasses.field(
+        devices: asyncio.Queue[list[pyudev.Device]] = field(
             default_factory=lambda: asyncio.Queue(128),
         )
-        context: pyudev.Context = dataclasses.field(default_factory=pyudev.Context)
-        monitor: pyudev.Monitor = dataclasses.field(init=False, repr=False)
+        context: pyudev.Context = field(default_factory=pyudev.Context)
+        monitor: pyudev.Monitor = field(init=False, repr=False)
 
         SUBSYSTEM: ClassVar[str] = 'usb'
         DEVICE_TYPE: ClassVar[str] = 'usb_interface'
@@ -90,7 +89,8 @@ if HAS_UDEV:  # pragma: no cover; platform-dependent
             """Determine whether a udev device is a Smart Sensor."""
             try:
                 vendor_id, product_id, _ = device.properties['PRODUCT'].split('/')
-                return int(vendor_id, 16) == cls.VENDOR_ID and int(product_id, 16) == cls.PRODUCT_ID
+                vid, pid = int(vendor_id, base=16), int(product_id, base=16)
+                return vid == cls.VENDOR_ID and pid == cls.PRODUCT_ID
             except (KeyError, ValueError):
                 return False
 
@@ -106,12 +106,15 @@ if HAS_UDEV:  # pragma: no cover; platform-dependent
 
         async def start(self, /) -> None:
             """Begin monitoring udev events and register initially connected devices."""
-            asyncio.get_running_loop().add_reader(self.monitor.fileno(), self.on_new_events)
+            asyncio.get_running_loop().add_reader(self.monitor.fileno(), self._on_event)
             self.monitor.start()
-            devices = await asyncio.to_thread(self.context.list_devices, subsystem=self.SUBSYSTEM)
+            devices = await asyncio.to_thread(
+                self.context.list_devices,
+                subsystem=self.SUBSYSTEM,
+            )
             self.handle_devices(devices)
 
-        def on_new_events(self, /) -> None:
+        def _on_event(self, /) -> None:
             """Callback when new udev events are available."""
             self.handle_devices(iter(lambda: self.monitor.poll(0), None))
 
@@ -122,12 +125,14 @@ if HAS_UDEV:  # pragma: no cover; platform-dependent
             ports = await asyncio.to_thread(list_ports.comports, include_links=True)
             paths = set()
             for port in ports:
-                if port.location and any(port.location in device.sys_path for device in devices):
+                if not port.location:
+                    continue
+                if any(port.location in device.sys_path for device in devices):
                     paths.add(Path(port.device))
             return paths
 
 
-@dataclasses.dataclass
+@dataclass
 class PollingObserver(SmartDeviceObserver):
     """Detect Smart Devices by polling the filesystem.
 
@@ -136,7 +141,7 @@ class PollingObserver(SmartDeviceObserver):
 
     patterns: frozenset[str] = frozenset({'/dev/ttyACM*'})
     interval: float = 1
-    ports: set[Path] = dataclasses.field(default_factory=set)
+    ports: set[Path] = field(default_factory=set)
 
     def __post_init__(self, /) -> None:
         self.patterns = frozenset(self.patterns)
@@ -158,16 +163,16 @@ def make_observer() -> SmartDeviceObserver:
     return EventObserver() if HAS_UDEV else PollingObserver()
 
 
-@dataclasses.dataclass  # type: ignore[misc]
+@dataclass  # type: ignore[misc]
 class SmartDevice(abc.ABC):  # https://github.com/python/mypy/issues/5374
     """A sensor or actuator that uses the Smart Device protocol.
 
     Attributes:
         reader: Stream reader.
         writer: Stream writer.
-        buffer: Shared memory buffer, which is initialized once the device type is discovered.
-        hb_requests: Maps the IDs of in-flight heartbeat requests to events set once the response
-            arrives.
+        buffer: Device buffer, which is initialized once the device type is discovered.
+        hb_requests: Maps the IDs of in-flight heartbeat requests to events set once the
+            response arrives.
         read_queue: A queue of messages read from the device.
         write_queue: A queue of messages waiting to be written to the device.
         logger: A logger instance bound to device context data.
@@ -175,17 +180,17 @@ class SmartDevice(abc.ABC):  # https://github.com/python/mypy/issues/5374
 
     reader: asyncio.StreamReader
     writer: asyncio.StreamWriter
-    buffer: DeviceBuffer = dataclasses.field(default_factory=NullDevice.attach)
-    requests: rpc.RequestTracker[Message] = dataclasses.field(
-        default_factory=lambda: rpc.RequestTracker(upper=256),
+    buffer: DeviceBuffer = field(default_factory=NullDevice.attach)
+    requests: remote.RequestTracker[Message] = field(
+        default_factory=lambda: remote.RequestTracker(upper=256),
     )
-    read_queue: asyncio.Queue[Message] = dataclasses.field(
+    read_queue: asyncio.Queue[Message] = field(
         default_factory=lambda: asyncio.Queue(1024),
     )
-    write_queue: asyncio.Queue[Message] = dataclasses.field(
+    write_queue: asyncio.Queue[Message] = field(
         default_factory=lambda: asyncio.Queue(1024),
     )
-    logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(default_factory=log.get_logger)
+    logger: log.AsyncLogger = field(default_factory=log.get_logger)
 
     async def read_messages(self) -> NoReturn:
         """Read inbound messages indefinitely.
@@ -234,14 +239,14 @@ class SmartDevice(abc.ABC):  # https://github.com/python/mypy/issues/5374
         """Send a heartbeat request.
 
         Arguments:
-            heartbeat_id: A one-byte heartbeat identifier. If not provided, a unique ID is randomly
-                generated.
+            heartbeat_id: A one-byte heartbeat identifier. If not provided, a unique ID
+                is randomly generated.
             timeout: The duration in seconds to wait for the response to return.
             block: Whether to wait for the heartbeat response.
 
         Raises:
-            ValueError: If the heartbeat ID is not unique. Either a non-unique ID was provided, or
-                the ID generator could not produce a unique ID.
+            ValueError: If the heartbeat ID is not unique. Either a non-unique ID was
+                provided, or the ID generator could not produce a unique ID.
             asyncio.TimeoutError: If the timeout is exhausted.
         """
         with self.requests.new_request(heartbeat_id) as (request_id, result):
@@ -288,7 +293,11 @@ class SmartDevice(abc.ABC):  # https://github.com/python/mypy/issues/5374
                 ) from exc
         elif message.type is MessageType.ERROR:
             error = message.read_error()
-            raise DeviceError('error message received', error=error.name, error_code=error.value)
+            raise DeviceError(
+                'error message received',
+                error=error.name,
+                error_code=error.value,
+            )
         else:
             raise DeviceError('message type not handled', type=message.type.name)
 
@@ -347,8 +356,8 @@ class SmartDeviceClient(SmartDevice):
         """Copy subscription/UID information into the internal buffer.
 
         Raises:
-            MessageError: If the message does not have the :attr:``MessageType.SUB_REQ`` type or is
-                otherwise unable to be read.
+            MessageError: If the message does not have the :attr:``MessageType.SUB_REQ``
+                type or is otherwise unable to be read.
         """
         with self.buffer.transaction():
             uid = int(self.buffer.uid)
@@ -360,11 +369,14 @@ class SmartDeviceClient(SmartDevice):
                 interval=self.buffer.interval,
             )
 
-    async def discover(self, buffers: BufferManager, /, *, interval: float = 1) -> DeviceUID:
+    async def discover(
+        self, buffers: BufferManager, /, *, interval: float = 1
+    ) -> DeviceUID:
         """Identify information about a newly connected device.
 
-        This method periodically pings the device to get a subscription response, which contains
-        the current subscription and the UID. Once the UID is known, the device allocates a buffer.
+        This method periodically pings the device to get a subscription response, which
+        contains the current subscription and the UID. Once the UID is known, the device
+        allocates a buffer.
 
         Arguments:
             buffers: The buffer manager that will allocate the buffer.
@@ -398,8 +410,8 @@ class SmartDeviceClient(SmartDevice):
             await self.write_queue.put(message)
 
 
-@dataclasses.dataclass
-class SmartDeviceManager(rpc.Handler):
+@dataclass
+class SmartDeviceManager(remote.Handler):
     """Manage the lifecycle and operations of Smart Devices.
 
     Attributes:
@@ -408,18 +420,18 @@ class SmartDeviceManager(rpc.Handler):
         devices: Map device UIDs to device instances.
 
     Note:
-        Although integer UIDs are used internally, UIDs are transported over the network as
-        strings because the serialization protocol may not support 96-bit integers.
+        Although integer UIDs are used internally, UIDs are transported over the network
+        as strings because the serialization protocol may not support 96-bit integers.
     """
 
     buffers: BufferManager
-    observer: SmartDeviceObserver = dataclasses.field(default_factory=make_observer)
-    devices: dict[int, SmartDeviceClient] = dataclasses.field(default_factory=dict)
+    observer: SmartDeviceObserver = field(default_factory=make_observer)
+    devices: dict[int, SmartDeviceClient] = field(default_factory=dict)
     poll_interval: float = 0.04
     discovery_timeout: float = 10
-    logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(default_factory=log.get_logger)
+    logger: log.AsyncLogger = field(default_factory=log.get_logger)
 
-    @rpc.route
+    @remote.route
     async def list_uids(self) -> list[str]:
         """List the UIDs of Smart Devices connected currently."""
         return list(map(str, self.devices))
@@ -431,29 +443,30 @@ class SmartDeviceManager(rpc.Handler):
             uids = [uids]
         return list(map(int, uids))
 
-    @rpc.route
+    @remote.route
     async def ping(self, uids: Optional[Union[str, list[str]]] = None) -> None:
         """Ping one or more devices.
 
         Arguments:
-            uids: The UIDs of devices to ping. If ``None`` is provided, this handler will ping all
-                devices. A single UID or a list of UIDs may also be provided.
+            uids: The UIDs of devices to ping. If ``None`` is provided, this handler
+                will ping all devices. A single UID or a list of UIDs may also be
+                provided.
         """
         for uid in self._normalize_uids(uids):
             await self.devices[uid].ping()
 
-    @rpc.route
+    @remote.route
     async def disable(self, uids: Optional[Union[str, list[str]]] = None) -> None:
         """Disable one or more devices.
 
         Arguments:
-            uids: The UIDs of devices to disable. See :meth:`SmartDeviceManager.ping` for an
-                explanation of this argument's type.
+            uids: The UIDs of devices to disable. See :meth:`SmartDeviceManager.ping`
+                for an explanation of this argument's type.
         """
         for uid in self._normalize_uids(uids):
             await self.devices[uid].disable()
 
-    @rpc.route
+    @remote.route
     async def subscribe(
         self,
         uid: str,
@@ -469,16 +482,16 @@ class SmartDeviceManager(rpc.Handler):
         """
         await self.devices[int(uid)].subscribe(params, interval)
 
-    @rpc.route
+    @remote.route
     async def unsubscribe(self, uids: Optional[Union[str, list[str]]] = None) -> None:
         for uid in self._normalize_uids(uids):
             await self.devices[uid].unsubscribe()
 
-    @rpc.route
+    @remote.route
     async def read(self, uid: str, params: Optional[Collection[str]] = None) -> None:
         await self.devices[int(uid)].read(params)
 
-    @rpc.route
+    @remote.route
     async def heartbeat(
         self,
         uid: str,
@@ -508,15 +521,17 @@ class SmartDeviceManager(rpc.Handler):
         Arguments:
             reader: Stream reader.
             writer: Stream writer.
-            port: The COM port path, if this is a serial connection. If not provided, this method
-                assumes this device is virtual.
+            port: The COM port path, if this is a serial connection. If not provided,
+                this method assumes this device is virtual.
         """
         port_name = str(port) if port else '(virtual)'
-        device = SmartDeviceClient(reader, writer, logger=self.logger.bind(port=port_name))
+        logger = self.logger.bind(port=port_name)
+        device = SmartDeviceClient(reader, writer, logger=logger)
         async with device.communicate() as tasks:
-            uid = int(await asyncio.wait_for(device.discover(self.buffers), self.discovery_timeout))
+            discover = device.discover(self.buffers)
+            uid = int(await asyncio.wait_for(discover, self.discovery_timeout))
             if uid in self.devices:
-                await self.logger.error('Device already exists (duplicate UID)', uid=str(uid))
+                await self.logger.error('Device already exists (duplicate UID)')
                 return
             self.devices[uid] = device
             await device.subscribe()
@@ -533,7 +548,8 @@ class SmartDeviceManager(rpc.Handler):
         """Open serial ports and schedule their execution concurrently.
 
         Arguments:
-            **options: Keyword arguments passed to :func:`serial_asyncio.open_serial_connection`.
+            **options: Keyword arguments passed to
+                :func:`serial_asyncio.open_serial_connection`.
         """
         await self.logger.info(
             'Opening serial connections',
@@ -542,8 +558,14 @@ class SmartDeviceManager(rpc.Handler):
         while True:
             ports = await self.observer.get_ports()
             for port in ports:
-                reader, writer = await aioserial.open_serial_connection(url=str(port), **options)
-                asyncio.create_task(self.run_device(reader, writer, port), name='dev-run')
+                reader, writer = await aioserial.open_serial_connection(
+                    url=str(port),
+                    **options,
+                )
+                asyncio.create_task(
+                    self.run_device(reader, writer, port),
+                    name='dev-run',
+                )
 
     async def open_virtual_devices(self, vsd_addr: str) -> None:
         vsd_addr_parts = urlsplit(vsd_addr)

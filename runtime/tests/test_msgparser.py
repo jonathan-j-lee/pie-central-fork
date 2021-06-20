@@ -4,7 +4,7 @@ import click.testing
 import orjson as json
 import pytest
 
-from runtime.__main__ import cli
+from runtime.cli import cli
 
 
 @pytest.fixture
@@ -27,8 +27,18 @@ def records():
             'uid': '56668397794435742564352',
         },
         {'type': 'DEV_READ', 'type_id': 19, 'payload_len': 2, 'params': ['duty_cycle']},
-        {'type': 'DEV_WRITE', 'type_id': 20, 'payload_len': 6, 'params': {'duty_cycle': 0.123}},
-        {'type': 'DEV_DATA', 'type_id': 21, 'payload_len': 6, 'params': {'duty_cycle': 0.456}},
+        {
+            'type': 'DEV_WRITE',
+            'type_id': 20,
+            'payload_len': 6,
+            'params': {'duty_cycle': 0.123},
+        },
+        {
+            'type': 'DEV_DATA',
+            'type_id': 21,
+            'payload_len': 6,
+            'params': {'duty_cycle': 0.456},
+        },
         {'type': 'DEV_DISABLE', 'type_id': 22, 'payload_len': 0},
         {'type': 'HB_REQ', 'type_id': 23, 'payload_len': 1, 'heartbeat_id': 255},
         {'type': 'HB_RES', 'type_id': 24, 'payload_len': 1, 'heartbeat_id': 255},
@@ -58,29 +68,37 @@ def messages():
     ]
 
 
-def run_command(args: list[str]) -> tuple[list[str], list[str]]:
+def run_command(*args: str, check_exit: bool = True) -> tuple[list[str], list[str]]:
     cli_runner = click.testing.CliRunner(mix_stderr=False)
     result = cli_runner.invoke(cli, args)
-    assert result.exit_code == 0
-    assert not result.exception
+    if check_exit:
+        assert result.exit_code == 0
+        assert not result.exception
     return result.stdout.splitlines(), result.stderr.splitlines()
 
 
 def make_approx(obj):
     if isinstance(obj, float):
         return pytest.approx(obj)
-    elif isinstance(obj, dict):
+    if isinstance(obj, dict):
         return {key: make_approx(value) for key, value in obj.items()}
-    elif isinstance(obj, list):
+    if isinstance(obj, list):
         return list(map(make_approx, obj))
-    else:
-        return obj
+    return obj
+
+
+def test_get_buf_type():
+    _, stderr = run_command('parse-msg', 'not-a-number', check_exit=False)
+    assert 'unrecognized device'.casefold() in stderr[-1].casefold()
+    _, stderr = run_command('parse-msg', '0x10000', check_exit=False)
+    assert 'unrecognized device'.casefold() in stderr[-1].casefold()
 
 
 def test_format(messages, records):
     records.append({})
-    args = ['format-msg', 'polar-bear'] + [json.dumps(record).decode() for record in records]
-    stdout, stderr = run_command(args)
+    args = ['format-msg', '0xc']
+    args += [json.dumps(record).decode() for record in records]
+    stdout, stderr = run_command(*args)
     assert list(map(bytes.fromhex, stdout)) == messages
     assert stderr == ["-> Failed to format message: KeyError: 'type'"]
 
@@ -89,7 +107,7 @@ def test_parse_json(messages, records):
     messages.append(b'\xff')
     args = ['parse-msg', 'polar-bear', '--output-format', 'json']
     args += [message.hex() for message in messages]
-    stdout, stderr = run_command(args)
+    stdout, stderr = run_command(*args)
     assert list(map(json.loads, stdout)) == make_approx(records)
     assert stderr == [
         '-> Failed to parse message: MessageError: failed to decode Smart Device message',
@@ -100,8 +118,8 @@ def test_parse_pretty(messages):
     messages.append(b'\xff')
     args = ['parse-msg', 'polar-bear', '--output-format', 'pretty']
     args += [message.hex() for message in messages]
-    stdout, stderr = run_command(args)
-    with (Path(__file__).parent / 'parse-msg-pretty.stdout').open() as stream:
+    stdout, stderr = run_command(*args)
+    with (Path(__file__).parent / 'parse-msg-pretty-stdout.txt').open() as stream:
         assert stdout == stream.read().splitlines()
     assert stderr == [
         '-> Failed to parse message: MessageError: failed to decode Smart Device message',

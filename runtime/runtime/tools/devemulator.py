@@ -1,6 +1,6 @@
 import asyncio
 import contextlib
-import dataclasses
+from dataclasses import dataclass, field
 from typing import Any, AsyncIterable, AsyncIterator, NoReturn, Optional
 from urllib.parse import urlsplit
 
@@ -12,16 +12,19 @@ from ..messaging import Message, MessageType
 from ..service.device import SmartDevice
 
 
-@dataclasses.dataclass
+@dataclass
 class SmartDeviceService(SmartDevice):
-    sub_task: asyncio.Future[NoReturn] = dataclasses.field(
+    sub_task: asyncio.Future[NoReturn] = field(
         default_factory=lambda: asyncio.get_running_loop().create_future(),
         init=False,
         repr=False,
     )
 
+    def _get_sub_update(self, /) -> list[Message]:
+        return list(self.buffer.emit_subscription())
+
     async def _send_sub_update(self, /) -> None:
-        messages = await asyncio.to_thread(lambda: list(self.buffer.emit_subscription()))
+        messages = await asyncio.to_thread(self._get_sub_update)
         for message in messages:
             await self.write_queue.put(message)
 
@@ -82,8 +85,8 @@ async def start_virtual_device(
     params: Optional[dict[str, Any]] = None,
     **kwargs: Any,
 ) -> AsyncIterator[set[asyncio.Task[NoReturn]]]:
-    vsd_addr_parts = urlsplit(options['dev_vsd_addr'])
-    reader, writer = await asyncio.open_connection(vsd_addr_parts.hostname, vsd_addr_parts.port)
+    address = urlsplit(options['dev_vsd_addr'])
+    reader, writer = await asyncio.open_connection(address.hostname, address.port)
     buffer = buffers.get_or_create(uid)
     buffer.uid = DeviceUID.from_int(uid)
     for param, value in (params or {}).items():

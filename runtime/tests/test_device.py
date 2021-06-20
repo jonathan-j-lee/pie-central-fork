@@ -4,19 +4,16 @@ import socket
 import tempfile
 import types
 from pathlib import Path
-from typing import Optional
 from unittest.mock import call
 
 import pytest
 import serial
 
-import runtime
 from runtime import log
 from runtime.buffer import Buffer, BufferManager
-from runtime.messaging import MessageType, MessageError, Message
+from runtime.messaging import Message, MessageError, MessageType
 from runtime.service.device import (
     HAS_UDEV,
-    DeviceError,
     PollingObserver,
     SmartDeviceClient,
     SmartDeviceManager,
@@ -28,9 +25,9 @@ if HAS_UDEV:
 
 @pytest.fixture(autouse=True)
 async def logging():
-    # Each test opens and closes a new async event loop. Since loggers cache the first loop that
-    # they use (with ``asyncio.get_running_loop``), we may need to reconstruct these loggers to
-    # prevent them from interacting with a closed event loop.
+    # Each test opens and closes a new async event loop. Since loggers cache the first
+    # loop that they use (with ``asyncio.get_running_loop``), we may need to reconstruct
+    # these loggers to prevent them from interacting with a closed event loop.
     log.configure(fmt='pretty', level='debug')
 
 
@@ -43,6 +40,7 @@ async def event_observer(mocker):
     observer = EventObserver(context=context)
     observer.monitor = monitor
     index, new_devices = 0, []
+
     def poll(_timeout):
         nonlocal index
         if index >= len(new_devices):
@@ -50,16 +48,18 @@ async def event_observer(mocker):
             new_devices.clear()
             rsock.recv(4096)
             return None
-        else:
-            device = new_devices[index]
-            index += 1
-            return device
+        device = new_devices[index]
+        index += 1
+        return device
+
     monitor.fileno.return_value = rsock.fileno()
     monitor.start.side_effect = lambda: setattr(monitor, 'started', True)
     monitor.poll.side_effect = poll
+
     def add_devices(devices):
         new_devices.extend(devices)
         asyncio.get_running_loop().call_soon(wsock.send, b'\x00')
+
     observer.add_devices = add_devices
     yield observer
 
@@ -97,9 +97,17 @@ async def device_manager(mocker, catalog, stream):
     with BufferManager(catalog) as buffers:
         manager = SmartDeviceManager(buffers)
         uids = {0x0000_01_00000000_00000000 + i for i in range(3)}
+        methods = (
+            'ping',
+            'disable',
+            'subscribe',
+            'unsubscribe',
+            'read',
+            'heartbeat',
+        )
         for uid in uids:
             manager.devices[uid] = device = SmartDeviceClient(*stream)
-            for method in ('ping', 'disable', 'subscribe', 'unsubscribe', 'read', 'heartbeat'):
+            for method in methods:
                 result = asyncio.get_running_loop().create_future()
                 mocker.patch.object(device, method, autospec=True).return_value = result
                 result.set_result(None)
@@ -111,7 +119,7 @@ async def device_manager(mocker, catalog, stream):
 async def device(stream, device_manager):
     yield SmartDeviceClient(
         *stream,
-        device_manager.buffers.get_or_create(0x0000_01_ffffffff_ffffffff),
+        device_manager.buffers.get_or_create(0x0000_01_FFFFFFFF_FFFFFFFF),
     )
 
 
@@ -160,7 +168,7 @@ async def test_event_observer(mocker, event_observer):
     assert not event_observer.monitor.started
     assert await event_observer.get_ports() == {Path('/dev/ttyACM0')}
     assert event_observer.monitor.started
-    event_observer.add_devices([
+    devices = [
         types.SimpleNamespace(
             action='remove',
             sys_path=f'{sys_root}/1-2/1-2:1.0',
@@ -171,7 +179,8 @@ async def test_event_observer(mocker, event_observer):
             sys_path=f'{sys_root}/1-2/1-2:1.0',
             properties={'PRODUCT': '0x2341/0x8037/'},
         ),
-    ])
+    ]
+    event_observer.add_devices(devices)
     assert await event_observer.get_ports() == {Path('/dev/ttyACM0')}
 
 
@@ -233,10 +242,13 @@ async def test_disable(stream, device):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('params,interval,packet', [
-    (None, 0, b'\x04\x11\x04\x07\x01\x01\x02\x12'),
-    (['switch1'], 1, b'\x04\x11\x04\x02\x04\xe8\x03\xfc'),
-])
+@pytest.mark.parametrize(
+    'params,interval,packet',
+    [
+        (None, 0, b'\x04\x11\x04\x07\x01\x01\x02\x12'),
+        (['switch1'], 1, b'\x04\x11\x04\x02\x04\xe8\x03\xfc'),
+    ],
+)
 async def test_subscribe(params, interval, packet, stream, device):
     _, writer = stream
     async with device.communicate():
@@ -251,7 +263,9 @@ async def test_unsubscribe(stream, device):
     async with device.communicate():
         await device.unsubscribe()
         await asyncio.sleep(0.02)
-        writer.write.assert_has_calls([call(b'\x03\x11\x04\x01\x01\x01\x02\x15'), call(b'\x00')])
+        writer.write.assert_has_calls(
+            [call(b'\x03\x11\x04\x01\x01\x01\x02\x15'), call(b'\x00')]
+        )
 
 
 @pytest.mark.asyncio
@@ -261,7 +275,9 @@ async def test_read(stream, device):
         await device.read(['switch0', 'switch2'])
         await device.poll_buffer()
         await asyncio.sleep(0.02)
-        writer.write.assert_has_calls([call(b'\x04\x13\x02\x05\x02\x14'), call(b'\x00')])
+        writer.write.assert_has_calls(
+            [call(b'\x04\x13\x02\x05\x02\x14'), call(b'\x00')]
+        )
 
 
 @pytest.mark.asyncio
@@ -271,7 +287,9 @@ async def test_write(stream, device):
         await asyncio.to_thread(device.buffer.write, 'switch1', True)
         await device.poll_buffer()
         await asyncio.sleep(0.02)
-        writer.write.assert_has_calls([call(b'\x04\x14\x03\x02\x03\x01\x14'), call(b'\x00')])
+        writer.write.assert_has_calls(
+            [call(b'\x04\x14\x03\x02\x03\x01\x14'), call(b'\x00')]
+        )
 
 
 @pytest.mark.asyncio
@@ -286,7 +304,7 @@ async def test_discovery(mocker, stream, device, device_manager):
     async with device.communicate():
         uid = await asyncio.wait_for(device.discover(device_manager.buffers), 0.1)
     writer.write.assert_has_calls([call(b'\x02\x10\x02\x10'), call(b'\x00')])
-    assert int(uid) == 0x0000_01_ffffffff_ffffffff
+    assert int(uid) == 0x0000_01_FFFFFFFF_FFFFFFFF
     assert device.buffer.subscription == set()
     assert device.buffer.interval == pytest.approx(0)
     assert device.buffer.device_id == 0
@@ -313,8 +331,9 @@ async def test_heartbeat(stream, device):
         heartbeat_id = message.read_hb_req()
         assert 0 <= heartbeat_id < 256
         writer.write.reset_mock()
-        reader.readuntil.return_value = result = asyncio.get_running_loop().create_future()
-        result.set_result(Message.make_hb_res(heartbeat_id))
+        future = asyncio.get_running_loop().create_future()
+        reader.readuntil.return_value = future
+        future.set_result(Message.make_hb_res(heartbeat_id))
         await device.heartbeat(heartbeat_id=heartbeat_id, timeout=0.1)
         writer.write.assert_has_calls([call(req_buf), call(b'\x00')])
 
@@ -324,8 +343,8 @@ async def test_heartbeat_dup_id(device):
     async with device.communicate():
         with pytest.raises(ValueError):
             await asyncio.gather(
-                device.heartbeat(0xff, timeout=0.1),
-                device.heartbeat(0xff, timeout=0.1),
+                device.heartbeat(0xFF, timeout=0.1),
+                device.heartbeat(0xFF, timeout=0.1),
             )
 
 
@@ -351,7 +370,10 @@ async def test_handle_hb_req(stream, device):
 @pytest.mark.asyncio
 async def test_handle_hb_res(mocker, stream, device):
     reader, _ = stream
-    reader.readuntil.side_effect = make_reads(b'\x05\x18\x01\x80\x99', b'\x05\x18\x01\x80\x99')
+    reader.readuntil.side_effect = make_reads(
+        b'\x05\x18\x01\x80\x99',
+        b'\x05\x18\x01\x80\x99',
+    )
     logger = mocker.spy(device.logger, 'error')
     async with device.communicate() as tasks:
         tasks.add(asyncio.create_task(device.handle_messages(), name='dev-handle'))
@@ -364,13 +386,12 @@ async def test_handle_hb_res(mocker, stream, device):
 async def test_handle_sub_res(mocker, stream, device):
     reader, _ = stream
     reader.readuntil.side_effect = make_reads(
-        b'\x04\x12\x0f\x01\x02\x14\x01\x01\x06'
-        b'\x0f\xef\xbe\xad\xde\x01\x01\x01\x02%'
+        b'\x04\x12\x0f\x01\x02\x14\x01\x01\x06\x0f\xef\xbe\xad\xde\x01\x01\x01\x02%',
     )
     async with device.communicate() as tasks:
         tasks.add(asyncio.create_task(device.handle_messages(), name='dev-handle'))
         await asyncio.sleep(0.02)
-        assert int(device.buffer.uid) == 0x0000_0f_00000000_deadbeef
+        assert int(device.buffer.uid) == 0x0000_0F_00000000_DEADBEEF
         assert device.buffer.subscription == {'switch0'}
         assert device.buffer.interval == pytest.approx(0.02)
 
@@ -387,12 +408,15 @@ async def test_handle_dev_data(stream, device):
         assert device.buffer.get('switch2')
 
 
-@pytest.mark.parametrize('packet', [
-    b'\x05\xff\x01\xff\x01',                # Error packet
-    b'\x02\x10\x02\x10',                    # Ping
-    b'\x03\x11\x04\x01\x01\x01\x02\x15',    # Unsubscribe
-    b'\x02\x16\x02\x16',                    # Device disable
-])
+@pytest.mark.parametrize(
+    'packet',
+    [
+        b'\x05\xff\x01\xff\x01',  # Error packet
+        b'\x02\x10\x02\x10',  # Ping
+        b'\x03\x11\x04\x01\x01\x01\x02\x15',  # Unsubscribe
+        b'\x02\x16\x02\x16',  # Device disable
+    ],
+)
 @pytest.mark.asyncio
 async def test_handle_error(packet, mocker, stream, device):
     reader, _ = stream

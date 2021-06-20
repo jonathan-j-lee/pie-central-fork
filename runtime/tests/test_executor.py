@@ -1,27 +1,25 @@
 import asyncio
 import inspect
 import re
-import signal
 import threading
 import types
 from pathlib import Path
 from unittest.mock import ANY
 
+import pytest
+
 import runtime
-from runtime import api, process
-from runtime.__main__ import load_yaml
-from runtime.buffer import BufferManager, DeviceBufferError
+from runtime import api
+from runtime.buffer import BufferManager
+from runtime.cli import load_yaml
 from runtime.exception import EmergencyStopException
 from runtime.service.executor import (
-    run_once,
-    ExecutionError,
-    ExecutionRequest,
     AsyncExecutor,
     Dispatcher,
-    main,
+    ExecutionError,
+    ExecutionRequest,
+    run_once,
 )
-
-import pytest
 
 
 @pytest.fixture(scope='module')
@@ -46,7 +44,7 @@ def dispatcher(mocker, buffers):
         buffers,
         'testcode.incr',
         timeouts,
-        {'left-motor': 0xc_00_00000000_00000000},
+        {'left-motor': 0xC_00_00000000_00000000},
         async_exec=AsyncExecutor(max_actions=2),
         logger=types.SimpleNamespace(),
     )
@@ -57,7 +55,10 @@ def dispatcher(mocker, buffers):
 
 @pytest.fixture
 async def async_exec(dispatcher):
-    dispatch = asyncio.create_task(dispatcher.async_exec.dispatch(cooldown=0.1), name='dispatch')
+    dispatch = asyncio.create_task(
+        dispatcher.async_exec.dispatch(cooldown=0.1),
+        name='dispatch',
+    )
     while dispatcher.async_exec.loop is None:
         await asyncio.sleep(0.05)
     yield dispatcher.async_exec
@@ -112,11 +113,12 @@ def test_sync_queueing(dispatcher):
         {'func': 'invalid'},
         {'func': 'counters'},
         {'func': 'teleop_main'},
-        {'func': 'challenge', 'args': [0xdeadbeef]},
-        {'func': 'challenge', 'args': [0xc0debeef], 'timeout': 0.5},
+        {'func': 'challenge', 'args': [0xDEADBEEF]},
+        {'func': 'challenge', 'args': [0xC0DEBEEF], 'timeout': 0.5},
     ]
     dispatcher.prepare_student_code_run(requests)
     from testcode import incr as studentcode
+
     assert dispatcher.sync_exec.requests.get_nowait() == ExecutionRequest(
         func=studentcode.teleop_setup,
         timeout=pytest.approx(1),
@@ -127,12 +129,12 @@ def test_sync_queueing(dispatcher):
     )
     assert dispatcher.sync_exec.requests.get_nowait() == ExecutionRequest(
         func=studentcode.challenge,
-        args=[0xdeadbeef],
+        args=[0xDEADBEEF],
         timeout=pytest.approx(1),
     )
     assert dispatcher.sync_exec.requests.get_nowait() == ExecutionRequest(
         func=studentcode.challenge,
-        args=[0xc0debeef],
+        args=[0xC0DEBEEF],
         timeout=pytest.approx(0.5),
     )
     assert dispatcher.sync_exec.requests.empty()
@@ -149,6 +151,7 @@ def test_sync_queueing_blank(dispatcher):
 @pytest.mark.asyncio
 async def test_sync_dispatch(dispatcher):
     counts, result = [], []
+
     async def main():
         try:
             await dispatcher.execute([{'func': 'bad'}])
@@ -171,6 +174,7 @@ async def test_sync_dispatch(dispatcher):
             result.extend(await dispatcher.execute(requests, block=True))
         finally:
             dispatcher.sync_exec.stop()
+
     service_thread = threading.Thread(target=lambda: asyncio.run(main()), daemon=True)
     service_thread.start()
     dispatcher.sync_exec.execute_forever()
@@ -199,25 +203,29 @@ async def test_sync_not_main_thread(dispatcher):
 def make_action():
     async def waiter(done: asyncio.Event):
         await done.wait()
+
     return waiter
 
 
 @pytest.mark.asyncio
 async def test_actions_result(async_exec):
     loop = asyncio.get_running_loop()
+
     async def func() -> int:
-        return 0xdeadbeef
+        return 0xDEADBEEF
+
     request = ExecutionRequest(func=func, loop=loop, future=loop.create_future())
     async_exec.schedule(request)
-    assert await request.future == 0xdeadbeef
-
+    assert await request.future == 0xDEADBEEF
 
 
 @pytest.mark.asyncio
 async def test_actions_exc(async_exec):
     loop = asyncio.get_running_loop()
+
     async def func():
         raise OSError
+
     request = ExecutionRequest(func=func, loop=loop, future=loop.create_future())
     async_exec.schedule(request)
     with pytest.raises(OSError):
@@ -267,9 +275,11 @@ async def test_actions_timeout(async_exec):
 @pytest.mark.asyncio
 async def test_action_periodic(async_exec):
     ctr = 0
+
     async def incr():
         nonlocal ctr
         ctr += 1
+
     async_exec.run(incr, periodic=True, timeout=0.1)
     await asyncio.sleep(0.35)
     assert async_exec.is_running(incr)
@@ -310,14 +320,17 @@ async def test_actions_stop(async_exec):
     assert len(asyncio.all_tasks()) == task_count - 1  # The ``dispatch`` task is gone.
 
 
-@pytest.mark.parametrize('key,create,param,value', [
-    (('gamepad', 0), True, 'joystick_left_x', 0.123),
-    (('gamepad', 0), False, 'joystick_left_x', 0),
-    (('gamepad', 0), True, 'button_a', True),
-    (('gamepad', 0), False, 'button_a', False),
-    (0xc_00_00000000_00000000, True, 'duty_cycle', -0.456),
-    (0xc_00_00000000_00000000, False, 'duty_cycle', 0),
-])
+@pytest.mark.parametrize(
+    'key,create,param,value',
+    [
+        (('gamepad', 0), True, 'joystick_left_x', 0.123),
+        (('gamepad', 0), False, 'joystick_left_x', 0),
+        (('gamepad', 0), True, 'button_a', True),
+        (('gamepad', 0), False, 'button_a', False),
+        (0xC_00_00000000_00000000, True, 'duty_cycle', -0.456),
+        (0xC_00_00000000_00000000, False, 'duty_cycle', 0),
+    ],
+)
 def test_device_get(key, create, param, value, dispatcher):
     if create:
         dispatcher.buffers.get_or_create(key).set(param, value)
@@ -337,7 +350,7 @@ def test_device_get(key, create, param, value, dispatcher):
         )
 
 
-@pytest.mark.parametrize('key', [('gamepad', 0), 0xc_00_00000000_00000000])
+@pytest.mark.parametrize('key', [('gamepad', 0), 0xC_00_00000000_00000000])
 def test_device_get_no_param(key, dispatcher):
     dispatcher.buffers.get_or_create(key)
     if isinstance(key, int):
@@ -351,11 +364,12 @@ def test_device_get_no_param(key, dispatcher):
 
 
 def test_robot_get_writeonly(dispatcher):
-    dispatcher.buffers.get_or_create(0xc_00_00000000_00000000)
-    assert dispatcher.student_code.Robot.get(
-        0xc_00_00000000_00000000,
+    dispatcher.buffers.get_or_create(0xC_00_00000000_00000000)
+    setpoint_default = dispatcher.student_code.Robot.get(
+        0xC_00_00000000_00000000,
         'pid_pos_setpoint',
-    ) == pytest.approx(0)
+    )
+    assert setpoint_default == pytest.approx(0)
     dispatcher.logger.sync_bl.warn.assert_called_once_with(
         'Unable to get parameter',
         exc_info=ANY,
@@ -366,8 +380,9 @@ def test_robot_get_writeonly(dispatcher):
 
 
 def test_robot_get_name_translation(dispatcher):
-    dispatcher.buffers.get_or_create(0xc_00_00000000_00000000).set('duty_cycle', 0.123)
-    assert dispatcher.student_code.Robot.get('left-motor', 'duty_cycle') == pytest.approx(0.123)
+    dispatcher.buffers.get_or_create(0xC_00_00000000_00000000).set('duty_cycle', 0.123)
+    duty_cycle = dispatcher.student_code.Robot.get('left-motor', 'duty_cycle')
+    assert duty_cycle == pytest.approx(0.123)
     assert dispatcher.student_code.Robot.get('right-motor') is None
     dispatcher.logger.sync_bl.error.assert_called_once_with(
         'get(...) raised an error',
@@ -376,8 +391,8 @@ def test_robot_get_name_translation(dispatcher):
 
 
 def test_robot_write(dispatcher):
-    buffer = dispatcher.buffers.get_or_create(0xc_00_00000000_00000000)
-    dispatcher.student_code.Robot.write(0xc_00_00000000_00000000, 'duty_cycle', 0.123)
+    buffer = dispatcher.buffers.get_or_create(0xC_00_00000000_00000000)
+    dispatcher.student_code.Robot.write(0xC_00_00000000_00000000, 'duty_cycle', 0.123)
     assert buffer.get_write() == {'duty_cycle': pytest.approx(0.123)}
 
 
@@ -391,10 +406,10 @@ def test_robot_write_readonly(dispatcher):
 
 
 def test_robot_write_name_translation(dispatcher):
-    buffer = dispatcher.buffers.get_or_create(0xc_00_00000000_00000000)
+    buffer = dispatcher.buffers.get_or_create(0xC_00_00000000_00000000)
     dispatcher.student_code.Robot.write('left-motor', 'duty_cycle', 0.456)
     assert buffer.get_write() == {'duty_cycle': pytest.approx(0.456)}
-    assert dispatcher.student_code.Robot.write('right-motor', 'duty_cycle', 0.456) is None
+    dispatcher.student_code.Robot.write('right-motor', 'duty_cycle', 0.456)
     dispatcher.logger.sync_bl.error.assert_called_once_with(
         'write(...) raised an error',
         exc_info=ANY,

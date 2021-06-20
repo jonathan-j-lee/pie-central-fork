@@ -5,28 +5,35 @@ import warnings
 from pathlib import Path
 
 import pytest
-import yaml
 
 from runtime.buffer import (
-    DeviceBufferError,
-    Parameter,
-    DeviceUID,
     Buffer,
-    DeviceBuffer,
     BufferManager,
+    DeviceBuffer,
+    DeviceBufferError,
+    DeviceUID,
+    Parameter,
 )
 from runtime.messaging import Message
 
 
 @pytest.fixture
 def device_buffer_type():
-    yield DeviceBuffer.make_type('ExampleDevice', [
-        Parameter('flag', ctypes.c_bool, 0, readable=False, writeable=True, subscribed=False),
+    params = [
+        Parameter(
+            'flag',
+            ctypes.c_bool,
+            0,
+            readable=False,
+            writeable=True,
+            subscribed=False,
+        ),
         Parameter('duty_cycle', ctypes.c_double, 1),
         Parameter('id', ctypes.c_uint32, 2, writeable=True),
         Parameter('large', ctypes.c_char * 253, 3, writeable=True),
         Parameter('pos', ctypes.c_double, 4, writeable=True, lower=-1, upper=1),
-    ])
+    ]
+    yield DeviceBuffer.make_type('ExampleDevice', params)
 
 
 @pytest.fixture
@@ -41,12 +48,15 @@ def device_buffer(device_buffer_type):
 @pytest.fixture
 def peer(device_buffer_type):
     ready, done = multiprocessing.Event(), multiprocessing.Event()
+
     def target(start, done):
         with device_buffer_type.open('test-device') as device_buffer:
-            device_buffer.write('id', 0xc0debeef)
-            device_buffer.update(Message.decode(b'\x04\x15\x06\x02\x06m\xe7\xfb\xbd\xdd'))
+            device_buffer.write('id', 0xC0DEBEEF)
+            message = Message.decode(b'\x04\x15\x06\x02\x06m\xe7\xfb\xbd\xdd')
+            device_buffer.update(message)
             ready.set()
             done.wait(3)
+
     peer = multiprocessing.Process(target=target, args=(ready, done), daemon=True)
     peer.start()
     ready.wait(3)
@@ -60,7 +70,7 @@ def peer(device_buffer_type):
 
 @pytest.fixture
 def device_uid():
-    yield DeviceUID(0xffff, 0xee, 0xc0debeef_deadbeef)
+    yield DeviceUID(0xFFFF, 0xEE, 0xC0DEBEEF_DEADBEEF)
 
 
 @pytest.fixture(params=[False, True])
@@ -108,16 +118,19 @@ def test_update_dev_data(mocker, device_buffer):
     time.time.return_value = 1
     device_buffer.update(Message.decode(b'\x04\x15\x06\x04\x06\xef\xbe\xad\xde5'))
     assert device_buffer.last_update == pytest.approx(1)
-    assert device_buffer.get('id') == 0xdeadbeef
-    assert device_buffer.get_update() == {'id': 0xdeadbeef}
+    assert device_buffer.get('id') == 0xDEADBEEF
+    assert device_buffer.get_update() == {'id': 0xDEADBEEF}
 
     time.time.return_value = 2
     device_buffer.update(Message.decode(b'\x04\x15\x06\x04\x06\xef\xbe\xad\xde5'))
     device_buffer.update(Message.decode(b'\x04\x15\x06\x02\x06m\xe7\xfb\xbd\xdd'))
     assert device_buffer.last_update == pytest.approx(2)
     assert device_buffer.get('duty_cycle') == pytest.approx(-0.123)
-    assert device_buffer.get('id') == 0xdeadbeef
-    assert device_buffer.get_update() == {'duty_cycle': pytest.approx(-0.123), 'id': 0xdeadbeef}
+    assert device_buffer.get('id') == 0xDEADBEEF
+    assert device_buffer.get_update() == {
+        'duty_cycle': pytest.approx(-0.123),
+        'id': 0xDEADBEEF,
+    }
 
     time.time.return_value = 3
     device_buffer.update(Message.decode(b'\x03\x15\x02\x01\x02\x17'))
@@ -127,7 +140,7 @@ def test_update_dev_data(mocker, device_buffer):
 
 def test_update_dev_read(device_buffer):
     device_buffer.update(Message.make_dev_read(0b10))
-    device_buffer.update(Message.make_dev_read(0xfffd))
+    device_buffer.update(Message.make_dev_read(0xFFFD))
     assert device_buffer.get_read() == {'duty_cycle', 'id', 'large', 'pos'}
 
 
@@ -136,17 +149,17 @@ def test_update_dev_write(mocker, device_buffer):
     time.time.return_value = 1
     device_buffer.update(Message.decode(b'\x04\x14\x06\x04\x06\xef\xbe\xad\xde4'))
     assert device_buffer.last_write == pytest.approx(1)
-    assert device_buffer.get_write() == {'id': 0xdeadbeef}
+    assert device_buffer.get_write() == {'id': 0xDEADBEEF}
 
 
 def test_update_sub_req(device_buffer):
     device_buffer.update(Message.make_sub_req(0b100, 5))
     assert device_buffer.subscription == {'id'}
-    device_buffer.set('id', 0xdeadbeef)
+    device_buffer.set('id', 0xDEADBEEF)
     (message,) = device_buffer.emit_subscription()
     assert message.encode() == b'\x04\x15\x06\x04\x06\xef\xbe\xad\xde5'
     assert device_buffer.interval == pytest.approx(0.04)
-    device_buffer.update(Message.make_sub_req(0xffff, 0))
+    device_buffer.update(Message.make_sub_req(0xFFFF, 0))
     assert device_buffer.interval == pytest.approx(0)
 
 
@@ -159,9 +172,9 @@ def test_update_sub_res(device_uid, device_buffer):
         device_uid.random,
     )
     device_buffer.update(sub_res)
-    assert device_buffer.uid.device_id == 0xffff
-    assert device_buffer.uid.year == 0xee
-    assert device_buffer.uid.random == 0xc0debeefdeadbeef
+    assert device_buffer.uid.device_id == 0xFFFF
+    assert device_buffer.uid.year == 0xEE
+    assert device_buffer.uid.random == 0xC0DEBEEFDEADBEEF
     assert device_buffer.subscription == {'flag', 'duty_cycle'}
     assert device_buffer.interval == pytest.approx(0.1)
     device_buffer.set('duty_cycle', 0.123)
@@ -177,16 +190,17 @@ def test_update_not_handled(device_buffer):
 
 def test_make_sub_req_res(device_buffer):
     device_buffer.update(Message.make_sub_res(0, 0, 0, 0, 0))
-    assert device_buffer.make_sub_req().encode() == Message.make_sub_req(0b11110, 40).encode()
+    sub_req = device_buffer.make_sub_req().encode()
+    assert sub_req == Message.make_sub_req(0b11110, 40).encode()
     message = device_buffer.make_sub_req({'duty_cycle'}, 0.08)
     assert message.encode() == Message.make_sub_req(0b10, 80).encode()
-    assert device_buffer.make_sub_res().encode() == Message.make_sub_res(0, 0, 0, 0, 0).encode()
+    sub_res = device_buffer.make_sub_res().encode()
+    assert sub_res == Message.make_sub_res(0, 0, 0, 0, 0).encode()
 
 
 def test_read(device_buffer):
     device_buffer.read(['flag', 'duty_cycle'])
     device_buffer.read(['id'])
-    get_read = lambda: {bytes(message.encode()) for message in device_buffer.emit_dev_rw()}
     (message,) = device_buffer.emit_dev_rw()
     assert message.encode() == b'\x04\x13\x02\x06\x02\x17'
     assert list(device_buffer.emit_dev_rw()) == []
@@ -202,7 +216,7 @@ def test_write(mocker, device_buffer):
     mocker.patch('time.time')
     time.time.return_value = 1
     device_buffer.write('flag', True)
-    device_buffer.write('id', 0xdeadbeef)
+    device_buffer.write('id', 0xDEADBEEF)
     (message,) = device_buffer.emit_dev_rw()
     assert device_buffer.last_write == 1
     assert message.encode() == b'\x04\x14\x07\x05\x07\x01\xef\xbe\xad\xde5'
@@ -215,13 +229,13 @@ def test_write(mocker, device_buffer):
 
 
 def test_write_large(device_buffer):
-    device_buffer.write('id', 0xdeadbeef)
-    device_buffer.write('large', b'\xff'*253)
+    device_buffer.write('id', 0xDEADBEEF)
+    device_buffer.write('large', b'\xff' * 253)
     device_buffer.write('pos', 0.5)
     messages = {bytes(message.encode()) for message in device_buffer.emit_dev_rw()}
     expected = {
         b'\x04\x14\x06\x04\x06\xef\xbe\xad\xde4',
-        b'\x04\x14\xff\x08' + b'\xff'*254 + b'\x1c',
+        b'\x04\x14\xff\x08' + b'\xff' * 254 + b'\x1c',
         b'\x04\x14\x06\x10\x01\x01\x01\x03?=',
     }
     assert messages == expected
@@ -246,12 +260,12 @@ def test_write_deny(mocker, device_buffer):
 
 
 def test_emit_dev_data(device_buffer):
-    device_buffer.set('id', 0xdeadbeef)
-    device_buffer.set('large', b'\xff'*253)
+    device_buffer.set('id', 0xDEADBEEF)
+    device_buffer.set('large', b'\xff' * 253)
     messages = {bytes(message.encode()) for message in device_buffer.emit_dev_data()}
     expected = {
         b'\x04\x15\x06\x04\x06\xef\xbe\xad\xde5',
-        b'\x04\x15\xff\x08' + b'\xff'*254 + b'\x1d',
+        b'\x04\x15\xff\x08' + b'\xff' * 254 + b'\x1d',
     }
     assert messages == expected
     assert set(device_buffer.emit_dev_data()) == set()
@@ -261,7 +275,7 @@ def test_valid_bit(device_buffer):
     device_buffer.valid = False
     actions = [
         lambda: device_buffer.get('id'),
-        lambda: device_buffer.set('id', 0xdeadbeef),
+        lambda: device_buffer.set('id', 0xDEADBEEF),
         lambda: device_buffer.write('id', 1),
         lambda: device_buffer.read([]),
         lambda: list(device_buffer.emit_dev_rw()),
@@ -338,11 +352,20 @@ def test_type_registration(buffer_manager):
     assert ExampleDevice.heartbeat_interval == pytest.approx(2)
     assert list(ExampleDevice.params.values()) == [
         Parameter('duty_cycle', ctypes.c_float, 0, writeable=True, lower=-1, upper=1),
-        Parameter('enabled', ctypes.c_bool, 1, readable=False, writeable=True, subscribed=False),
+        Parameter(
+            'enabled',
+            ctypes.c_bool,
+            1,
+            readable=False,
+            writeable=True,
+            subscribed=False,
+        ),
     ]
     Camera = buffer_manager.catalog['camera']
     assert issubclass(Camera, Buffer) and not issubclass(Camera, DeviceBuffer)
-    assert list(Camera.params.values()) == [Parameter('rgb', ctypes.c_uint8 * 128 * 128 * 3, 0)]
+    assert list(Camera.params.values()) == [
+        Parameter('rgb', ctypes.c_uint8 * 128 * 128 * 3, 0)
+    ]
 
 
 def test_duplicate_registration():
@@ -374,7 +397,9 @@ def test_shm_open_close(buffer_manager):
         pytest.skip()
     buf = buffer_manager.get_or_create(0x80_00_00000000_00000000)
     assert len(buffer_manager) == 1
-    assert list(buffer_manager.items()) == [(('example-device', 0x80_00_00000000_00000000), buf)]
+    assert list(buffer_manager.items()) == [
+        (('example-device', 0x80_00_00000000_00000000), buf)
+    ]
     path = Path('/dev/shm/rt-example-device-604462909807314587353088')
     assert path.exists()
     assert buf.valid

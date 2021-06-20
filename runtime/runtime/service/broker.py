@@ -4,41 +4,40 @@ import asyncio
 import collections
 import contextlib
 import ctypes
-import dataclasses
 import functools
 import re
 import shlex
 import typing
+from dataclasses import dataclass, field
 from typing import Any, ClassVar, Iterable, Optional, Union
 
 import click
 import orjson as json
-import structlog
 
-from .. import api, log, process, rpc
+from .. import api, log, process, remote
 from ..buffer import BufferManager, DeviceBufferError, Parameter
 
 __all__ = ['Broker', 'main']
 
 
-@dataclasses.dataclass
-class Broker(rpc.Handler):
+@dataclass
+class Broker(remote.Handler):
     """The coordinator between Runtime's clients and Runtime's other processes.
 
     Attributes:
         ctx: Command-line context.
-        update_publisher: A client for notifying subscribers of Smart Device parameter updates.
+        update_publisher: A client for broadcasting Smart Device parameter updates.
         client: A client for interprocess calls.
         buffers: A buffer manager.
         uids: Smart Device UIDs.
     """
 
     ctx: click.Context
-    update_publisher: rpc.Client
-    client: rpc.Client
+    update_publisher: remote.Client
+    client: remote.Client
     buffers: BufferManager
-    uids: set[str] = dataclasses.field(default_factory=set)
-    logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(default_factory=log.get_logger)
+    uids: set[str] = field(default_factory=set)
+    logger: log.AsyncLogger = field(default_factory=log.get_logger)
 
     PYLINT_EXEC: ClassVar[str] = 'pylint'
     PYLINT_OPTIONS: ClassVar[list[str]] = [
@@ -61,20 +60,21 @@ class Broker(rpc.Handler):
         """Convert an environment variable into its corresponding option name."""
         return envvar.lower().removeprefix(f'{self._env_prefix.lower()}_')
 
-    @rpc.route
-    async def get_option(self, option: Optional[str] = None) -> Union[Any, dict[str, Any]]:
+    @remote.route
+    async def get_option(self, option: Optional[str] = None) -> Any:
         """Get a command-line option.
 
         Arguments:
             option: The option name. If not provided, all options are returned.
 
         Returns:
-            If the option name was requested, a single option value. Otherwise, a mapping from
-            all option names to their respective values.
+            If the option name was requested, a single option value. Otherwise, a
+            mapping from all option names to their respective values.
         """
         if option:
             return self.ctx.obj.envvars[self.get_envvar(option)]
-        return {self.get_name(envvar): value for envvar, value in self.ctx.obj.envvars.items()}
+        envvars = self.ctx.obj.envvars.items()
+        return {self.get_name(envvar): value for envvar, value in envvars}
 
     @staticmethod
     def format_args(options: dict[str, Any]) -> Iterable[str]:
@@ -100,7 +100,7 @@ class Broker(rpc.Handler):
                     yield flag
                     yield str(element)
 
-    @rpc.route
+    @remote.route
     async def set_option(self, options: dict[str, Any]) -> None:
         """Set a command-line option to be used when Runtime is next restarted.
 
@@ -132,17 +132,18 @@ class Broker(rpc.Handler):
             stdout: ``pylint`` subprocess standard output.
 
         Returns:
-            A list of dictionaries, each of which has the keys: ``line``, ``column``, ``msg``,
-            ``msg_id``, ``symbol``, ``category``, and ``obj``. See the `Pylint Output`_
-            documentation for details.
+            A list of dictionaries, each of which has the keys: ``line``, ``column``,
+            ``msg``, ``msg_id``, ``symbol``, ``category``, and ``obj``. See the
+            `Pylint Output`_ documentation for details.
 
         Note:
-            We cannot selectively disable certain errors within a category from the command line.
-            For example, undefined variables 'Robot' and 'Gamepad' are OK because the student API
-            is patched in, but we still want to emit warnings for undefined variables created by
-            students (so we cannot disable the "undefined-variable" category entirely). This means
-            the total score will always start with a large penalty and has a meaningless baseline.
-            We solve this problem by computing the score client-side.
+            We cannot selectively disable certain errors within a category from the
+            command line. For example, undefined variables 'Robot' and 'Gamepad' are OK
+            because the student API is patched in, but we still want to emit warnings
+            for undefined variables created by students (so we cannot disable the
+            "undefined-variable" category entirely). This means the total score will
+            always start with a large penalty and has a meaningless baseline. We solve
+            this problem by computing the score client-side.
 
         .. _Pylint Output:
             https://docs.pylint.org/en/1.6.0/output.html
@@ -161,7 +162,7 @@ class Broker(rpc.Handler):
             self.logger.sync_bl.error('Linter wrote to stderr', stderr=stderr)
         return messages
 
-    @rpc.route
+    @remote.route
     async def lint(self) -> list[dict[str, Union[str, int]]]:
         """Lint student code to catch errors and suggest best practices.
 
@@ -189,7 +190,7 @@ class Broker(rpc.Handler):
         params.sort(key=lambda param: param.id)
         return params
 
-    @rpc.route
+    @remote.route
     def update_gamepads(self, update: dict[str, dict[str, Union[int, float]]]) -> None:
         """Update gamepad parameters.
 
@@ -224,7 +225,10 @@ class Broker(rpc.Handler):
     async def update_uids(self) -> None:
         """Update the set of valid Smart Device UIDs."""
         try:
-            new_uids = await self.client.call.list_uids(address=b'device-service', timeout=0.2)
+            new_uids = await self.client.call.list_uids(
+                address=b'device-service',
+                timeout=0.2,
+            )
             self.uids.clear()
             self.uids.update(new_uids)
         except asyncio.TimeoutError as exc:
