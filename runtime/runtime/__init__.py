@@ -39,4 +39,4 @@ async def main(ctx: click.Context) -> None:
         await asyncio.sleep(0.05)
         await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     finally:
-        buffer.BufferManager.unlink_all()
+        buffer.BufferStore.unlink_all()

@@ -5,7 +5,7 @@ from typing import Any, Iterator
 import click
 import orjson as json
 
-from ..buffer import Buffer, DeviceUID
+from ..buffer import Buffer
 from ..messaging import ErrorCode, Message, MessageError, MessageType
 
 
@@ -41,7 +41,7 @@ def _format(buffer: Buffer, message: dict[str, Any]) -> Iterator[Message]:
         yield buffer.make_sub_req(message['params'], message['interval'])
     elif msg_type is MessageType.SUB_RES:
         buffer.update(buffer.make_sub_req(message['params'], message['interval']))
-        buffer.uid = DeviceUID.from_int(int(message['uid']))
+        buffer.uid = int(message['uid'])
         yield buffer.make_sub_res()
     elif msg_type is MessageType.DEV_READ:
         buffer.read(message['params'])

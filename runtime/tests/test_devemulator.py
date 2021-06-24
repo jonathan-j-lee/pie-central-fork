@@ -3,7 +3,7 @@ import random
 
 import pytest
 
-from runtime.buffer import Buffer, BufferManager, DeviceUID
+from runtime.buffer import Buffer, BufferStore, DeviceUID
 from runtime.service.device import SmartDeviceManager
 from runtime.tools.devemulator import start_virtual_device
 
@@ -28,12 +28,12 @@ def catalog() -> dict[str, type[Buffer]]:
             ],
         },
     }
-    yield BufferManager.make_catalog(catalog)
+    yield BufferStore.make_catalog(catalog)
 
 
 @pytest.fixture
 async def device_manager(catalog, vsd_addr):
-    with BufferManager(catalog, shared=False) as buffers:
+    with BufferStore(catalog, shared=False) as buffers:
         manager = SmartDeviceManager(buffers)
         asyncio.create_task(manager.open_virtual_devices(vsd_addr))
         yield manager
@@ -51,7 +51,7 @@ async def upstream(device_manager, downstream):
 
 @pytest.fixture
 async def downstream(catalog, vsd_addr):
-    with BufferManager(catalog, shared=False) as buffers:
+    with BufferStore(catalog, shared=False) as buffers:
         options = {'dev_vsd_addr': vsd_addr, 'dev_poll_interval': 0.04}
         uid = 0xC_00_00000000_00000000
         async with start_virtual_device(buffers, uid, options):
@@ -133,7 +133,7 @@ async def test_heartbeat(device_manager, upstream, downstream):
 
 @pytest.mark.asyncio
 async def test_duplicate_uid(catalog, vsd_addr, device_manager, upstream, downstream):
-    with BufferManager(catalog, shared=False) as buffers:
+    with BufferStore(catalog, shared=False) as buffers:
         options = {'dev_vsd_addr': vsd_addr, 'dev_poll_interval': 0.04}
         uid = 0xC_00_00000000_00000000
         async with start_virtual_device(buffers, uid, options) as tasks:

@@ -1,4 +1,4 @@
-"""Smart Device Management."""
+"""Smart device management."""
 
 import abc
 import asyncio
@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
     Any,
-    AsyncIterable,
     AsyncIterator,
     ClassVar,
     Collection,
@@ -26,7 +25,7 @@ import uvloop
 from serial.tools import list_ports
 
 from .. import log, process, remote
-from ..buffer import BufferManager, DeviceBuffer, DeviceUID, NullDevice
+from ..buffer import BufferStore, DeviceBuffer, DeviceUID, NullDevice
 from ..exception import RuntimeBaseException
 from ..messaging import ErrorCode, Message, MessageError, MessageType
 
@@ -41,7 +40,7 @@ __all__ = [
     'PollingObserver',
     'SmartDeviceClient',
     'SmartDeviceManager',
-    'main',
+    'target',
 ]
 
 
@@ -64,7 +63,7 @@ if HAS_UDEV:  # pragma: no cover; platform-dependent
     class EventObserver(SmartDeviceObserver):
         """Detect Smart Devices using Linux's udev.
 
-        Attributes:
+        Parameters:
             devices: A queue of batches of detected devices. The devices are batched to
                 reduce expensive calls to :func:`list_ports.comports`.
         """
@@ -167,7 +166,7 @@ def make_observer() -> SmartDeviceObserver:
 class SmartDevice(abc.ABC):  # https://github.com/python/mypy/issues/5374
     """A sensor or actuator that uses the Smart Device protocol.
 
-    Attributes:
+    Parameters:
         reader: Stream reader.
         writer: Stream writer.
         buffer: Device buffer, which is initialized once the device type is discovered.
@@ -238,7 +237,7 @@ class SmartDevice(abc.ABC):  # https://github.com/python/mypy/issues/5374
     ) -> Optional[Message]:
         """Send a heartbeat request.
 
-        Arguments:
+        Parameters:
             heartbeat_id: A one-byte heartbeat identifier. If not provided, a unique ID
                 is randomly generated.
             timeout: The duration in seconds to wait for the response to return.
@@ -279,7 +278,7 @@ class SmartDevice(abc.ABC):  # https://github.com/python/mypy/issues/5374
             self.writer.close()
             await self.logger.info('Device closed')
 
-    async def _emit_responses(self, message: Message, /) -> AsyncIterable[Message]:
+    async def _emit_responses(self, message: Message, /) -> AsyncIterator[Message]:
         if message.type is MessageType.HB_REQ:
             yield Message.make_hb_res(message.read_hb_req())
         elif message.type is MessageType.HB_RES:
@@ -318,6 +317,8 @@ class SmartDevice(abc.ABC):  # https://github.com/python/mypy/issues/5374
 
 
 class SmartDeviceClient(SmartDevice):
+    """A Smart Device implementation from the upstream end."""
+
     async def ping(self, /) -> None:
         """Ping the sensor to receive a subscription response."""
         await self.write_queue.put(Message.make_ping())
@@ -334,7 +335,7 @@ class SmartDeviceClient(SmartDevice):
     ) -> None:
         """Receive periodic updates for zero or more parameters.
 
-        Arguments:
+        Parameters:
             params: A list of parameter names.
             interval: The duration between subscription updates in seconds.
 
@@ -349,7 +350,12 @@ class SmartDeviceClient(SmartDevice):
         await self.write_queue.put(Message.make_unsubscribe())
 
     async def read(self, /, params: Optional[Collection[str]] = None) -> None:
-        """Read some parameters from the device."""
+        """Read some parameters from the device.
+
+        Parameters:
+            params: The names of a collection of parameters to read. If not provided,
+                this client reads all parameters.
+        """
         await asyncio.to_thread(self.buffer.read, params)
 
     def _handle_sub_res(self, /) -> None:
@@ -357,7 +363,7 @@ class SmartDeviceClient(SmartDevice):
 
         Raises:
             MessageError: If the message does not have the :attr:``MessageType.SUB_REQ``
-                type or is otherwise unable to be read.
+                type or this client cannot otherwise read the message.
         """
         with self.buffer.transaction():
             uid = int(self.buffer.uid)
@@ -369,16 +375,14 @@ class SmartDeviceClient(SmartDevice):
                 interval=self.buffer.interval,
             )
 
-    async def discover(
-        self, buffers: BufferManager, /, *, interval: float = 1
-    ) -> DeviceUID:
+    async def discover(self, buffers: BufferStore, /, *, interval: float = 1) -> int:
         """Identify information about a newly connected device.
 
         This method periodically pings the device to get a subscription response, which
         contains the current subscription and the UID. Once the UID is known, the device
         allocates a buffer.
 
-        Arguments:
+        Parameters:
             buffers: The buffer manager that will allocate the buffer.
             interval: The delay in seconds between pings.
         """
@@ -388,8 +392,8 @@ class SmartDeviceClient(SmartDevice):
                 message = await self.read_queue.get()
                 if message.type is MessageType.SUB_RES:
                     _, _, uid_parts = message.read_sub_res()
-                    uid = DeviceUID(*uid_parts)
-                    self.buffer = await asyncio.to_thread(buffers.get_or_create, uid)
+                    uid = int(DeviceUID(*uid_parts))
+                    self.buffer = await asyncio.to_thread(buffers.get_or_open, uid)
                     await asyncio.to_thread(setattr, self.buffer, 'valid', True)
                     await asyncio.to_thread(self.buffer.update, message)
                     await asyncio.to_thread(self._handle_sub_res)
@@ -397,7 +401,7 @@ class SmartDeviceClient(SmartDevice):
         finally:
             ping.cancel()
 
-    async def _emit_responses(self, message: Message, /) -> AsyncIterable[Message]:
+    async def _emit_responses(self, message: Message, /) -> AsyncIterator[Message]:
         if message.type is MessageType.SUB_RES:
             await asyncio.to_thread(self._handle_sub_res)
         elif message.type is not MessageType.DEV_DATA:
@@ -414,7 +418,7 @@ class SmartDeviceClient(SmartDevice):
 class SmartDeviceManager(remote.Handler):
     """Manage the lifecycle and operations of Smart Devices.
 
-    Attributes:
+    Parameters:
         observer: An observer for detecting hotplugged Smart Devices.
         buffers: A buffer manager for opening/closing shared memory.
         devices: Map device UIDs to device instances.
@@ -424,7 +428,7 @@ class SmartDeviceManager(remote.Handler):
         as strings because the serialization protocol may not support 96-bit integers.
     """
 
-    buffers: BufferManager
+    buffers: BufferStore
     observer: SmartDeviceObserver = field(default_factory=make_observer)
     devices: dict[int, SmartDeviceClient] = field(default_factory=dict)
     poll_interval: float = 0.04
@@ -447,7 +451,7 @@ class SmartDeviceManager(remote.Handler):
     async def ping(self, uids: Optional[Union[str, list[str]]] = None) -> None:
         """Ping one or more devices.
 
-        Arguments:
+        Parameters:
             uids: The UIDs of devices to ping. If ``None`` is provided, this handler
                 will ping all devices. A single UID or a list of UIDs may also be
                 provided.
@@ -459,7 +463,7 @@ class SmartDeviceManager(remote.Handler):
     async def disable(self, uids: Optional[Union[str, list[str]]] = None) -> None:
         """Disable one or more devices.
 
-        Arguments:
+        Parameters:
             uids: The UIDs of devices to disable. See :meth:`SmartDeviceManager.ping`
                 for an explanation of this argument's type.
         """
@@ -475,7 +479,7 @@ class SmartDeviceManager(remote.Handler):
     ) -> None:
         """Send subscription requests to a device.
 
-        Arguments:
+        Parameters:
             uid: The UID of the device to send the request to.
 
         The remaining arguments are passed to :meth:`SmartDevice.subscribe`.
@@ -484,11 +488,29 @@ class SmartDeviceManager(remote.Handler):
 
     @remote.route
     async def unsubscribe(self, uids: Optional[Union[str, list[str]]] = None) -> None:
+        """Unsubscribe from all parameters.
+
+        Parameters:
+            uids: The UIDs of devices to unsubscribe from. See
+                :meth:`SmartDeviceManager.ping` for an explanation of this argument's
+                type.
+        """
         for uid in self._normalize_uids(uids):
             await self.devices[uid].unsubscribe()
 
     @remote.route
     async def read(self, uid: str, params: Optional[Collection[str]] = None) -> None:
+        """Read some parameters.
+
+        The parameter values are not returned from this method, since the Smart Device
+        protocol is asynchronous. Instead, the updated parameters will be copied into
+        the corresponding buffer.
+
+        Parameters:
+            uid: The UID of the device to read parameters from.
+
+        The remaining arguments are passed to :meth:`SmartDevice.read`.
+        """
         await self.devices[int(uid)].read(params)
 
     @remote.route
@@ -501,7 +523,7 @@ class SmartDeviceManager(remote.Handler):
     ) -> float:
         """Send heartbeat requests to a device.
 
-        Arguments:
+        Parameters:
             uid: The UID of the device to send the request to.
 
         The remaining arguments are passed to :meth:`SmartDevice.heartbeat`.
@@ -518,7 +540,7 @@ class SmartDeviceManager(remote.Handler):
     ) -> None:
         """Create and register a new Smart Device and block until the connection closes.
 
-        Arguments:
+        Parameters:
             reader: Stream reader.
             writer: Stream writer.
             port: The COM port path, if this is a serial connection. If not provided,
@@ -529,7 +551,7 @@ class SmartDeviceManager(remote.Handler):
         device = SmartDeviceClient(reader, writer, logger=logger)
         async with device.communicate() as tasks:
             discover = device.discover(self.buffers)
-            uid = int(await asyncio.wait_for(discover, self.discovery_timeout))
+            uid = await asyncio.wait_for(discover, self.discovery_timeout)
             if uid in self.devices:
                 await self.logger.error('Device already exists (duplicate UID)')
                 return
@@ -547,7 +569,7 @@ class SmartDeviceManager(remote.Handler):
     async def open_serial_devices(self, **options: Any) -> NoReturn:
         """Open serial ports and schedule their execution concurrently.
 
-        Arguments:
+        Parameters:
             **options: Keyword arguments passed to
                 :func:`serial_asyncio.open_serial_connection`.
         """
@@ -568,6 +590,11 @@ class SmartDeviceManager(remote.Handler):
                 )
 
     async def open_virtual_devices(self, vsd_addr: str) -> None:
+        """Establish connections to Virtual Smart Devices forever.
+
+        Parameters:
+            vsd_addr: The address to listen on.
+        """
         vsd_addr_parts = urlsplit(vsd_addr)
         server = await asyncio.start_server(
             self.run_device,
@@ -580,12 +607,8 @@ class SmartDeviceManager(remote.Handler):
             await server.serve_forever()
 
 
-async def main(**options: Any) -> None:
-    """Async entry point.
-
-    Arguments:
-        **options: Command-line options.
-    """
+async def _main(**options: Any) -> None:
+    """Async entry point."""
     async with process.Application('device', options) as app:
         await app.make_log_publisher()
         device_manager = SmartDeviceManager(
@@ -602,5 +625,10 @@ async def main(**options: Any) -> None:
 
 
 def target(**options: Any) -> None:
+    """Process entry point.
+
+    Parameters:
+        **options: Command-line options.
+    """
     uvloop.install()
-    asyncio.run(main(**options))
+    asyncio.run(_main(**options))

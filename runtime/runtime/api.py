@@ -1,6 +1,22 @@
-"""Student API.
+"""Student API for controlling the robot.
 
-Most of these interfaces are just wrappers around :class:`runtime.buffer.BufferManager`.
+The student provides a single Python file containing a minimum of four functions:
+
+    >>> def autonomous_setup():
+    ...     ...
+    >>> def autonomous_main():
+    ...     ...
+    >>> def teleop_setup():
+    ...     ...
+    >>> def teleop_main():
+    ...     ...
+
+The ``*_setup`` functions---``autonomous_setup`` and ``teleop_setup``---run once at the
+start of the autonomous and teleop phases, respectively. After the setup function runs,
+the corresponding ``*_main`` functions run periodically until the end of the phase. The
+frequency of ``main`` calls is configurable, but the default interval is 0.1s.
+
+These interfaces are largely thin wrappers around :class:`runtime.buffer.BufferStore`.
 """
 
 import abc
@@ -22,15 +38,30 @@ from typing import (
 )
 
 from . import log
-from .buffer import Buffer, BufferKey, BufferManager, DeviceBufferError
+from .buffer import Buffer, BufferKey, BufferStore, DeviceBufferError
 
-__all__ = ['safe', 'Alliance', 'Actions', 'Robot', 'Gamepad', 'Field']
-Action = Callable[[], Awaitable[None]]  # For example, a no-argument coroutine function
+__all__ = [
+    'Actions',
+    'Alliance',
+    'BufferAPI',
+    'Field',
+    'Gamepad',
+    'Robot',
+    'StudentAPI',
+    'safe',
+]
+
+Action = Callable[..., Awaitable[None]]
 
 
 @enum.unique
 class Alliance(enum.IntEnum):
-    """The alliances that compete in a match."""
+    """The alliances that compete in a match.
+
+    Attributes:
+        BLUE: The blue alliance.
+        GOLD: The gold alliance.
+    """
 
     BLUE = 0
     GOLD = 1
@@ -52,19 +83,28 @@ class Actions(StudentAPI):
 
     In this example, the robot's servo rotates 45 degrees counterclockwise from the
     motor's center, waits one second, and then rotates 90 degrees clockwise. Actions are
-    useful for triggering time-sensitive events outside the normal ``autonomous_main``
-    or ``teleop_main`` functions.
+    useful for triggering time-sensitive events outside the ``autonomous_main`` or
+    ``teleop_main`` functions, which fire at a fixed frequency.
+
+    To schedule an action to run, call :meth:`Actions.run` on the action's name from one
+    of the regular ``*_setup`` or ``*_main`` functions, like so:
+
+        >>> def autonomous_setup():
+        ...     Actions.run(wave_hand)  # Correct
+        ...     wave_hand()             # Incorrect: will not run
+
+    Do not call an action like you would call a regular function.
     """
 
     @staticmethod
     async def sleep(duration: float, /) -> None:
-        """Pause the program for some amount of time.
+        """Pause the current action for some amount of time.
 
-        Arguments:
+        Parameters:
             duration: The number of seconds to wait for. Must be a nonnegative number.
 
         Note:
-            Remember to use ``await`` before :meth:`Actions.sleep`.
+            Remember to use the ``await`` keyword before :meth:`Actions.sleep`.
         """
         await asyncio.sleep(duration)
 
@@ -77,18 +117,36 @@ class Actions(StudentAPI):
         timeout: float = 30,
         periodic: bool = False,
     ) -> None:
-        """Schedule an action to run outside of the ``*_main`` functions."""
+        """Schedule an action to run outside of the ``*_main`` functions.
+
+        Parameters:
+            action: An action (coroutine function).
+            args: Positional arguments to pass to the action.
+            timeout: Maximum number of seconds the action should be allowed to run for.
+                Must be a nonnegative number.
+            periodic: Whether to run the action repeatedly or not. A periodic action
+                that completes before the timeout has elapsed is not rescheduled early.
+        """
 
     @abc.abstractmethod
     def is_running(self, action: Action, /) -> Optional[bool]:
-        """Check whether an action is already running."""
+        """Check whether an action is already running.
+
+        Parameters:
+            action: An action (coroutine function).
+        """
 
 
 @dataclass
-class DeviceAPI(StudentAPI):
-    """Base type for all APIs that access shared memory buffers."""
+class BufferAPI(StudentAPI):
+    """Base type for all APIs that access shared memory buffers.
 
-    buffers: BufferManager
+    Parameters:
+        buffers: Buffer store.
+        logger: Synchronous bound logger.
+    """
+
+    buffers: BufferStore
     logger: log.Logger
 
     def _get_default(self, type_name: str, param: str) -> Any:
@@ -115,8 +173,19 @@ RT = TypeVar('RT')
 
 
 def safe(method: Callable[..., RT]) -> Callable[..., Optional[RT]]:
+    """A decorator that wraps API methods to catch and log any exceptions.
+
+    Parameters:
+        method: API method to be wrapped.
+
+    Returns:
+        The method wrapper. If the wrapped method raises an :class:`Exception`, the
+        wrapper's return value will be :data:`None`. :class:`BaseException` is too broad
+        to catch.
+    """
+
     @functools.wraps(method)
-    def wrapper(self: DeviceAPI, /, *args: Any, **kwargs: Any) -> Optional[RT]:
+    def wrapper(self: BufferAPI, /, *args: Any, **kwargs: Any) -> Optional[RT]:
         try:
             return method(self, *args, **kwargs)
         except Exception as exc:  # pylint: disable=broad-except; student-facing method
@@ -127,8 +196,13 @@ def safe(method: Callable[..., RT]) -> Callable[..., Optional[RT]]:
 
 
 @dataclass
-class Robot(DeviceAPI):
-    """API for interacting with Smart Devices."""
+class Robot(BufferAPI):
+    """API for accessing Smart Devices.
+
+    Parameters:
+        names: A mapping from human-readable device names (aliases) to UIDs that
+            students can configure.
+    """
 
     names: Mapping[str, int] = field(default_factory=dict)
 
@@ -145,25 +219,55 @@ class Robot(DeviceAPI):
 
     @safe
     def get(self, uid: Union[str, int], param: str, /) -> Any:
+        """Get a Smart Device parameter.
+
+        Parameters:
+            uid: Either a UID as an integer or a device name to be resolved into a UID.
+            param: Parameter name.
+
+        Returns:
+            The current parameter value. Because written parameters take time to
+            propogate to the device and the device must send an acknowledgement, the
+            current value may not immediately reflect a written value.
+        """
         return self._get(self._translate_uid(uid), param)
 
     @safe
     def write(self, uid: Union[str, int], param: str, value: Any, /) -> None:
-        self.buffers[self._translate_uid(uid)].write(param, value)
+        """Write a Smart Device parameter.
 
-    # Legacy API method aliases.
-    get_value = get
-    set_value = write
+        Parameters:
+            uid: Either a UID as an integer or a device name to be resolved into a UID.
+            param: Parameter name.
+            value: New parameter value.
+        """
+        self.buffers[self._translate_uid(uid)].write(param, value)
 
 
 @dataclass
-class Gamepad(DeviceAPI):
+class Gamepad(BufferAPI):
+    """API for reading game controller inputs.
+
+    Parameters:
+        enabled: Whether gamepads are enabled. In autonomous mode, this parameter should
+            be set to :data:`False`.
+    """
+
     enabled: bool = True
 
     TYPE_NAME: ClassVar[str] = 'gamepad'
 
     @safe
     def get(self, param: str, index: int = 0, /) -> Any:
+        """Get a gamepad parameter.
+
+        Attempting to access a gamepad while it is disabled will emit a warning but
+        will still return a type-safe default value.
+
+        Parameters:
+            param: Parameter name.
+            index: Gamepad identifier (a nonnegative integer).
+        """
         if not self.enabled:
             default = self._get_default(self.TYPE_NAME, param)
             self.logger.error(
@@ -174,13 +278,15 @@ class Gamepad(DeviceAPI):
             return default
         return self._get((self.TYPE_NAME, index), param)
 
-    # Legacy API method aliases.
-    get_value = get
-
 
 @dataclass
-class Field(DeviceAPI):
-    """API for interacting with the field and other robots."""
+class Field(BufferAPI):
+    """API for interacting with the field and other robots.
+
+    Parameters:
+        start: The UNIX timestamp (in seconds) of the start of the current
+            autonomous/teleop phase.
+    """
 
     start: float = field(default_factory=time.time)
 
@@ -200,18 +306,25 @@ class Field(DeviceAPI):
 
     @safe
     def send(self, obj: Any, /) -> None:
+        """Send a message to an allied robot."""
         ...  # TODO
 
     @safe
     def recv(self, /) -> Any:
+        """Receive a message from an allied robot."""
         ...  # TODO
 
 
 class StudentCodeModule(Protocol):
+    """The API symbols made available to the student code module.
+
+    Note:
+        The :func:`print` function should also be listed, but Mypy does not yet support
+        replacing callables: https://github.com/python/mypy/issues/708
+    """
+
     Alliance: type[Alliance] = Alliance
     Actions: Actions
     Robot: Robot
     Gamepad: Gamepad
     Field: Field
-    # The ``print`` function is not listed here because Mypy does not yet support
-    # replacing callables: https://github.com/python/mypy/issues/708

@@ -29,20 +29,20 @@ Each Smart Device has between zero and 16 (inclusive) parameters:
 * Each parameter has a data type.
   Similar to standard C types, the supported types are:
 
-    .. hlist::
-      :columns: 3
+  .. hlist::
+    :columns: 3
 
-      * ``bool`` (1 byte)
-      * ``uint8_t``
-      * ``int8_t``
-      * ``uint16_t``
-      * ``int16_t``
-      * ``uint32_t``
-      * ``int32_t``
-      * ``uint64_t``
-      * ``int64_t``
-      * ``float`` (4 bytes)
-      * ``double`` (8 bytes)
+    * ``bool`` (1 byte)
+    * ``uint8_t``
+    * ``int8_t``
+    * ``uint16_t``
+    * ``int16_t``
+    * ``uint32_t``
+    * ``int32_t``
+    * ``uint64_t``
+    * ``int64_t``
+    * ``float`` (4 bytes)
+    * ``double`` (8 bytes)
 
   As implied by its name, an ``(u)intNN_t`` integral type is exactly ``NN/8`` bytes wide.
   The ``u`` prefix denotes an unsigned type.
@@ -60,9 +60,8 @@ Every message (packet) follows a basic format:
 
 .. tikz:: Message Format
   :align: center
-  :xscale: 70
 
-  [font=\ttfamily]
+  [font=\ttfamily, scale=0.55, every node/.style={scale=0.55}]
   \fill[blue!20] (-1.5, 0.7) rectangle (8.5, -0.7);
   \node[align=center] at (0, 0) {Message ID \\ (8 bits)};
   \node[align=center] at (3.5, 0) {Payload Length \\ (8 bits)};
@@ -85,9 +84,8 @@ Each Smart Device is assigned a unique 88-bit identifier (UID) at compile time:
 
 .. tikz:: UID Format
   :align: center
-  :xscale: 50
 
-  [font=\ttfamily]
+  [font=\ttfamily, scale=0.55, every node/.style={scale=0.55}]
   \node[align=center] at (0, 0) {Device ID \\ (16 bits)};
   \node[align=center] at (3, 0) {Year \\ (8 bits)};
   \node[align=center] at (6, 0) {Random \\ (64 bits)};
@@ -165,9 +163,8 @@ Arduino Micros are little-endian (least significant byte first).
 
 .. tikz:: Payload Formats
   :align: center
-  :xscale: 80
 
-  [font=\ttfamily]
+  [font=\ttfamily, scale=0.55, every node/.style={scale=0.55}]
   \node[align=center] at (-1, 0) {Ping};
   \node[align=center] at (3, 0) {Empty \\ (0 bits)};
   \draw[thick] (1.5, 0.7) -- (4.5, 0.7) -- (4.5, -0.7) -- (1.5, -0.7) -- cycle;
@@ -335,17 +332,17 @@ Device List
   Monitors battery voltages and cell balances.
   The power distribution board (PDB) is shown below (left):
 
-    * Closing the circuitbreaker's yellow switch in the center switches on the PDB.
-      Pressing the circuitbreaker's red button opens the switch.
-    * Horizontal Anderson connectors, which power motors, populate the PDB's right side.
-      Following convention, the black connectors stand for ground, the red for power.
-      The motors use vertically stacked Andersons that can only be plugged into a motor controller, not directly into the PDB, to discourage such an accident.
-    * ATX connectors, which power servos and the Raspberry Pi, populate the PDB's left side.
-    * The buzzer in the bottom left corner beeps once when switched on under normal operation, and beeps continuously when the battery condition is unsafe.
-    * The ATX connectors above the buzzer connect to the battery.
-    * The seven-segment display in the bottom right corner shows the battery's voltage.
-    * The Arduino is optional.
-      The buzzer works even without the Arduino.
+  * Closing the circuitbreaker's yellow switch in the center switches on the PDB.
+    Pressing the circuitbreaker's red button opens the switch.
+  * Horizontal Anderson connectors, which power motors, populate the PDB's right side.
+    Following convention, the black connectors stand for ground, the red for power.
+    The motors use vertically stacked Andersons that can only be plugged into a motor controller, not directly into the PDB, to discourage such an accident.
+  * ATX connectors, which power servos and the Raspberry Pi, populate the PDB's left side.
+  * The buzzer in the bottom left corner beeps once when switched on under normal operation, and beeps continuously when the battery condition is unsafe.
+  * The ATX connectors above the buzzer connect to the battery.
+  * The seven-segment display in the bottom right corner shows the battery's voltage.
+  * The Arduino is optional.
+    The buzzer works even without the Arduino.
 
   The LIPO battery (shown below, right) contains three separate cells with their own voltages that are connected in parallel.
   Using a battery under unsafe conditions may permanently damage the battery and pose an electrical or fire risk.

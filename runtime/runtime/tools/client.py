@@ -37,5 +37,6 @@ async def main(ctx: click.Context) -> None:
                 notification=app.options['notification'],
             )
             await app.logger.info('Remote call succeeded', result=result)
+        # pylint: disable=broad-except; user should not seen an error traceback
         except Exception as exc:
             await app.logger.error('Remote call failed', exc_info=exc)

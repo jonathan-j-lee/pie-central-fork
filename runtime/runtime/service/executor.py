@@ -1,4 +1,4 @@
-"""Student Code Execution."""
+"""Student code execution."""
 
 import abc
 import asyncio
@@ -31,12 +31,13 @@ import structlog
 import uvloop
 
 from .. import api, log, process, remote
-from ..buffer import BufferManager
+from ..buffer import BufferStore
 from ..exception import EmergencyStopException, RuntimeBaseException
 
 __all__ = [
     'ExecutionError',
     'ExecutionRequest',
+    'Executor',
     'SyncExecutor',
     'AsyncExecutor',
     'Dispatcher',
@@ -144,7 +145,7 @@ def run_periodically(
 class ExecutionRequest(NamedTuple):
     """A request for an :class:`Executor` to execute a callable.
 
-    Attributes:
+    Parameters:
         func: The callable. May or may be a coroutine function.
         args: Positonal arguments to pass to :attr:`func`.
         timeout: If the request is not periodic, the timeout is the maximum number of
@@ -165,6 +166,7 @@ class ExecutionRequest(NamedTuple):
     future: Optional[asyncio.Future[Any]] = None
 
     def set_result(self, result: Any, /) -> None:
+        """Resolve this request's future."""
         if self.loop and self.future:
             if isinstance(result, BaseException):
                 callback = self.future.set_exception
@@ -186,7 +188,7 @@ class Executor(abc.ABC):
     def schedule(self, /, request: ExecutionRequest) -> None:
         """Schedule a callable for execution.
 
-        Arguments:
+        Parameters:
             request: The execution request.
 
         Raises:
@@ -220,7 +222,7 @@ class SyncExecutor(Executor):
     executes signal handlers. Synchronous handlers rely on the ``SIGALRM`` handler to
     raise an exception that will interrupt code that reaches a timeout.
 
-    Attributes:
+    Parameters:
         requests: A synchronous queue of execution requests.
     """
 
@@ -233,7 +235,11 @@ class SyncExecutor(Executor):
         self.requests.put(request)
 
     def execute(self, /, request: ExecutionRequest) -> Any:
-        """Execute a regular request."""
+        """Execute a regular execution request.
+
+        Parameters:
+            request: An execution request.
+        """
         if not request.periodic:
             return run_once(request.func, *request.args, timeout=request.timeout)
         run_periodically(
@@ -277,7 +283,7 @@ class SyncExecutor(Executor):
 class AsyncExecutor(Executor, api.Actions):
     """An executor that executes coroutine functions.
 
-    Attributes:
+    Parameters:
         loop: The event loop running the coroutine functions as tasks.
         requests: An async queue of execution requests.
         max_actions: The maximum number of concurrently running tasks.
@@ -320,7 +326,7 @@ class AsyncExecutor(Executor, api.Actions):
         self.running_actions.pop(action, None)
         try:
             request.set_result(future.result())
-        except Exception as exc:  # pylint: disable=broad-except; exception handled
+        except Exception as exc:  # pylint: disable=broad-except; exception is re-raised
             asyncio.get_running_loop().create_task(
                 asyncio.to_thread(
                     self.logger.error,
@@ -332,15 +338,13 @@ class AsyncExecutor(Executor, api.Actions):
 
     def _register_action(self, /, request: ExecutionRequest) -> None:
         """Schedule a regular request as an ``asyncio.Task`` instance."""
-        coro = request.func(*request.args)
-        if not coro:
-            return
-        if not request.periodic:
-            coro = asyncio.wait_for(coro, request.timeout)
-        else:
-            coro = process.spin(request.func, *request.args, interval=request.timeout)
-        task = asyncio.create_task(coro, name='action')
         action = typing.cast(api.Action, request.func)
+        coro: Awaitable[None]
+        if not request.periodic:
+            coro = asyncio.wait_for(action(*request.args), request.timeout)
+        else:
+            coro = process.spin(action, *request.args, interval=request.timeout)
+        task = asyncio.create_task(coro, name='action')
         self.running_actions[action] = task
         task.add_done_callback(functools.partial(self._action_done, request, action))
 
@@ -390,12 +394,10 @@ class AsyncExecutor(Executor, api.Actions):
         timeout: float = 30,
         periodic: bool = False,
     ) -> None:
-        """Student-friendly wrapper around :meth:`AsyncExecutor.schedule`."""
         self.schedule(ExecutionRequest(action, args, timeout, periodic))
 
     @api.safe
     def is_running(self, action: api.Action, /) -> bool:
-        """Check whether an action (coroutine function) is running."""
         return action in self.running_actions
 
 
@@ -403,7 +405,7 @@ class AsyncExecutor(Executor, api.Actions):
 class Dispatcher(remote.Handler):
     """An RPC handler to forward execution requests to the executors.
 
-    Attributes:
+    Parameters:
         timeouts: Maps function name patterns to a timeout duration (in seconds).
         student_code: Student code module.
         sync_exec: An synchronous executor for executing the ``*_setup`` and ``*_main``
@@ -412,7 +414,7 @@ class Dispatcher(remote.Handler):
         buffers: Buffer manager.
     """
 
-    buffers: BufferManager
+    buffers: BufferStore
     student_code_name: InitVar[str] = 'studentcode'
     timeouts: Mapping[Pattern[str], float] = field(default_factory=dict)
     names: Mapping[str, int] = field(default_factory=dict)
@@ -426,7 +428,7 @@ class Dispatcher(remote.Handler):
         self.student_code = types.ModuleType(student_code_name)
 
     @property
-    def should_import(self, /) -> bool:
+    def _should_import(self, /) -> bool:
         """Whether student code should be imported for the first time."""
         return not hasattr(self.student_code, '__file__')
 
@@ -439,8 +441,12 @@ class Dispatcher(remote.Handler):
         self.logger.sync_bl.info(sep.join(map(str, values)), student_print=True)
 
     def reload(self, /, *, enable_gamepads: bool = True) -> None:
-        """Load student code from disk and monkey-patch in the Runtime API."""
-        if self.should_import:
+        """Load student code from disk and monkey-patch in the Runtime API.
+
+        Parameters:
+            enable_gamepads: Whether to allow reading from gamepads.
+        """
+        if self._should_import:
             self.student_code = importlib.import_module(self.student_code.__name__)
         else:
             self.student_code = importlib.reload(self.student_code)
@@ -469,7 +475,7 @@ class Dispatcher(remote.Handler):
         Reload the student code module, then enqueue execution requests for the module's
         functions.
 
-        Arguments:
+        Parameters:
             requests: A list of keyword arguments to :class:`ExecutionRequest`. However,
                 the ``func`` argument should be a string naming a function in the
                 student code module. Also, if ``timeout`` is not present, this method
@@ -585,10 +591,15 @@ async def main(
 
 
 def target(name: str, **options: Any) -> None:
-    """The process entry point."""
+    """The process entry point.
+
+    Parameters:
+        name: This process's application name.
+        options: Processed command-line options.
+    """
     uvloop.install()
-    catalog = BufferManager.make_catalog(options['dev_catalog'])
-    with BufferManager(catalog) as buffers:
+    catalog = BufferStore.make_catalog(options['dev_catalog'])
+    with BufferStore(catalog) as buffers:
         dispatcher = Dispatcher(
             buffers,
             options['exec_module'],
@@ -596,7 +607,7 @@ def target(name: str, **options: Any) -> None:
             dict(options['dev_name']),
         )
         ready, done = threading.Event(), threading.Event()
-        for signum in {signal.SIGINT, signal.SIGTERM}:
+        for signum in (signal.SIGINT, signal.SIGTERM):
             signal.signal(signum, functools.partial(_handle_termination, done))
         service_thread = threading.Thread(
             target=lambda: asyncio.run(main(dispatcher, ready, done, name, **options)),

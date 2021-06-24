@@ -22,6 +22,20 @@ cdef extern from "message.hpp" namespace "message" nogil:
     ctypedef uint16_t device_id_t
 
     cpdef enum class MessageType:
+        """The Smart Device message's type identifies what kind of payload it contains.
+
+        Attributes:
+            PING: Ping request from Runtime to the Smart Device.
+            SUB_REQ: Subscription request.
+            SUB_RES: Subscription response.
+            DEV_READ: Device read.
+            DEV_WRITE: Device write.
+            DEV_DATA: Device data.
+            DEV_DISABLE: Device disable.
+            HB_REQ: Heartbeat request.
+            HB_RES: Heartbeat response.
+            ERROR: Error.
+        """
         PING,
         SUB_REQ,
         SUB_RES,
@@ -34,6 +48,19 @@ cdef extern from "message.hpp" namespace "message" nogil:
         ERROR
 
     cpdef enum class ErrorCode:
+        """Error codes produced by the Smart Device or during message encoding/decoding.
+
+        Attributes:
+            OK: No error occurred.
+            BACKOFF: The receiver is overwhelmed. The peer should transmit less data.
+            INVALID_TYPE: The receiver received a message type it does not handle.
+            BUFFER_OVERFLOW: Message was too large to encode/decode.
+            UNEXPECTED_DELIMETER: Message was incomplete or otherwise unable to be
+                decoded.
+            BAD_CHECKSUM: Checksum computed by the receiver did not match the sender's
+                claim.
+            GENERIC_ERROR: General error.
+        """
         OK,
         BACKOFF,
         INVALID_TYPE,

@@ -8,7 +8,7 @@ import pytest
 
 from runtime.buffer import (
     Buffer,
-    BufferManager,
+    BufferStore,
     DeviceBuffer,
     DeviceBufferError,
     DeviceUID,
@@ -33,7 +33,7 @@ def device_buffer_type():
         Parameter('large', ctypes.c_char * 253, 3, writeable=True),
         Parameter('pos', ctypes.c_double, 4, writeable=True, lower=-1, upper=1),
     ]
-    yield DeviceBuffer.make_type('ExampleDevice', params)
+    yield DeviceBuffer.make_type('example-device', params)
 
 
 @pytest.fixture
@@ -74,7 +74,7 @@ def device_uid():
 
 
 @pytest.fixture(params=[False, True])
-def buffer_manager(request):
+def buffers(request):
     catalog = {
         'example-device': {
             'device_id': 0x80,
@@ -106,10 +106,10 @@ def buffer_manager(request):
             ]
         },
     }
-    catalog = BufferManager.make_catalog(catalog)
-    with BufferManager(catalog, shared=request.param) as buffers:
+    catalog = BufferStore.make_catalog(catalog)
+    with BufferStore(catalog, shared=request.param) as buffers:
         yield buffers
-    BufferManager.unlink_all()
+    BufferStore.unlink_all()
 
 
 def test_update_dev_data(mocker, device_buffer):
@@ -172,9 +172,7 @@ def test_update_sub_res(device_uid, device_buffer):
         device_uid.random,
     )
     device_buffer.update(sub_res)
-    assert device_buffer.uid.device_id == 0xFFFF
-    assert device_buffer.uid.year == 0xEE
-    assert device_buffer.uid.random == 0xC0DEBEEFDEADBEEF
+    assert device_buffer.uid == 0xFFFF_EE_C0DEBEEF_DEADBEEF
     assert device_buffer.subscription == {'flag', 'duty_cycle'}
     assert device_buffer.interval == pytest.approx(0.1)
     device_buffer.set('duty_cycle', 0.123)
@@ -343,8 +341,8 @@ def test_too_many_params():
         DeviceBuffer.make_type('too-many-params', params)
 
 
-def test_type_registration(buffer_manager):
-    ExampleDevice = buffer_manager.catalog['example-device']
+def test_type_registration(buffers):
+    ExampleDevice = buffers.catalog['example-device']
     assert issubclass(ExampleDevice, DeviceBuffer)
     assert ExampleDevice.device_id == 0x80
     assert ExampleDevice.sub_interval == pytest.approx(0.08)
@@ -361,7 +359,7 @@ def test_type_registration(buffer_manager):
             subscribed=False,
         ),
     ]
-    Camera = buffer_manager.catalog['camera']
+    Camera = buffers.catalog['camera']
     assert issubclass(Camera, Buffer) and not issubclass(Camera, DeviceBuffer)
     assert list(Camera.params.values()) == [
         Parameter('rgb', ctypes.c_uint8 * 128 * 128 * 3, 0)
@@ -374,40 +372,40 @@ def test_duplicate_registration():
         'dev2': {'device_id': 0x80},
     }
     with pytest.raises(DeviceBufferError):
-        BufferManager(BufferManager.make_catalog(catalog))
+        BufferStore(BufferStore.make_catalog(catalog))
 
 
-def test_key_equivalence(buffer_manager):
-    buf1 = buffer_manager.get_or_create(0x80_00_00000000_00000000)
-    buf2 = buffer_manager.get_or_create(DeviceUID(0x80, 0, 0))
-    buf3 = buffer_manager['example-device', 0x80_00_00000000_00000000]
-    assert buf1 is buf2 is buf3
+def test_key_equivalence(buffers):
+    buf1 = buffers.get_or_open(0x80_00_00000000_00000000)
+    buf2 = buffers['example-device', 0x80_00_00000000_00000000]
+    assert buf1 is buf2
 
 
-def test_buffer_access_error(buffer_manager):
+def test_buffer_access_error(buffers):
+    if buffers.shared:
+        with pytest.raises(DeviceBufferError):
+            _ = buffers[0x80_00_00000000_00000000]
     with pytest.raises(KeyError):
-        _ = buffer_manager[0x80_00_00000000_00000000]
-    with pytest.raises(KeyError):
-        buffer_manager.get_or_create(0x81_00_00000000_00000000)
-    assert len(buffer_manager) == 0
+        buffers.get_or_open(0x81_00_00000000_00000000)
+    assert len(buffers) == 0
 
 
-def test_shm_open_close(buffer_manager):
-    if not buffer_manager.shared:
+def test_shm_open_close(buffers):
+    if not buffers.shared:
         pytest.skip()
-    buf = buffer_manager.get_or_create(0x80_00_00000000_00000000)
-    assert len(buffer_manager) == 1
-    assert list(buffer_manager.items()) == [
+    buf = buffers.get_or_open(0x80_00_00000000_00000000)
+    assert len(buffers) == 1
+    assert list(buffers.items()) == [
         (('example-device', 0x80_00_00000000_00000000), buf)
     ]
     path = Path('/dev/shm/rt-example-device-604462909807314587353088')
     assert path.exists()
     assert buf.valid
-    buffer_manager.stack.close()
-    assert len(buffer_manager) == 0
+    buffers.stack.close()
+    assert len(buffers) == 0
     assert path.exists()
-    buf2 = buffer_manager.get_or_create(0x80_00_00000000_00000000)
-    buf3 = buffer_manager[0x80_00_00000000_00000000]
+    buf2 = buffers.get_or_open(0x80_00_00000000_00000000)
+    buf3 = buffers[0x80_00_00000000_00000000]
     assert buf2 is buf3
     assert buf2.valid
     assert buf is not buf2

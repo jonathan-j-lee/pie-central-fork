@@ -1,13 +1,13 @@
 import asyncio
 import contextlib
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterable, AsyncIterator, NoReturn, Optional
+from typing import Any, AsyncIterator, NoReturn, Optional
 from urllib.parse import urlsplit
 
 import click
 
 from .. import process
-from ..buffer import BufferManager, DeviceBufferError, DeviceUID
+from ..buffer import BufferStore, DeviceBufferError
 from ..messaging import Message, MessageType
 from ..service.device import SmartDevice
 
@@ -35,7 +35,7 @@ class SmartDeviceService(SmartDevice):
                     with contextlib.suppress(DeviceBufferError):
                         self.buffer.write(param.name, param.default)
 
-    async def _emit_responses(self, message: Message, /) -> AsyncIterable[Message]:
+    async def _emit_responses(self, message: Message, /) -> AsyncIterator[Message]:
         if message.type in {MessageType.PING, MessageType.SUB_REQ}:
             yield await asyncio.to_thread(self.buffer.make_sub_res)
             interval = await asyncio.to_thread(getattr, self.buffer, 'interval')
@@ -79,7 +79,7 @@ class SmartDeviceService(SmartDevice):
 
 @contextlib.asynccontextmanager
 async def start_virtual_device(
-    buffers: BufferManager,
+    buffers: BufferStore,
     uid: int,
     options: dict[str, Any],
     params: Optional[dict[str, Any]] = None,
@@ -87,8 +87,8 @@ async def start_virtual_device(
 ) -> AsyncIterator[set[asyncio.Task[NoReturn]]]:
     address = urlsplit(options['dev_vsd_addr'])
     reader, writer = await asyncio.open_connection(address.hostname, address.port)
-    buffer = buffers.get_or_create(uid)
-    buffer.uid = DeviceUID.from_int(uid)
+    buffer = buffers.get_or_open(uid)
+    buffer.uid = uid
     for param, value in (params or {}).items():
         buffer.set(param, value)
     device = SmartDeviceService(reader, writer, buffer, **kwargs)

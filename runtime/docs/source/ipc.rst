@@ -149,7 +149,7 @@ Format
 .. tikz:: Buffer Format
   :align: center
 
-  [font=\ttfamily, thick, align=center]
+  [font=\ttfamily, thick, align=center, scale=0.5, every node/.style={scale=0.5}]
 
   \node at (0, 3) {Timestamp \\ (64 bits)};
   \node at (3, 3) {Param. 1 \\ (var.)};
@@ -293,19 +293,19 @@ A consumer should never die while holding a buffer's mutex if the consumer uses 
 
 Rejected alternative implementations that proactively clean up shared memory:
 
-  * ``server`` is the sole owner of all shared memory blocks.
-    Consumers poll ``server`` for a list of active blocks and request allocation/deallocation.
-    This design is quite noisy and ``server`` must guess when there are no more outstanding views of a shared memory block before it unlinks the block.
-  * Add a reference count to every block and unlink the block when the number of views reaches zero.
-    A service can die suddenly and leave the reference count too high.
-    This design also suffers from the aforementioned transient connection issue.
-  * Use a special shared memory block as a *directory* of all active blocks, their open/close states, and reference counts.
-    This introduces more shared state with a bad single point of failure.
-  * Use ``inotify`` to alert consumers when a new buffer is available or unavailable.
-    When the peripheral disconnects, the peripheral owner unlinks the shared memory immediately, which triggers ``inotify`` to prompt consumers to close their views.
+* ``server`` is the sole owner of all shared memory blocks.
+  Consumers poll ``server`` for a list of active blocks and request allocation/deallocation.
+  This design is quite noisy and ``server`` must guess when there are no more outstanding views of a shared memory block before it unlinks the block.
+* Add a reference count to every block and unlink the block when the number of views reaches zero.
+  A service can die suddenly and leave the reference count too high.
+  This design also suffers from the aforementioned transient connection issue.
+* Use a special shared memory block as a *directory* of all active blocks, their open/close states, and reference counts.
+  This introduces more shared state with a bad single point of failure.
+* Use ``inotify`` to alert consumers when a new buffer is available or unavailable.
+  When the peripheral disconnects, the peripheral owner unlinks the shared memory immediately, which triggers ``inotify`` to prompt consumers to close their views.
 
-    Although this is an elegant event-driven solution, it relies on the ``multiprocessing.shared_memory`` module's handling of what it calls "memory access errors".
-    It's unclear whether these errors entail exceptions or segfaults; the latter would be very bad.
-    `POSIX shared memory <https://man7.org/linux/man-pages/man3/shm_unlink.3.html>`_, which Python's ``multiprocessing.shared_memory`` module wraps, allows ``unlink()`` to precede all ``close()`` calls.
-    The block remains usable, but invisible on the filesystem, after ``unlink()``.
-    In any case, relying on platform-specific behavior and an API like ``inotify`` is not portable.
+  Although this is an elegant event-driven solution, it relies on the ``multiprocessing.shared_memory`` module's handling of what it calls "memory access errors".
+  It's unclear whether these errors entail exceptions or segfaults; the latter would be very bad.
+  `POSIX shared memory <https://man7.org/linux/man-pages/man3/shm_unlink.3.html>`_, which Python's ``multiprocessing.shared_memory`` module wraps, allows ``unlink()`` to precede all ``close()`` calls.
+  The block remains usable, but invisible on the filesystem, after ``unlink()``.
+  In any case, relying on platform-specific behavior and an API like ``inotify`` is not portable.

@@ -1,20 +1,89 @@
-table.compact-table td {
-  white-space: normal !important;
+img {
+  max-width: 100%;
 }
 
-td ul {
+caption {
+  margin-bottom: 0.5rem;
+}
+
+table {
+  margin: 2em 0;
+}
+
+ul.simple {
+  margin-bottom: 0.7em !important;
+}
+
+/* Style API documentation */
+
+dd > .admonition {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  margin: 0.5rem 0 0 0;
+}
+
+dl.field-list dt {
+  font-size: 1.1em;
+}
+
+dl.field-list dd, dl.field-list dt {
+  margin-bottom: 0.5rem !important;
+}
+
+dd > ul.simple {
+  margin: 0;
+}
+
+strong {
   margin: 0 !important;
 }
 
-td ul li {
-  margin: 4px 0;
+p {
+  margin-bottom: 0.7em !important;
+  line-height: 1.4em;
 }
 
-td ul li p {
-  font-size: 14.4px !important;
-  line-height: 16px !important;
+dl {
+  margin: 0;
 }
 
-dd > p, dd > ul, dd > ol {
-  margin-bottom: 0.5rem !important;
+li > p {
+  margin: 0 !important;
+}
+
+pre {
+  font-size: 0.9em;
+  padding: 1.2em !important;
+}
+
+code {
+  padding: 0.1rem 0.25rem !important;
+}
+
+em.property > span.pre {
+  padding-right: 0.3rem !important;
+}
+
+.sig-paren {
+  font-size: 1.1em;
+}
+
+.py.attribute > dd > dl.field-list.simple, p.rubric {
+  margin: 0.5em 0 !important;
+}
+
+td {
+  padding: 0.3em 0.6em;
+}
+
+dl.class {
+  margin-bottom: 2em;
+}
+
+dl.method, dl.property {
+  margin: 0.7em 0;
+}
+
+dl.method dt, dl.property dt {
+  margin: 0;
 }

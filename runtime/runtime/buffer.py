@@ -1,4 +1,20 @@
-"""Peripheral Data Storage and Sharing."""
+"""Peripheral data storage and sharing.
+
+Buffers are the primary interprocess communication (IPC) mechanism within Runtime. Each
+buffer is a C-style structure created with the :mod:`ctypes` foreign function library
+and possibly backed by shared memory. Each buffer represents one Smart Device or other
+peripheral and contains parameters that can be read or written to.
+
+For extensibility reasons, this library contains no hardcoded information about specific
+peripherals. Instead, this library parses each peripheral's parameter and memory layout
+specifications from a config file and generates the buffer types dynamically.
+
+Consumers should poll buffers for changes. There is no mechanism for event-based
+notifications.
+
+This library is synchronous. Since many operations acquire a mutex, buffer operations
+should run in an executor, so as not to block the event loop.
+"""
 
 import collections.abc
 import contextlib
@@ -18,7 +34,6 @@ from typing import (
     Callable,
     Collection,
     ContextManager,
-    Iterable,
     Iterator,
     Mapping,
     MutableMapping,
@@ -33,13 +48,14 @@ from .messaging import Message, MessageError, MessageType, ParameterMap
 from .sync import Mutex
 
 __all__ = [
-    'BufferManager',
-    'DeviceBufferError',
-    'Parameter',
-    'DeviceUID',
     'Buffer',
+    'BufferStore',
+    'Catalog',
     'DeviceBuffer',
+    'DeviceBufferError',
+    'DeviceUID',
     'NullDevice',
+    'Parameter',
 ]
 
 # List: https://docs.python.org/3/library/ctypes.html#fundamental-data-types
@@ -71,11 +87,23 @@ _SIMPLE_TYPES: frozenset[type] = frozenset(
 
 
 class DeviceBufferError(RuntimeBaseException):
-    """General buffer error."""
+    """Error when interfacing with a buffer."""
 
 
 class Parameter(NamedTuple):
-    """A description of a parameter."""
+    """A parameter descriptor.
+
+    Parameters:
+        name: The parameter name.
+        ctype: A :mod:`ctypes` type.
+        id: The parameter ID, a nonnegative integer.
+        lower: This parameter's minimum valid value. For numeric parameters only.
+        upper: This parameter's maximum valid value. For numeric parameters only.
+        readable: Whether this parameter should be readable with :meth:`Buffer.get`.
+        writeable: Whether this parameter should be writeable with :meth:`Buffer.write`.
+        subscribed: Whether this parameter should be subscribed to, by default. Only
+            applicable for Smart Devices.
+    """
 
     name: str
     ctype: type
@@ -87,18 +115,31 @@ class Parameter(NamedTuple):
     subscribed: bool = True
 
     @property
-    def platform_type(self) -> type:
-        """A ``ctype`` that has the correct width to hold this parameter's values.
+    def platform_type(self, /) -> type:
+        """A C type that has the correct width to hold this parameter's values.
 
         The type widths of Runtime's platform and the peripheral's platform may not
-        match. This method performs the conversion to ensure the space allocated in the
-        buffer is exactly the right size as the bytes emitted by the peripheral.
+        match. This method performs the necessary conversion to allocate the correct
+        amount of buffer space.
+
+        Returns:
+            A type exactly as wide as the values (bytes) emitted by the peripheral.
         """
         return ctypes.c_float if self.ctype is ctypes.c_double else self.ctype
 
     @staticmethod
     def parse_ctype(type_specifier: str) -> type:
         """Parse a type specifier into the corresponding C type.
+
+        Parameters:
+            type_specifier: A description of the parameter's type. Can be a the name of
+                any simple :mod:`ctypes` data type without the ``c_`` prefix. A vector
+                type of `n` elements can also be specified by appending ``[<n>]`` to an
+                existing type (resembling C array declaration syntax). Pointer types are
+                not supported.
+
+        Returns:
+            A :mod:`ctypes`-compatible data type.
 
         Example:
             >>> assert Parameter.parse_ctype('bool') is ctypes.c_bool
@@ -115,8 +156,27 @@ class Parameter(NamedTuple):
             ctype *= dim
         return typing.cast(type, ctype)
 
-    def clamp(self, value: float) -> float:
-        """Ensure a real value is between the parameter's lower and upper limits."""
+    def clamp(self, value: float, /) -> float:
+        """Ensure a real value is between this parameter's lower and upper limits.
+
+        If the value is not within the bounds, this method will emit a warning.
+
+        Parameters:
+            value: Candidate value.
+
+        Returns:
+            A value between :attr:`Parameter.lower` and :attr:`Parameter.upper`. A value
+            that exceeds the minimum or maximum will be clipped to that bound.
+
+        Example:
+            >>> param = Parameter('param', ctypes.c_double, 0, lower=-1, upper=1)
+            >>> param.clamp(-1.1)
+            -1
+            >>> param.clamp(1.1)
+            1
+            >>> param.clamp(0)
+            0
+        """
         if value < self.lower:
             warnings.warn(f'{self.name} exceeded lowerbound ({value} < {self.lower})')
         if value > self.upper:
@@ -124,11 +184,31 @@ class Parameter(NamedTuple):
         return max(self.lower, min(self.upper, value))
 
     @property
-    def default(self) -> Any:
+    def default(self, /) -> Any:
+        """The default value when initializing this parameter.
+
+        Returns:
+            The default value of :attr:`Parameter.platform_type`.
+
+        Raises:
+            DeviceBufferError: If this parameter is not a simple :mod:`ctype`.
+
+        Example:
+            >>> Parameter('param', ctypes.c_double, 0).default
+            0.0
+            >>> Parameter('param', ctypes.c_int8, 0).default
+            0
+            >>> Parameter('param', ctypes.c_bool, 0).default
+            False
+            >>> Parameter('param', ctypes.c_bool * 3, 0).default
+            Traceback (most recent call last):
+              ...
+            runtime.buffer.DeviceBufferError: vector parameters have no default
+        """
         ctype = self.platform_type
         if ctype not in _SIMPLE_TYPES:
             raise DeviceBufferError(
-                'structured or vector parameters have no default',
+                'vector parameters have no default',
                 name=self.name,
                 index=self.id,
             )
@@ -139,13 +219,23 @@ WriteableBuffer = TypeVar('WriteableBuffer', memoryview, bytearray)
 
 
 class BaseStructure(ctypes.LittleEndianStructure):
-    """Ensure all buffers have the same endianness."""
+    """Base type for all structures.
+
+    This type ensures all buffers have the same endianness. The endianness of this type
+    should match that of the Smart Device platform.
+    """
 
     @classmethod
-    def get_view(cls, base_view: WriteableBuffer, field_name: str) -> WriteableBuffer:
-        """Get a memory view of a field from the structure's memory view."""
-        struct_field = getattr(cls, field_name)
-        return base_view[struct_field.offset : struct_field.offset + struct_field.size]
+    def get_view(cls, /, base: WriteableBuffer, field_name: str) -> memoryview:
+        """Get a memory view of a field from the structure's buffer.
+
+        Parameters:
+            base: The buffer backing the structure.
+            field_name: The name of the field view to extract.
+        """
+        field_desc = getattr(cls, field_name)
+        view = memoryview(base)
+        return view[field_desc.offset : field_desc.offset + field_desc.size]
 
 
 @functools.lru_cache(maxsize=64)
@@ -170,6 +260,12 @@ def make_bitmask(bits: int) -> int:
 class DeviceUID(BaseStructure):
     """A unique device identifier.
 
+    Attributes:
+        device_id (int): The device's type ID. Consult the catalog for the full list.
+        year (int): The year in which the device was created. ``0x00`` corresponds to
+            the spring 2016 season, and increments for each season afterwards.
+        random (int): The UID's random bits to distinguish otherwise identical devices.
+
     Examples:
         >>> uid = DeviceUID(0xffff, 0xee, 0xc0debeef_deadbeef)
         >>> assert int(uid) == 0xffff_ee_c0debeef_deadbeef
@@ -188,15 +284,14 @@ class DeviceUID(BaseStructure):
         ('random', ctypes.c_uint64),
     ]
 
-    def __int__(self) -> int:
-        """Serialize this UID as a 96-bit integer."""
+    def __int__(self, /) -> int:
         uid = int(self.device_id)
         uid = (uid << 8 * type(self).year.size) | self.year
         uid = (uid << 8 * type(self).random.size) | self.random
         return uid
 
     @classmethod
-    def from_int(cls, uid: int) -> 'DeviceUID':
+    def from_int(cls, /, uid: int) -> 'DeviceUID':
         """Parse a device UID in integer format into its constituent fields."""
         rand, uid = uid & make_bitmask(8 * cls.random.size), uid >> 8 * cls.random.size
         year, uid = uid & make_bitmask(8 * cls.year.size), uid >> 8 * cls.year.size
@@ -205,6 +300,8 @@ class DeviceUID(BaseStructure):
 
 
 class DeviceMetricsBlock(BaseStructure):
+    """A special structure for storing Smart Device statistics."""
+
     _counter_type = ctypes.c_uint64
     _fields_ = [
         ('send', _counter_type * Message.MAX_PARAMS),
@@ -213,7 +310,7 @@ class DeviceMetricsBlock(BaseStructure):
 
 
 class DeviceControlBlock(BaseStructure):
-    """A special structure for Smart Device bookkeeping."""
+    """A special structure for bookkeeping Smart Device control state."""
 
     _param_map_type = ctypes.c_uint16
     _timestamp_type = ctypes.c_double
@@ -231,8 +328,11 @@ class DeviceControlBlock(BaseStructure):
 
 
 class ParameterBlock(BaseStructure):
+    """A structure for holding parameters."""
+
     @classmethod
-    def make_type(cls, name: str, params: list[Parameter]) -> type['ParameterBlock']:
+    def make_type(cls, /, name: str, params: list[Parameter]) -> type['ParameterBlock']:
+        """Make a structure with the given parameters as fields."""
         fields = [(param.name, param.platform_type) for param in params]
         return type(name, (cls,), {'_fields_': fields, 'params': params})
 
@@ -241,6 +341,8 @@ RT = TypeVar('RT')
 
 
 def with_transaction(wrapped: Callable[..., RT]) -> Callable[..., RT]:
+    """Decorator applied to :class:`Buffer` methods to begin a transaction."""
+
     @functools.wraps(wrapped)
     def wrapper(self: 'Buffer', /, *args: Any, **kwargs: Any) -> RT:
         with self.transaction():
@@ -254,14 +356,17 @@ DeviceBufferType = TypeVar('DeviceBufferType', bound='DeviceBuffer')
 
 
 class Buffer(BaseStructure):
-    """A structure for holding peripheral data.
+    """A structure for storing peripheral data.
 
-    A buffer consists of two substructures: an _update_ block for holding current
-    parameter values (as read from the peripheral), and a _write_ block for parameter
+    A buffer consists of two substructures: an *update block* for storing current
+    parameter values (as read from the peripheral), and a *write block* for parameter
     values to be written to the peripheral.
+
+    Attributes:
+        params: Maps param names to their descriptors.
     """
 
-    params: dict[str, Parameter]
+    params: Mapping[str, Parameter]
     mutex: ContextManager[None] = contextlib.nullcontext()
 
     @classmethod
@@ -270,6 +375,12 @@ class Buffer(BaseStructure):
         buf: Optional[WriteableBuffer] = None,
         /,
     ) -> BufferType:
+        """Create a new buffer.
+
+        Parameters:
+            buf: A writeable Python buffer (not to be confused with :class:`Buffer`). If
+                not provided, a :class:`bytearray` with the correct size is allocated.
+        """
         if buf is None:
             return cls.attach(bytearray(ctypes.sizeof(cls)))
         structure = cls.from_buffer(buf)
@@ -279,11 +390,20 @@ class Buffer(BaseStructure):
     @classmethod
     def make_type(
         cls: type[BufferType],
+        /,
         name: str,
         params: list[Parameter],
         *extra_fields: tuple[str, type],
         **attrs: Any,
     ) -> type[BufferType]:
+        """Create a new buffer type (subclass).
+
+        Parameters:
+            name: Type name prefix (preferably kebab case).
+            params: Parameter list.
+            extra_fields: Extra :mod:`ctypes` fields (name and types).
+            attrs: Additional class attributes.
+        """
         normalized_name = name.title().replace('-', '')
         update_block_type = ParameterBlock.make_type(
             f'{normalized_name}UpdateBlock',
@@ -307,9 +427,9 @@ class Buffer(BaseStructure):
     @classmethod
     @contextlib.contextmanager
     def open(cls, name: str, /, *, create: bool = True) -> Iterator['Buffer']:
-        """Create a new buffer backed by shared memory.
+        """Open a new buffer backed by shared memory.
 
-        Arguments:
+        Parameters:
             name: The shared memory object's name.
             create: Whether to attempt to create a new shared memory object. If ``True``
                 but the object already exists, :meth:`open` silently attaches to the
@@ -386,6 +506,18 @@ class Buffer(BaseStructure):
 
     @with_transaction
     def get(self, param: str, /) -> Any:
+        """Read a parameter from the update block.
+
+        Parameters:
+            param: The parameter name.
+
+        Returns:
+            The parameter value. Consult the catalog for each device's parameters and
+            their types.
+
+        Raises:
+            DeviceBufferError: If the parameter does not exist or is not readable.
+        """
         try:
             return getattr(self.update_block, param)
         except AttributeError as exc:
@@ -396,10 +528,36 @@ class Buffer(BaseStructure):
 
     @with_transaction
     def set(self, param: str, value: Any, /) -> None:
+        """Set a parameter value in the update block.
+
+        Parameters:
+            param: The parameter name.
+            value: The parameter value. Consult the catalog for each device's parameters
+                and their types.
+
+        Raises:
+            DeviceBufferError: If the parameter does not exist or is not writeable.
+            TypeError: If the value is not the correct type.
+        """
         self._set(self.update_block, param, value)
 
     @with_transaction
     def write(self, param: str, value: Any, /) -> None:
+        """Request writing a parameter to the device.
+
+        Because the buffer is polled and the writes are batched during each cycle, it's
+        possible to overwrite a pending parameter write. This is a feature to reduce
+        excessive writes.
+
+        Parameters:
+            param: The parameter name.
+            value: The parameter value. Consult the catalog for each device's parameters
+                and their types.
+
+        Raises:
+            DeviceBufferError: If the parameter does not exist or is not writeable.
+            TypeError: If the value is not the correct type.
+        """
         self._set(self.write_block, param, value)
 
     def _set(self, block: ParameterBlock, param_name: str, value: Any, /) -> None:
@@ -426,6 +584,14 @@ class Buffer(BaseStructure):
 
 
 class DeviceBuffer(Buffer):
+    """A special buffer representing a Smart Device.
+
+    Attributes:
+        sub_interval: The default subscription interval in seconds.
+        write_interval: The duration in seconds between device writes.
+        heartbeat_interval: The duration in seconds between heartbeat requests.
+    """
+
     sub_interval: float = 0.04
     write_interval: float = 0.04
     heartbeat_interval: float = 1
@@ -499,6 +665,15 @@ class DeviceBuffer(Buffer):
 
     @with_transaction
     def read(self, /, params: Optional[Collection[str]] = None) -> None:
+        """Request the device to return values for some parameters.
+
+        Parameters:
+            params: A list of parameter names to return values for. Passing ``None``
+                specifies all parameters of this device type.
+
+        Raises:
+            KeyError: If an invalid parameter name is provided.
+        """
         if params is None:
             params = {param.name for param in self.params.values() if param.readable}
         self.control.read |= self._to_bitmap(params) & self._read_mask
@@ -508,7 +683,7 @@ class DeviceBuffer(Buffer):
         make_msg: Callable[[int, ParameterMap], Message],
         bitmap: int,
         param_map: ParameterMap,
-    ) -> Iterable[Message]:
+    ) -> Iterator[Message]:
         try:
             yield make_msg(bitmap, param_map)
         except MessageError:
@@ -516,7 +691,17 @@ class DeviceBuffer(Buffer):
                 yield make_msg(1 << param.id, param_map)
 
     @with_transaction
-    def emit_dev_rw(self, /) -> Iterable[Message]:
+    def emit_dev_rw(self, /) -> Iterator[Message]:
+        """Make messages for reading and writing parameters.
+
+        Calling this method will clear the pending parameter maps.
+
+        Yields:
+            runtime.messaging.Message: Zero or more messages, depending on how many
+            parameters the consumer requested with :meth:`read` or :meth:`Buffer.write`.
+            If no parameters have been requested, since the last read, this method may
+            yield no messages.
+        """
         if self.control.write:
             yield from self._emit(
                 Message.make_dev_write,
@@ -530,7 +715,14 @@ class DeviceBuffer(Buffer):
             self.control.read = Message.NO_PARAMS
 
     @with_transaction
-    def emit_dev_data(self, /) -> Iterable[Message]:
+    def emit_dev_data(self, /) -> Iterator[Message]:
+        """Make messages for containing device data for recently updated parameters.
+
+        Calling this method will mark all parameters are not recently updated.
+
+        Yields:
+            runtime.messaging.Message: Zero or more messages containing device data.
+        """
         # Subscribed parameters will be read soon anyway.
         # This optimization deduplicates updates.
         self.control.update &= Message.ALL_PARAMS ^ self.control.subscription
@@ -543,7 +735,12 @@ class DeviceBuffer(Buffer):
             self.control.update = Message.NO_PARAMS
 
     @with_transaction
-    def emit_subscription(self, /) -> Iterable[Message]:
+    def emit_subscription(self, /) -> Iterator[Message]:
+        """Make messages containing device data for subscribed parameters.
+
+        Yields:
+            runtime.messaging.Message: Zero or more messages containing device data.
+        """
         yield from self._emit(
             Message.make_dev_data,
             self.control.subscription,
@@ -557,6 +754,16 @@ class DeviceBuffer(Buffer):
         params: Optional[Collection[str]] = None,
         interval: Optional[float] = None,
     ) -> Message:
+        """Make a subscription request for some parameters.
+
+        Parameters:
+            params: A list of parameter names to subscribe to. Passing ``None``
+                specifies all parameters of this device type.
+            interval: The duration between updates in seconds.
+
+        Returns:
+            The subscription request message.
+        """
         if params is None:
             params = {param.name for param in self.params.values() if param.subscribed}
         if interval is None:
@@ -565,22 +772,41 @@ class DeviceBuffer(Buffer):
 
     @with_transaction
     def make_sub_res(self, /) -> Message:
+        """Make a subscription response for the parameters subscribed to.
+
+        Returns:
+            The subscription response message.
+        """
         return Message.make_sub_res(
             self.control.subscription,
             self.control.interval,
-            self.uid.device_id,
-            self.uid.year,
-            self.uid.random,
+            self.control.uid.device_id,
+            self.control.uid.year,
+            self.control.uid.random,
         )
 
     @with_transaction
     def get_read(self, /) -> frozenset[str]:
+        """Get the parameters that are to be read.
+
+        Calling this method will clear the pending read map.
+
+        Returns:
+            A collection of parameter names.
+        """
         params = frozenset(param.name for param in self._from_bitmap(self.control.read))
         self.control.read = Message.NO_PARAMS
         return params
 
     @with_transaction
     def get_write(self, /) -> dict[str, Any]:
+        """Get the parameters that were written.
+
+        Calling this method will clear the pending write map.
+
+        Returns:
+            A map of parameter names to their corresponding values.
+        """
         params = self._from_bitmap(self.control.write)
         params = frozenset(param for param in params if param.writeable)
         self.control.write = Message.NO_PARAMS
@@ -588,12 +814,23 @@ class DeviceBuffer(Buffer):
 
     @with_transaction
     def get_update(self, /) -> dict[str, Any]:
+        """Get the parameters that were updated.
+
+        Calling this method will clear the pending update map.
+
+        Returns:
+            A map of parameter names to their corresponding values.
+        """
         params = self._from_bitmap(self.control.update)
         self.control.update = Message.NO_PARAMS
         return {param.name: self.get(param.name) for param in params}
 
     @with_transaction
     def update(self, message: Message, /) -> None:
+        """Digest a Smart Device message and update this buffer's state accordingly.
+
+        The message's bitmaps and parameter values are copied into this buffer.
+        """
         if message.type is MessageType.DEV_DATA:
             self.control.update |= message.read_dev_data(self._update_param_map)
             self.control.last_update = time.time()
@@ -617,50 +854,74 @@ class DeviceBuffer(Buffer):
             self.control.uid = DeviceUID(*uid)
 
     @property
-    def uid(self) -> DeviceUID:
+    def uid(self) -> int:
+        """Smart Device unique identifier."""
         with self.transaction():
-            buf = self.get_view(self.buf, 'control')
-            buf = self.control.get_view(buf, 'uid')
-            return DeviceUID.from_buffer_copy(buf)
+            return int(self.control.uid)
 
     @uid.setter
-    def uid(self, uid: DeviceUID, /) -> None:
+    def uid(self, uid: int, /) -> None:
         with self.transaction():
-            self.control.uid.device_id = uid.device_id
-            self.control.uid.year = uid.year
-            self.control.uid.random = uid.random
+            uid_parts = DeviceUID.from_int(uid)
+            self.control.uid.device_id = uid_parts.device_id
+            self.control.uid.year = uid_parts.year
+            self.control.uid.random = uid_parts.random
 
     @property
     def subscription(self) -> frozenset[str]:
+        """The names of parameters subscribed to."""
         with self.transaction():
             params = self._from_bitmap(self.control.subscription)
             return frozenset(param.name for param in params)
 
     @property
     def last_write(self) -> float:
+        """The timestamp given by :func:`time.time` of the last write."""
         with self.transaction():
             return float(self.control.last_write)
 
     @property
     def last_update(self) -> float:
+        """The timestamp given by :func:`time.time` of the last update."""
         with self.transaction():
             return float(self.control.last_update)
 
     @property
     def interval(self) -> float:
+        """The subscription interval in seconds."""
         with self.transaction():
             return float(self.control.interval) / 1000
 
 
 NullDevice = DeviceBuffer.make_type('null-device', [])
-DeviceBufferKey = Union[int, DeviceUID]
-BufferKey = Union[tuple[str, int], DeviceBufferKey]
+"""A buffer type with no parameters.
+
+Useful for creating a non-null placeholder where a buffer is required.
+"""
+
+BufferKey = Union[int, tuple[str, int]]
 Catalog = Mapping[str, type[Buffer]]
 
 
 @dataclass
-class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
-    """Manage the lifecycle of a collection of buffers."""
+class BufferStore(collections.abc.Mapping[BufferKey, Buffer]):
+    """Manage the lifecycle of a collection of buffers.
+
+    Every device type has a unique name and every device has an integer identifier
+    (UID) unique among its type. A type name and UID pair uniquely identifies a device
+    globally. For Smart Devices, the UID encodes the type, so its UID alone specifies
+    a buffer.
+
+    A :class:`BufferStore` maps type name and UID pairs to buffer instances. The store
+    implements the context manager protocol for automatically closing all open buffers.
+
+    Parameters:
+        catalog: A device catalog mapping unique type names to buffer types. The
+            buffer types should be generated with the :meth:`Buffer.make_type` factory.
+        buffers: A mapping from type name and UID pairs to buffer instances.
+        stack: An exit stack for closing buffers.
+        shared: Whether buffers should be created shared memory.
+    """
 
     catalog: Catalog
     buffers: MutableMapping[tuple[str, int], Buffer] = field(default_factory=dict)
@@ -668,10 +929,10 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
     shared: bool = True
     device_ids: Mapping[int, str] = field(init=False, repr=False)
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, /) -> None:
         self.device_ids = self._make_device_ids()
 
-    def _make_device_ids(self) -> Mapping[int, str]:
+    def _make_device_ids(self, /) -> Mapping[int, str]:
         device_ids = {}
         for type_name, buf_type in self.catalog.items():
             device_id = getattr(buf_type, 'device_id', None)
@@ -684,7 +945,7 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
                 device_ids[device_id] = type_name
         return device_ids
 
-    def __enter__(self, /) -> 'BufferManager':
+    def __enter__(self, /) -> 'BufferStore':
         self.stack.__enter__()
         return self
 
@@ -698,10 +959,7 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
         return self.stack.__exit__(exc_type, exc, traceback)
 
     def __getitem__(self, key: BufferKey, /) -> Buffer:
-        try:
-            return self.get_or_create(key, create=False)
-        except DeviceBufferError as exc:
-            raise KeyError(str(exc)) from exc
+        return self.get_or_open(key, create=False)
 
     def __iter__(self, /) -> Iterator[BufferKey]:
         return iter(self.buffers)
@@ -710,28 +968,31 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
         return len(self.buffers)
 
     def normalize_key(self, key: BufferKey, /) -> tuple[str, int]:
+        """Convert a Smart Device UID into the type name and UID format.
+
+        Returns:
+            The type name and UID pair.
+        """
         if isinstance(key, int):
-            return self.normalize_key(DeviceUID.from_int(key))
-        if isinstance(key, DeviceUID):
-            return self.device_ids[key.device_id], int(key)
+            uid = DeviceUID.from_int(key)
+            return self.device_ids[uid.device_id], key
         return key
 
     @typing.overload
-    def get_or_create(
-        self,
-        key: DeviceBufferKey,
-        /,
-        *,
-        create: bool = ...,
-    ) -> DeviceBuffer:
+    def get_or_open(self, key: int, /, *, create: bool = ...) -> DeviceBuffer:
         ...
 
     @typing.overload
-    def get_or_create(self, key: BufferKey, /, *, create: bool = ...) -> Buffer:
+    def get_or_open(self, key: tuple[str, int], /, *, create: bool = ...) -> Buffer:
         ...
 
-    def get_or_create(self, key: BufferKey, /, *, create: bool = True) -> Buffer:
-        """
+    def get_or_open(self, key: BufferKey, /, *, create: bool = True) -> Buffer:
+        """Get a buffer, opening a new one if necessary.
+
+        Parameters:
+            key: A buffer identifier.
+            create: Whether to create a new buffer if one does not already exist.
+
         Raises:
             KeyError: The device ID or type name does not exist.
             DeviceBufferError: If ``create=False``, but the buffer does not exist.
@@ -739,11 +1000,10 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
         type_name, uid = key = self.normalize_key(key)
         buffer = self.buffers.get(key)
         if not buffer:
-            buffer_type = self.catalog[type_name]
+            buf_type = self.catalog[type_name]
             if self.shared:
-                buffer = self.stack.enter_context(
-                    buffer_type.open(f'rt-{type_name}-{uid}', create=create),
-                )
+                name = f'rt-{type_name}-{uid}'
+                buffer = self.stack.enter_context(buf_type.open(name, create=create))
             else:
                 if not create:
                     raise DeviceBufferError(
@@ -751,7 +1011,7 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
                         type=type_name,
                         uid=str(uid),
                     )
-                buffer = buffer_type.attach()
+                buffer = buf_type.attach()
                 buffer.valid = True
             self.buffers[key] = buffer
             self.stack.callback(self.buffers.pop, key)
@@ -759,11 +1019,12 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
 
     @staticmethod
     def unlink_all(shm_path: Path = Path('/dev/shm')) -> None:
+        """Unlink all shared buffers owned by Runtime."""
         for path in shm_path.glob('rt-*'):
             Buffer.unlink(path.name)
 
     @staticmethod
-    def _make_params(attrs: dict[str, Any]) -> Iterable[Parameter]:
+    def _make_params(attrs: dict[str, Any]) -> Iterator[Parameter]:
         for index, param in enumerate(attrs.pop('params', [])):
             param.setdefault('id', index)
             param['ctype'] = Parameter.parse_ctype(param.pop('type'))
@@ -771,6 +1032,21 @@ class BufferManager(collections.abc.Mapping[BufferKey, Buffer]):
 
     @classmethod
     def make_catalog(cls, catalog: dict[str, dict[str, Any]]) -> Catalog:
+        """Generate buffer types from the raw peripheral specification.
+
+        The raw peripheral specification follows this form::
+
+            {
+                "device_id": <int>,             # For Smart Devices only
+                "sub_interval": <float>,          # Optional
+                "write_interval": <float>,        # Optional
+                "heartbeat_interval": <float>,    # Optional
+                "params": [
+                    # Keyword arguments of ``Parameter``
+                    {"name": <str>, "type": <str>}
+                ]
+            }
+        """
         catalog_types = {}
         for type_name, attrs in catalog.items():
             params = list(cls._make_params(attrs))

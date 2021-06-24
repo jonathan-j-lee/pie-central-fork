@@ -155,7 +155,7 @@ async def test_checks():
         remote.Client(remote.SocketNode(socket_type=zmq.DEALER), concurrency=-1)
     with pytest.raises(ValueError):
         remote.DatagramNode.from_address('tcp://localhost:8080')
-    with pytest.raises(ValueError):
+    with pytest.raises(remote.RemoteCallError):
         await remote.SocketNode(socket_type=zmq.PUB).recv()
     node = remote.DatagramNode.from_address(UDP_ADDR, bind=False)
     node.close()
@@ -257,14 +257,14 @@ async def test_bad_payloads(endpoints):
     service_payloads = [
         [b''],
         [b''] * 2,
-        [await remote.encode([])],
-        [(await remote.encode([]))[:-1]],
-        [await remote.encode('abcd')],
-        [await remote.encode([5, 0, None, None])],
-        [await remote.encode([remote.MessageType.RESPONSE.value, 0, None, None])],
+        [await remote._encode([])],
+        [(await remote._encode([]))[:-1]],
+        [await remote._encode('abcd')],
+        [await remote._encode([5, 0, None, None])],
+        [await remote._encode([remote.MessageType.RESPONSE.value, 0, None, None])],
     ]
     bad_request = [remote.MessageType.REQUEST.value, 0, 'generate_message_id', ()]
-    client_payloads = [*service_payloads, [await remote.encode(bad_request)]]
+    client_payloads = [*service_payloads, [await remote._encode(bad_request)]]
     for _ in range(3):
         for payload in service_payloads:
             await client.node.send(payload, address=service.node.address)
@@ -430,7 +430,7 @@ async def test_loopback(endpoints):
     await asyncio.sleep(0.3)
     message = [remote.MessageType.REQUEST.value, 0, 'inc', ()]
     await service.node.send(
-        [await remote.encode(message)],
+        [await remote._encode(message)],
         address=service.node.address,
     )
     await asyncio.sleep(0.3)

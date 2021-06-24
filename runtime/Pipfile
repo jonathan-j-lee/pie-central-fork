@@ -29,9 +29,9 @@ pytest-asyncio = '~=0.15'
 pytest-cov = '~=2.11'
 pytest-mock = '~=3.6'
 pyenchant = '~=3.2'
-sphinx = '~=3.5'
-sphinx-autobuild = '~=2020.9'
-sphinx-rtd-theme = '~=0.5'
+sphinx = '~=4.0'
+sphinx-autobuild = '~=2021.3'
+sphinx-press-theme = '~=0.7'
 sphinxcontrib-tikz = '~=0.4'
 types-PyYAML = '~=0.1'
 types-orjson = '~=0.1'
@@ -39,44 +39,19 @@ types-orjson = '~=0.1'
 [scripts]
 build = 'python setup.py build_ext --inplace'
 clean = 'sh -c "rm -rf build runtime/*.cpython-*.so runtime/*.c runtime/*.cpp"'
-client = """python -m runtime
-  --debug
-  --log-format pretty
-  client
-"""
-dev = """python -m runtime
-  --debug
-  --log-format pretty
-  server
-"""
+client = 'python -m runtime --debug --log-format pretty client'
+dev = 'python -m runtime --debug --log-format pretty server'
 prod = 'python -m runtime server'
-emulate = """python -m runtime
-  --debug
-  --log-format pretty
-  emulate-dev
-"""
-pager = """python -m runtime
-  --debug
-  --log-format pretty
-  log-pager
-"""
-servedocs = 'make --directory=docs livehtml'
+emulate = 'python -m runtime --debug --log-format pretty emulate-dev'
+pager = 'python -m runtime --debug --log-format pretty log-pager'
+'docs:build' = 'make --directory=docs html'
+'docs:serve' = 'make --directory=docs livehtml'
 typecheck = 'mypy --strict --implicit-reexport runtime'
-lint = """bash -c '
-pylint runtime;
-pylint \\
-  --disable=redefined-outer-name \\
-  --disable=missing-module-docstring \\
-  --disable=missing-class-docstring \\
-  --disable=missing-function-docstring \\
-  tests/*.py
-'"""
-fasttest = 'pytest -m "not slow"'
+lint = './scripts/lint.sh'
+'test:fast' = 'pytest -m "not slow"'
 test = 'pytest -v'
-format = """bash -c '
-black --color --target-version py39 --skip-string-normalization runtime stubs tests/*.py &&
-isort --profile black runtime stubs tests/*.py
-'"""
+format = './scripts/format.sh'
+'format:check' = './scripts/format.sh --check'
 
 [pipenv]
 allow_prereleases = true

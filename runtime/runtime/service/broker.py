@@ -1,4 +1,4 @@
-"""Broker Service Handler."""
+"""Broker service handler."""
 
 import asyncio
 import collections
@@ -9,14 +9,15 @@ import re
 import shlex
 import typing
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Iterable, Optional, Union
+from typing import Any, ClassVar, Iterator, Optional, Union
 
 import click
 import orjson as json
 
 from .. import api, log, process, remote
-from ..buffer import BufferManager, DeviceBufferError, Parameter
+from ..buffer import BufferStore, DeviceBufferError, Parameter
 
+# isort: unique-list
 __all__ = ['Broker', 'main']
 
 
@@ -24,7 +25,7 @@ __all__ = ['Broker', 'main']
 class Broker(remote.Handler):
     """The coordinator between Runtime's clients and Runtime's other processes.
 
-    Attributes:
+    Parameters:
         ctx: Command-line context.
         update_publisher: A client for broadcasting Smart Device parameter updates.
         client: A client for interprocess calls.
@@ -35,7 +36,7 @@ class Broker(remote.Handler):
     ctx: click.Context
     update_publisher: remote.Client
     client: remote.Client
-    buffers: BufferManager
+    buffers: BufferStore
     uids: set[str] = field(default_factory=set)
     logger: log.AsyncLogger = field(default_factory=log.get_logger)
 
@@ -52,11 +53,11 @@ class Broker(remote.Handler):
     def _env_prefix(self) -> str:
         return (self.ctx.auto_envvar_prefix or 'RT').upper()
 
-    def get_envvar(self, name: str) -> str:
+    def _get_envvar(self, name: str) -> str:
         """Convert an option name into its corresponding environment variable."""
         return f'{self._env_prefix}_{name}'.upper()
 
-    def get_name(self, envvar: str) -> str:
+    def _get_name(self, envvar: str) -> str:
         """Convert an environment variable into its corresponding option name."""
         return envvar.lower().removeprefix(f'{self._env_prefix.lower()}_')
 
@@ -64,7 +65,7 @@ class Broker(remote.Handler):
     async def get_option(self, option: Optional[str] = None) -> Any:
         """Get a command-line option.
 
-        Arguments:
+        Parameters:
             option: The option name. If not provided, all options are returned.
 
         Returns:
@@ -72,15 +73,15 @@ class Broker(remote.Handler):
             mapping from all option names to their respective values.
         """
         if option:
-            return self.ctx.obj.envvars[self.get_envvar(option)]
+            return self.ctx.obj.envvars[self._get_envvar(option)]
         envvars = self.ctx.obj.envvars.items()
-        return {self.get_name(envvar): value for envvar, value in envvars}
+        return {self._get_name(envvar): value for envvar, value in envvars}
 
     @staticmethod
-    def format_args(options: dict[str, Any]) -> Iterable[str]:
+    def _format_args(options: dict[str, Any]) -> Iterator[str]:
         """Normalize a option name-value mapping as a flat command-line argument list.
 
-        Arguments:
+        Parameters:
             options: Option name-value mapping. Names are in snake case.
 
         Returns:
@@ -108,12 +109,12 @@ class Broker(remote.Handler):
             Command-line switches are not supported at this time.
         """
         items = self.ctx.obj.envvars.items()
-        current_options = {self.get_name(envvar): value for envvar, value in items}
+        current_options = {self._get_name(envvar): value for envvar, value in items}
         current_options.update(options)
-        args = list(self.format_args(current_options))
+        args = list(self._format_args(current_options))
         await asyncio.to_thread(self.ctx.command.parse_args, self.ctx, args)
 
-    def _filter_lint_message(self, message: dict[str, Any]) -> bool:
+    def _filter_lint_message(self, message: dict[str, Any], /) -> bool:
         """Exclude spurious lint messages."""
         if message['symbol'] == 'undefined-variable':
             match = re.match("Undefined variable '(?P<symbol>.+)'", message['message'])
@@ -126,28 +127,7 @@ class Broker(remote.Handler):
         stdout: str,
         stderr: str,
     ) -> list[dict[str, Union[str, int]]]:
-        """Parse raw ``pylint`` output into JSON records.
-
-        Arguments:
-            stdout: ``pylint`` subprocess standard output.
-
-        Returns:
-            A list of dictionaries, each of which has the keys: ``line``, ``column``,
-            ``msg``, ``msg_id``, ``symbol``, ``category``, and ``obj``. See the
-            `Pylint Output`_ documentation for details.
-
-        Note:
-            We cannot selectively disable certain errors within a category from the
-            command line. For example, undefined variables 'Robot' and 'Gamepad' are OK
-            because the student API is patched in, but we still want to emit warnings
-            for undefined variables created by students (so we cannot disable the
-            "undefined-variable" category entirely). This means the total score will
-            always start with a large penalty and has a meaningless baseline. We solve
-            this problem by computing the score client-side.
-
-        .. _Pylint Output:
-            https://docs.pylint.org/en/1.6.0/output.html
-        """
+        """Parse a ``pylint`` process's raw output into JSON records."""
         issue_counter: dict[str, int] = collections.defaultdict(lambda: 0)
         messages = []
         for message in filter(self._filter_lint_message, json.loads(stdout)):
@@ -163,12 +143,21 @@ class Broker(remote.Handler):
         return messages
 
     @remote.route
-    async def lint(self) -> list[dict[str, Union[str, int]]]:
-        """Lint student code to catch errors and suggest best practices.
+    async def lint(self, /) -> list[dict[str, Union[str, int]]]:
+        """Lint student code to identify errors and suggest best practices.
 
         Returns:
-            A list of lint messages, each of which represents one warning. See
-            :meth:`Broker.parse_lint_output` for details on the format of the output.
+            A list of warnings. See the `Pylint Output`_ documentation for details.
+
+        Note:
+            The numerical score Pylint produces is not reported because Runtime's API
+            built-ins (:mod:`runtime.api`) are always flagged as undefined. There is no
+            way to selectively exclude certain errors within a category from the score
+            calculation. Perfectly written student code will always have a meaningless
+            penalty.
+
+        .. _Pylint Output:
+            https://docs.pylint.org/en/1.6.0/output.html
         """
         subprocess = await asyncio.create_subprocess_exec(
             self.PYLINT_EXEC,
@@ -191,14 +180,14 @@ class Broker(remote.Handler):
         return params
 
     @remote.route
-    def update_gamepads(self, update: dict[str, dict[str, Union[int, float]]]) -> None:
+    def update_gamepads(self, update: dict[str, dict[str, Any]]) -> None:
         """Update gamepad parameters.
 
-        Arguments:
+        Parameters:
             update: A map of gamepad indices to their values.
         """
         for index, params in update.items():
-            gamepad = self.buffers.get_or_create(('gamepad', int(index)))
+            gamepad = self.buffers.get_or_open(('gamepad', int(index)))
             with gamepad.transaction():
                 for joystick in ('left', 'right'):
                     for axis in ('x', 'y'):
@@ -209,7 +198,7 @@ class Broker(remote.Handler):
                 for i, param in enumerate(self.button_params):
                     gamepad.set(param.name, bool((bitmap >> i) & 0b1))
 
-    def make_update(self) -> dict[str, dict[str, Any]]:
+    def _make_update(self) -> dict[str, dict[str, Any]]:
         """Build a Smart Device update."""
         update = {}
         for uid in self.uids:
@@ -219,7 +208,7 @@ class Broker(remote.Handler):
 
     async def send_update(self) -> None:
         """Broadcast a Smart Device update."""
-        update = await asyncio.to_thread(self.make_update)
+        update = await asyncio.to_thread(self._make_update)
         await self.update_publisher.call.update(update, notification=True)
 
     async def update_uids(self) -> None:
@@ -238,8 +227,8 @@ class Broker(remote.Handler):
 async def main(ctx: click.Context, **options: Any) -> None:
     """Async entry point.
 
-    Arguments:
-        **options: Command-line options.
+    Parameters:
+        options: Processed command-line options.
     """
     async with process.Application('broker', options) as app:
         await app.make_log_forwarder()

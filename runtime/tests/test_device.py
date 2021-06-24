@@ -10,7 +10,7 @@ import pytest
 import serial
 
 from runtime import log
-from runtime.buffer import Buffer, BufferManager
+from runtime.buffer import Buffer, BufferStore
 from runtime.messaging import Message, MessageError, MessageType
 from runtime.service.device import (
     HAS_UDEV,
@@ -89,12 +89,12 @@ def catalog() -> dict[str, type[Buffer]]:
             ],
         },
     }
-    yield BufferManager.make_catalog(catalog)
+    yield BufferStore.make_catalog(catalog)
 
 
 @pytest.fixture
 async def device_manager(mocker, catalog, stream):
-    with BufferManager(catalog) as buffers:
+    with BufferStore(catalog) as buffers:
         manager = SmartDeviceManager(buffers)
         uids = {0x0000_01_00000000_00000000 + i for i in range(3)}
         methods = (
@@ -112,14 +112,14 @@ async def device_manager(mocker, catalog, stream):
                 mocker.patch.object(device, method, autospec=True).return_value = result
                 result.set_result(None)
         yield manager
-    BufferManager.unlink_all()
+    BufferStore.unlink_all()
 
 
 @pytest.fixture
 async def device(stream, device_manager):
     yield SmartDeviceClient(
         *stream,
-        device_manager.buffers.get_or_create(0x0000_01_FFFFFFFF_FFFFFFFF),
+        device_manager.buffers.get_or_open(0x0000_01_FFFFFFFF_FFFFFFFF),
     )
 
 

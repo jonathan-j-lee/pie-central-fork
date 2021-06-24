@@ -7,7 +7,7 @@ import zmq
 
 import runtime
 from runtime import remote
-from runtime.buffer import BufferManager
+from runtime.buffer import BufferStore
 from runtime.cli import cli, load_yaml
 from runtime.service.broker import Broker
 
@@ -15,14 +15,14 @@ from runtime.service.broker import Broker
 @pytest.fixture(scope='module')
 def catalog():
     catalog_path = Path(runtime.__file__).parent / 'catalog.yaml'
-    yield BufferManager.make_catalog(load_yaml(catalog_path))
+    yield BufferStore.make_catalog(load_yaml(catalog_path))
 
 
 @pytest.fixture
 def buffers(catalog):
-    with BufferManager(catalog) as buffers:
+    with BufferStore(catalog) as buffers:
         yield buffers
-    BufferManager.unlink_all()
+    BufferStore.unlink_all()
 
 
 @pytest.fixture
@@ -52,12 +52,13 @@ async def broker(update_publisher, client, buffers):
     with cli.make_context('cli', args) as ctx:
         ctx.obj.options.update(ctx.params)
         broker = Broker(ctx, update_publisher, client, buffers)
-        limit_switch = broker.buffers.get_or_create(0x0000_00_FFFFFFFF_FFFFFFFF)
+        limit_switch = broker.buffers.get_or_open(0x0000_00_FFFFFFFF_FFFFFFFF)
         limit_switch.set('switch0', True)
         limit_switch.set('switch1', False)
         limit_switch.set('switch2', True)
         broker.buffers.stack.close()
         broker.buffers[0x0000_00_FFFFFFFF_FFFFFFFF].valid = True
+        broker.logger = broker.logger.bind()
         yield broker
 
 
@@ -79,13 +80,15 @@ async def test_option(broker):
 
 @pytest.mark.asyncio
 async def test_lint(broker):
-    record1, record2 = await broker.lint()
+    record1, record2, record3 = await broker.lint()
     assert record1['symbol'] == 'undefined-variable'
-    assert record1['category'] == 'error'
-    assert record1['msg'] == "Undefined variable 'doesnt_exist'"
+    assert record1['type'] == 'error'
+    assert record1['message'] == "Undefined variable 'doesnt_exist'"
     assert record2['symbol'] == 'global-statement'
-    assert record2['category'] == 'warning'
-    assert record2['msg'] == 'Using the global statement'
+    assert record2['type'] == 'warning'
+    assert record2['message'] == 'Using the global statement'
+    assert record3['symbol'] == 'invalid-name'
+    assert record3['type'] == 'convention'
 
 
 @pytest.mark.asyncio

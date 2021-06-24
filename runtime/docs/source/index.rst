@@ -16,6 +16,7 @@ Runtime Documentation
    architecture
    ipc
    smart-devices
+   api-reference/index
 
 Indices and tables
 ==================

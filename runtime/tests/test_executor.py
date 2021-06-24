@@ -10,7 +10,7 @@ import pytest
 
 import runtime
 from runtime import api
-from runtime.buffer import BufferManager
+from runtime.buffer import BufferStore
 from runtime.cli import load_yaml
 from runtime.exception import EmergencyStopException
 from runtime.service.executor import (
@@ -25,12 +25,12 @@ from runtime.service.executor import (
 @pytest.fixture(scope='module')
 def catalog():
     catalog_path = Path(runtime.__file__).parent / 'catalog.yaml'
-    yield BufferManager.make_catalog(load_yaml(catalog_path))
+    yield BufferStore.make_catalog(load_yaml(catalog_path))
 
 
 @pytest.fixture
 def buffers(catalog):
-    with BufferManager(catalog, shared=False) as buffers:
+    with BufferStore(catalog, shared=False) as buffers:
         yield buffers
 
 
@@ -333,14 +333,16 @@ async def test_actions_stop(async_exec):
 )
 def test_device_get(key, create, param, value, dispatcher):
     if create:
-        dispatcher.buffers.get_or_create(key).set(param, value)
+        dispatcher.buffers.get_or_open(key).set(param, value)
     if isinstance(value, float):
         value = pytest.approx(value)
     if isinstance(key, int):
         assert dispatcher.student_code.Robot.get(key, param) == value
     else:
         assert dispatcher.student_code.Gamepad.get(param) == value
-    if not create:
+    if create:
+        dispatcher.logger.sync_bl.warn.assert_not_called()
+    else:
         dispatcher.logger.sync_bl.warn.assert_called_once_with(
             'Device does not exist',
             exc_info=ANY,
@@ -352,7 +354,7 @@ def test_device_get(key, create, param, value, dispatcher):
 
 @pytest.mark.parametrize('key', [('gamepad', 0), 0xC_00_00000000_00000000])
 def test_device_get_no_param(key, dispatcher):
-    dispatcher.buffers.get_or_create(key)
+    dispatcher.buffers.get_or_open(key)
     if isinstance(key, int):
         assert dispatcher.student_code.Robot.get(key, 'not_a_param') is None
     else:
@@ -364,7 +366,7 @@ def test_device_get_no_param(key, dispatcher):
 
 
 def test_robot_get_writeonly(dispatcher):
-    dispatcher.buffers.get_or_create(0xC_00_00000000_00000000)
+    dispatcher.buffers.get_or_open(0xC_00_00000000_00000000)
     setpoint_default = dispatcher.student_code.Robot.get(
         0xC_00_00000000_00000000,
         'pid_pos_setpoint',
@@ -380,7 +382,7 @@ def test_robot_get_writeonly(dispatcher):
 
 
 def test_robot_get_name_translation(dispatcher):
-    dispatcher.buffers.get_or_create(0xC_00_00000000_00000000).set('duty_cycle', 0.123)
+    dispatcher.buffers.get_or_open(0xC_00_00000000_00000000).set('duty_cycle', 0.123)
     duty_cycle = dispatcher.student_code.Robot.get('left-motor', 'duty_cycle')
     assert duty_cycle == pytest.approx(0.123)
     assert dispatcher.student_code.Robot.get('right-motor') is None
@@ -391,13 +393,13 @@ def test_robot_get_name_translation(dispatcher):
 
 
 def test_robot_write(dispatcher):
-    buffer = dispatcher.buffers.get_or_create(0xC_00_00000000_00000000)
+    buffer = dispatcher.buffers.get_or_open(0xC_00_00000000_00000000)
     dispatcher.student_code.Robot.write(0xC_00_00000000_00000000, 'duty_cycle', 0.123)
     assert buffer.get_write() == {'duty_cycle': pytest.approx(0.123)}
 
 
 def test_robot_write_readonly(dispatcher):
-    dispatcher.buffers.get_or_create(0)
+    dispatcher.buffers.get_or_open(0)
     dispatcher.student_code.Robot.write(0, 'switch0', True)
     dispatcher.logger.sync_bl.error.assert_called_once_with(
         'write(...) raised an error',
@@ -406,7 +408,7 @@ def test_robot_write_readonly(dispatcher):
 
 
 def test_robot_write_name_translation(dispatcher):
-    buffer = dispatcher.buffers.get_or_create(0xC_00_00000000_00000000)
+    buffer = dispatcher.buffers.get_or_open(0xC_00_00000000_00000000)
     dispatcher.student_code.Robot.write('left-motor', 'duty_cycle', 0.456)
     assert buffer.get_write() == {'duty_cycle': pytest.approx(0.456)}
     dispatcher.student_code.Robot.write('right-motor', 'duty_cycle', 0.456)

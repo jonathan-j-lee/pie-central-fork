@@ -27,7 +27,7 @@ import zmq
 import runtime
 
 from . import log
-from .buffer import Buffer, BufferManager
+from .buffer import Buffer, BufferStore
 from .tools import client, devemulator, logpager, msgparser
 
 __all__ = [
@@ -131,7 +131,7 @@ def make_converter(convert: Callable[[Any], Any]) -> ParameterCallback:
 
     Works with options provided multiple times (where ``multiple=True``).
 
-    Arguments:
+    Parameters:
         convert: A unary conversion callable. The argument/return types are arbitrary
             and need not be the same.
 
@@ -269,7 +269,7 @@ def parse_uid(value: str) -> int:
 def load_yaml(path: Union[str, Path]) -> Any:
     """Read and parse a YAML file.
 
-    Arguments:
+    Parameters:
         path: A path to a valid regular text file.
 
     Examples:
@@ -305,7 +305,7 @@ def get_buf_type(
     _param: click.Parameter,
     value: str,
 ) -> type[Buffer]:
-    catalog = BufferManager.make_catalog(ctx.obj.options['dev_catalog'])
+    catalog = BufferStore.make_catalog(ctx.obj.options['dev_catalog'])
     with contextlib.suppress(KeyError):
         return catalog[value]
     not_found = click.BadParameter(
@@ -516,8 +516,7 @@ def cli(ctx: click.Context, **options: Any) -> None:
 @cli.command()
 @click.pass_context
 def server(ctx: click.Context, **options: Any) -> None:
-    """Start the Runtime daemon.
-    """
+    """Start the Runtime daemon."""
     ctx.obj.options.update(options)
     asyncio.run(runtime.main(ctx))
 

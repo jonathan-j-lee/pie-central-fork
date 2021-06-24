@@ -6,9 +6,8 @@ Control Stack
 
 .. tikz:: Control Stack
    :align: center
-   :xscale: 90
 
-   [font=\ttfamily, thick]
+   [font=\ttfamily, thick, scale=1.2]
 
    \tikzstyle{block} = [minimum width=2.6cm, minimum height=0.7cm];
 
@@ -269,12 +268,12 @@ Why use so many separate TCP connections?
   Because each connection is long-lived, TCP handshakes rarely occur and the only long-term overhead is keep-alive packet traffic.
   Rejected alternatives:
 
-    * Multiplexed TCP: Not supported by ZMQ, and suffers from head-of-line blocking.
-      One blocked channel with dropped or out-of-order packets will unnecessarily block all other channels.
-    * SCTP: Supports multiple streams and is message-based.
-      However, some OSs lack native implementations and poorly built network middleware may block SCTP traffic.
-    * QUIC: QUIC supports multiple streams using UDP but, like SCTP, is not yet a mature, stable protocol.
-    * UDP-only: Reliable transmission is required for some functionality.
-      For example, student-logged messages must appear in Dawn's console.
-    * Consolidate the log socket pair with the RPC pair: Runtime would need to explicitly publish logs to all of its peers, which is an antipattern.
-      The correct model for unidirectional asynchronous data flow is publish-subscribe.
+  * Multiplexed TCP: Not supported by ZMQ, and suffers from head-of-line blocking.
+    One blocked channel with dropped or out-of-order packets will unnecessarily block all other channels.
+  * SCTP: Supports multiple streams and is message-based.
+    However, some OSs lack native implementations and poorly built network middleware may block SCTP traffic.
+  * QUIC: QUIC supports multiple streams using UDP but, like SCTP, is not yet a mature, stable protocol.
+  * UDP-only: Reliable transmission is required for some functionality.
+    For example, student-logged messages must appear in Dawn's console.
+  * Consolidate the log socket pair with the RPC pair: Runtime would need to explicitly publish logs to all of its peers, which is an antipattern.
+    The correct model for unidirectional asynchronous data flow is publish-subscribe.

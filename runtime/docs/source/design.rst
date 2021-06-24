@@ -31,12 +31,12 @@ Challenges are optional but may reward successful teams with score bonuses or po
 Features
 --------
 
-  * Read, write, and store Smart Device (SD) data.
-  * Provide a student API for students to read/write SD and gamepad data.
-  * Provide a control API for clients to start/stop execution of student code.
-  * Execute a student-written ``main`` function at a constant interval during play.
-  * Accept gamepad inputs from the student during teleop.
-  * Publish log and Smart Device data to the frontend.
+* Read, write, and store Smart Device (SD) data.
+* Provide a student API for students to read/write SD and gamepad data.
+* Provide a control API for clients to start/stop execution of student code.
+* Execute a student-written ``main`` function at a constant interval during play.
+* Accept gamepad inputs from the student during teleop.
+* Publish log and Smart Device data to the frontend.
 
 Out-of-scope:
   * A GUI, which is provided by a separate frontend (Dawn).
@@ -48,30 +48,30 @@ Out-of-scope:
 Requirements
 ------------
 
-  1. **Performance**: Optimize for latency on the critical path from moving a joystick to actuation.
-     Poor performance during teleop can make the robot seem unresponsive and result in a frustrating student experience.
-  2. **Safety**: Motors and other powerful electronics can pose a physical/electrical hazard and require a reliable emergency stop.
-  3. **Robustness**: Many PiE students are programming novices who may write buggy code that Runtime should run to the best of its ability.
-     Some faults, like referencing a nonexistent device, should not halt execution and should emit a warning instead of crashing.
-     Likewise, features like hotplugging reduce the likelihood that students forfeit a match because of a hardware issue outside their control.
-  4. **Debugging**: Tracing and profiling are essential.
-     Performance options should be tunable.
-  5. **Modularity**: The control stack should be flexible enough to support the following use cases:
+1. **Performance**: Optimize for latency on the critical path from moving a joystick to actuation.
+   Poor performance during teleop can make the robot seem unresponsive and result in a frustrating student experience.
+2. **Safety**: Motors and other powerful electronics can pose a physical/electrical hazard and require a reliable emergency stop.
+3. **Robustness**: Many PiE students are programming novices who may write buggy code that Runtime should run to the best of its ability.
+   Some faults, like referencing a nonexistent device, should not halt execution and should emit a warning instead of crashing.
+   Likewise, features like hotplugging reduce the likelihood that students forfeit a match because of a hardware issue outside their control.
+4. **Debugging**: Tracing and profiling are essential.
+   Performance options should be tunable.
+5. **Modularity**: The control stack should be flexible enough to support the following use cases:
 
-       * **Development**: A team works on a physical robot over a LAN created by a PiE-provided router.
-       * **Simulation (local)**: Dawn spawns a simulator instance that feeds virtual SD data to Runtime, which still runs on a physical robot's Pi.
-       * **Simulation (cloud)**: A team uses a Runtime instance hosted in the cloud to simulate their robot.
-         No hardware is required.
-       * **Competition**: Four robots compete on a field.
-         Each robot is connected over a staff-managed router to a field control station running Dawn.
-         A field control station supervises the robots.
+   * **Development**: A team works on a physical robot over a LAN created by a PiE-provided router.
+   * **Simulation (local)**: Dawn spawns a simulator instance that feeds virtual SD data to Runtime, which still runs on a physical robot's Pi.
+   * **Simulation (cloud)**: A team uses a Runtime instance hosted in the cloud to simulate their robot.
+     No hardware is required.
+   * **Competition**: Four robots compete on a field.
+     Each robot is connected over a staff-managed router to a field control station running Dawn.
+     A field control station supervises the robots.
 
-  6. **Ease-of-use**: Students have a range of programming experience.
-     Keep the API simple, but provide enough high-level tools (*e.g.*, PID) to free up student creativity on tackling the game's challenges.
-  7. **Backwards compatibility**: Avoid breaking changes to promote hardware reuse and reduce software update frequency.
-     This is especially relevant for SDs, which can only be updated through flashing.
+6. **Ease-of-use**: Students have a range of programming experience.
+   Keep the API simple, but provide enough high-level tools (*e.g.*, PID) to free up student creativity on tackling the game's challenges.
+7. **Backwards compatibility**: Avoid breaking changes to promote hardware reuse and reduce software update frequency.
+   This is especially relevant for SDs, which can only be updated through flashing.
 
 .. Note::
-  Securing Runtime is impossible because the Raspberry Pi's Micro SD card is editable and already in students' hands.
+  Securing Runtime is impossible because the Raspberry Pi's Micro SD card is editable and already in students' possession.
   The competition itself is held on private LANs.
   In theory, one team could sabotage another by programming its robot to send bad packets to its peers, but high school students are unlikely to perform such an attack.
