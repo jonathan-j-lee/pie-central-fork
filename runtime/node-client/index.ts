@@ -4,9 +4,11 @@ import * as util from 'util';
 import * as cbor from 'cbor';
 import * as zmq from 'zeromq';
 
-const REQUEST = 0;
-const RESPONSE = 1;
-const NOTIFICATION = 2;
+const MESSAGE_TYPE = {
+  REQUEST: 0,
+  RESPONSE: 1,
+  NOTIFICATION: 2,
+};
 
 const decode = util.promisify(cbor.decodeFirst);
 
@@ -45,36 +47,32 @@ export interface Gamepad {
 }
 
 type Callback = (err: Error | null, result: any) => void;
+const DGRAM_OPTIONS: dgram.SocketOptions = { type: 'udp4', reuseAddr: true };
 
 /** A client of a Runtime instance (robot). */
 class Client {
-  callSocket: zmq.Dealer;
-  logSocket: zmq.Subscriber;
-  controlTransmitter: dgram.Socket;
-  updateReceiver: dgram.Socket;
+  private callSocket: zmq.Dealer;
+  private logSocket: zmq.Subscriber;
+  private controlTransmitter: dgram.Socket;
+  private updateReceiver: dgram.Socket;
 
   constructor() {
     this.callSocket = new zmq.Dealer();
     this.logSocket = new zmq.Subscriber();
-    const dgramOptions: dgram.SocketOptions = { type: 'udp4', reuseAddr: true };
-    this.controlTransmitter = dgram.createSocket(dgramOptions);
-    this.updateReceiver = dgram.createSocket(dgramOptions);
+    this.controlTransmitter = dgram.createSocket(DGRAM_OPTIONS);
+    this.updateReceiver = dgram.createSocket(DGRAM_OPTIONS);
+    this.callSocket.context.blocky = false;
   }
 
-  dispatch(callback: Callback, msg: Buffer) {
+  private handleNotification(callback: Callback, msg: Buffer) {
     decode(msg)
       .then(([_msgType, _method, payload]) => callback(null, payload))
       .catch(err => callback(err, null));
   }
 
-  async recvEvent(callback: Callback) {
-    while (true) {
-      try {
-        let [_topic, msg] = await this.logSocket.receive();
-        this.dispatch(callback, msg);
-      } catch (err) {
-        callback(err, null);
-      }
+  private async recvEvent(callback: Callback) {
+    for await (const [_topic, msg] of this.logSocket) {
+      this.handleNotification(callback, msg);
     }
   }
 
@@ -84,7 +82,7 @@ class Client {
    *  @param options - Socket options.
    */
   async open(onUpdate: Callback = () => null, onEvent: Callback = () => null, options = {}) {
-    let opts: ClientOptions = {
+    const opts: ClientOptions = {
       host: 'localhost',
       callPort: 6000,
       logPort: 6001,
@@ -97,6 +95,8 @@ class Client {
     };
 
     this.callSocket.connect(`tcp://${opts.host}:${opts.callPort}`);
+    this.callSocket.sendTimeout = 3000;
+    this.callSocket.receiveTimeout = 3000;
     this.logSocket.connect(`tcp://${opts.host}:${opts.logPort}`);
     for (const level of opts.logLevels) {
       this.logSocket.subscribe(level);
@@ -106,21 +106,35 @@ class Client {
     await new Promise((resolve, reject) =>
       this.controlTransmitter.connect(opts.controlPort, opts.host, () => resolve(null)));
     this.updateReceiver.on('listening', () => {
-      let address = this.updateReceiver.address();
+      const address = this.updateReceiver.address();
       this.updateReceiver.setBroadcast(true);
       this.updateReceiver.setMulticastTTL(opts.multicastTTL);
       this.updateReceiver.addMembership(opts.multicastGroup);
     });
-    this.updateReceiver.on('message', msg => this.dispatch(onUpdate, msg));
+    this.updateReceiver.on('message', msg => this.handleNotification(onUpdate, msg));
     this.updateReceiver.bind(opts.updatePort);
   }
 
-  /** Terminate all sockets. Only call after calling {@linkcode open}. */
-  close() {
+  /** Terminate all sockets. Only call after calling {@linkcode open}.
+   *  @param reopen - Whether the sockets should be replaced.
+   */
+  close(reopen = false) {
     this.callSocket.close();
     this.logSocket.close();
     this.controlTransmitter.close();
     this.updateReceiver.close();
+    if (reopen) {
+      this.callSocket = new zmq.Dealer();
+      this.logSocket = new zmq.Subscriber();
+      this.controlTransmitter = dgram.createSocket(DGRAM_OPTIONS);
+      this.updateReceiver = dgram.createSocket(DGRAM_OPTIONS);
+      this.callSocket.context.blocky = false;
+    }
+  }
+
+  async notify(address: string, method: string, ...args: any) {
+    const request = cbor.encode([MESSAGE_TYPE.NOTIFICATION, method, args]);
+    await this.callSocket.send([Buffer.from(address), request]);
   }
 
   /** Issue a remote call and wait for the result.
@@ -129,14 +143,14 @@ class Client {
    *  @param args - Positional arguments for the remote method.
    *  @returns The remote method's return value.
    */
-  async sendCall(address: string, method: string, ...args: any) {
-    let msgId = crypto.randomBytes(4).readUInt32BE();
-    let request = cbor.encode([REQUEST, msgId, method, args]);
+  async request(address: string, method: string, ...args: any) {
+    const msgId = crypto.randomBytes(4).readUInt32BE();
+    const request = cbor.encode([MESSAGE_TYPE.REQUEST, msgId, method, args]);
     await this.callSocket.send([Buffer.from(address), request]);
-    let [_address, response] = await this.callSocket.receive();
+    const [_address, response] = await this.callSocket.receive();
     return await decode(response)
       .then(([msgType, msgIdReturned, err, result]) => {
-        if (msgType !== RESPONSE) {
+        if (msgType !== MESSAGE_TYPE.RESPONSE) {
           throw new Error(`expected a response, got: ${msgType}`);
         } else if (msgIdReturned !== msgId) {
           throw new Error(`bad message ID: expected ${msgId}, got ${msgIdReturned}`);
@@ -151,7 +165,7 @@ class Client {
    *  @param gamepads - A map from gamepad indices (as strings) to gamepad parameters.
    */
   async sendControl(gamepads: Map<string, Gamepad>) {
-    let request = cbor.encode([NOTIFICATION, 'update_gamepads', [gamepads]]);
+    const request = cbor.encode([MESSAGE_TYPE.NOTIFICATION, 'update_gamepads', [gamepads]]);
     await new Promise((resolve, reject) =>
       this.controlTransmitter.send(request, err => {
         if (err) {

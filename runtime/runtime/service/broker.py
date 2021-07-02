@@ -227,7 +227,7 @@ class Broker(rpc.Handler):
             self.uids.clear()
             self.uids.update(new_uids)
         except asyncio.TimeoutError as exc:
-            await self.logger.error('Broker could not refresh UIDs', exc_info=exc)
+            await self.logger.warn('Broker could not refresh UIDs', exc_info=exc)
 
 
 async def main(ctx: click.Context, **options: Any) -> None:

@@ -1,12 +1,11 @@
+'use strict';
+
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import { Provider } from 'react-redux';
-import { createStore, combineReducers } from 'redux';
 import App from './components/App';
-import '../assets/custom.scss';
-
-const reducer = combineReducers({});
-const store = createStore(reducer);
+import store from './store';
+import './assets/custom.scss';
 
 ReactDOM.render(
   <Provider store={store}>

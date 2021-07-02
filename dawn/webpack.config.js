@@ -5,7 +5,10 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 module.exports = [
   {
     mode: 'development',
-    entry: './app/main.ts',
+    entry: {
+      main: './app/main.ts',
+      preload: './app/preload.ts',
+    },
     target: 'electron-main',
     module: {
       rules: [{
@@ -16,7 +19,9 @@ module.exports = [
     },
     output: {
       path: path.join(__dirname, 'build'),
-      filename: 'main.js',
+    },
+    node: {
+      __dirname: true,
     },
   },
   {
@@ -52,7 +57,7 @@ module.exports = [
       filename: 'bundle.js',
     },
     plugins: [
-      new HtmlWebpackPlugin({template: './assets/index.html'}),
+      new HtmlWebpackPlugin({ template: './app/index.html' }),
       /* BlueprintJS bug workaround: https://github.com/palantir/blueprint/issues/3739 */
       new webpack.DefinePlugin({
         "process.env": "{}",

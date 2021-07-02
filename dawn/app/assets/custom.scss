@@ -1,0 +1,119 @@
+@import "~@blueprintjs/core/lib/scss/variables";
+
+#app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.bp3-dark {
+  background-color: $dark-gray5;
+}
+
+main {
+  height: 100%;
+  overflow: auto;
+}
+
+.editor {
+  block: inline-block;
+  float: left;
+  width: 70%;
+  height: calc(100% - 2rem);
+}
+
+.editor-status {
+  min-height: 2rem;
+  padding: 0.4rem 0 0.4rem 0.8rem;
+  font-size: 0.8rem;
+}
+
+.cursor-status {
+  float: right;
+  .cursor-status-tooltip {
+    margin-left: 0.6rem;
+  }
+}
+
+.status-container {
+  display: flex;
+  flex-direction: row;
+  .status-description {
+    padding-right: 1rem;
+    margin-right: auto;
+  }
+}
+
+.status-tag {
+  margin-right: 0.5rem;
+}
+
+.peripherals {
+  block: inline-block;
+  float: right;
+  width: 30%;
+  height: 100%;
+  padding: 1rem;
+  overflow: auto;
+  ul {
+    padding-left: 1.5rem;
+  }
+}
+
+.console {
+  padding: 0.3rem 0.8rem;
+  pre {
+    height: 400px;
+    overflow: auto;
+    line-height: 1.6;
+  }
+  .log-context {
+    float: right;
+    .context-entry {
+      margin-right: 0.5rem;
+    }
+  }
+  .log-severity {
+    float: right;
+    min-height: 12px;
+    min-width: 54px;
+    text-align: center;
+    line-height: 12px;
+  }
+}
+
+.dev-sep {
+  margin-top: 1rem;
+}
+
+.dev-type {
+  padding: 5px 0;
+  display: inline-block;
+  line-height: 1rem;
+}
+
+.dev-show-param {
+  float: right;
+}
+
+.dev-icon {
+  margin-right: 0.5rem;
+}
+
+.dev-id {
+  display: flex;
+}
+
+.dev-name {
+  width: 50%;
+  font-family: monospace;
+}
+
+.dev-uid {
+  margin-left: auto;
+}
+
+.tooltip-content {
+  max-width: 300px;
+  margin: 0;
+}
