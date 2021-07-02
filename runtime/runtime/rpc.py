@@ -19,6 +19,7 @@ import enum
 import functools
 import inspect
 import random
+import socket
 import types
 import typing
 from typing import (
@@ -241,6 +242,7 @@ class DatagramNode(Node, asyncio.DatagramProtocol):
         kwargs: dict[str, Any] = {
             ('local_addr' if self.bind else 'remote_addr'): (self.host, self.port),
             'reuse_port': True,
+            'family': socket.AF_INET,
         }
         transport, _ = await loop.create_datagram_endpoint(lambda: self, **kwargs)
         self.transport = typing.cast(asyncio.DatagramTransport, transport)
@@ -820,8 +822,11 @@ class Service(Endpoint):
 
 
 def _render_id(identity: bytes) -> str:
-    decoded = identity.decode()
-    return decoded if decoded.isprintable() else identity.hex()
+    with contextlib.suppress(UnicodeDecodeError):
+        decoded = identity.decode()
+        if decoded.isprintable():
+            return decoded
+    return identity.hex()
 
 
 @dataclasses.dataclass
