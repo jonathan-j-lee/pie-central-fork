@@ -1,35 +1,38 @@
-import { createSlice } from '@reduxjs/toolkit';
-import { makeAppendReducer } from './util';
+import { createEntityAdapter, createSlice } from '@reduxjs/toolkit';
+import * as _ from 'lodash';
 
-export const UPDATE_LWM = 50;
-export const UPDATE_HWM = 100;
-export const EXPIRY = 5000;
+const MAX_VALUES = 50;
 
-const addTimestamp = action => ({
-  ...action,
-  payload: { timestamp: Date.now(), devices: action.payload },
-});
-const appendRobotUpdate = makeAppendReducer('robotUpdates', UPDATE_LWM, UPDATE_HWM);
-const appendGamepadUpdate = makeAppendReducer('gamepadUpdates', UPDATE_LWM, UPDATE_HWM);
-
-export default createSlice({
+const slice = createSlice({
   name: 'peripherals',
   initialState: {
-    robotUpdates: [],
-    gamepadUpdates: [],
+    devices: {},
+    gamepads: {},
   },
   reducers: {
-    appendRobotUpdate: (state, action) =>
-      appendRobotUpdate(state, addTimestamp(action)),
-    appendGamepadUpdate: (state, action) =>
-      appendGamepadUpdate(state, addTimestamp(action)),
+    updatePeripherals(state, action) {
+      const { peripheralType, timestamp, update } = action.payload;
+      const peripherals = state[peripheralType];
+      if (!peripherals) {
+        return;
+      }
+      for (const [uid, params] of _.toPairs(update)) {
+        _.defaults(peripherals, { [uid]: {} });
+        const timelines = peripherals[uid];
+        for (const [param, value] of _.toPairs(params)) {
+          _.defaults(timelines, { [param]: [] });
+          const timeline = timelines[param];
+          const size = timeline.push([timestamp, value]);
+          timeline.splice(0, size - MAX_VALUES);
+        }
+      }
+      state[peripheralType] = _.pick(peripherals, _.keys(update));
+    },
   },
 });
 
-export function getQueueFront(queue) {
-  return queue.length <= UPDATE_LWM ? queue[0] : queue[queue.length - UPDATE_LWM];
-}
-
-export function getQueueBack(queue) {
-  return queue[queue.length - 1];
-}
+export default slice;
+export const updateDevices = (update, options = {}) => slice.actions.updatePeripherals(
+  { peripheralType: 'devices', timestamp: Date.now(), update, ...options });
+export const updateGamepads = (update, options = {}) => slice.actions.updatePeripherals(
+  { peripheralType: 'gamepads', timestamp: Date.now(), update, ...options });

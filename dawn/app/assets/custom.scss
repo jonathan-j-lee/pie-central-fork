@@ -82,7 +82,7 @@ main {
   }
 }
 
-.dev-sep {
+.sep {
   margin-top: 1rem;
 }
 
@@ -104,9 +104,13 @@ main {
   display: flex;
 }
 
+.monospace {
+  font-family: monospace;
+}
+
 .dev-name {
   width: 50%;
-  font-family: monospace;
+  @extend .monospace;
 }
 
 .dev-uid {
@@ -116,4 +120,17 @@ main {
 .tooltip-content {
   max-width: 300px;
   margin: 0;
+}
+
+.bp3-callout > p:last-child {
+  margin-bottom: 0;
+}
+
+.settings {
+  min-width: 40%;
+}
+
+.private-key {
+  min-height: 32rem;
+  overflow-x: auto;
 }

@@ -12,7 +12,7 @@ import Toolbar from './Toolbar';
 FocusStyleManager.onlyShowFocusOnTabs();
 
 export default function App() {
-  const editorRef = React.createRef();
+  const editorRef = React.useRef();
   const editorTheme = useAppSelector(state => state.editor.editorTheme);
   const [logOpen, setLogOpen] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);

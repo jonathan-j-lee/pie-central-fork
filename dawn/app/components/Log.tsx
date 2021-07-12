@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Collapse, Intent, Pre, Tag } from '@blueprintjs/core';
+import * as _ from 'lodash';
 import { useAppSelector } from '../hooks';
 
 const notContext = new Set(['timestamp', 'exception', 'event', 'level']);
@@ -8,7 +9,7 @@ const renderContext = event => {
   // TODO: make collapsible
   return (
     <span className="log-context">
-      {Object.entries(event)
+      {_.toPairs(event)
         .filter(([key, value]) => !notContext.has(key))
         .sort(([key1], [key2]) => key1.localeCompare(key2))
         .map(([key, value], index) => (
@@ -39,7 +40,7 @@ const renderLevel = level => {
       break;
   }
   return (
-    <Tag round intent={intent} className="log-severity">{level}</Tag>
+    <Tag round intent={intent} className="log-severity">{shortLevel}</Tag>
   );
 };
 
@@ -55,7 +56,7 @@ export default function Log(props) {
               {log.showTimestamps && <span>[{event.timestamp}] </span>}
               <span>{event.event}</span>
               {log.showSeverity && renderLevel(event.level.toUpperCase())}
-              {log.showContext && renderContext(event)}
+              {renderContext(event)}
               <br />
             </span>
           ))

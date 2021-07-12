@@ -2,7 +2,8 @@ import * as React from 'react';
 import AceEditor from 'react-ace';
 import { Classes, Tooltip } from '@blueprintjs/core';
 import { useAppSelector, useAppDispatch } from '../hooks';
-import editor from '../store/editor';
+import editor, { open } from '../store/editor';
+import { importSettings, exportSettings } from '../store';
 
 import 'ace-builds/src-noconflict/mode-python';
 import 'ace-builds/src-noconflict/ext-language_tools';  // For autocompletion
@@ -21,6 +22,21 @@ import 'ace-builds/src-noconflict/theme-terminal';
 
 export default function Editor(props) {
   const dispatch = useAppDispatch();
+  React.useEffect(() => {
+    window.ipc.on('load-settings', (settings) => {
+      dispatch(importSettings(settings))
+        .unwrap()
+        .then(() => {
+          const { filePath } = settings.editor;
+          if (!filePath) {
+            throw new Error('file path not found');
+          }
+          return dispatch(open({ filePath, editorRef: props.editorRef })).unwrap();
+        })
+        .then(() => dispatch(exportSettings()).unwrap());
+    });
+    return () => window.ipc.removeListeners('load-settings');
+  }, [dispatch]);
   const editorState = useAppSelector(state => state.editor);
   const [cursor, setCursor] = React.useState({ row: 0, column: 0 });
   const [range, setRange] = React.useState({ rows: 1, chars: 0 });
@@ -40,7 +56,11 @@ export default function Editor(props) {
         enableLiveAutocompletion={editorState.liveAutocompletion}
         fontSize={editorState.fontSize}
         tabSize={editorState.tabSize}
-        onChange={() => dispatch(editor.actions.setDirty())}
+        onChange={() => {
+          if (!editorState.dirty) {
+            dispatch(editor.actions.setDirty());
+          }
+        }}
         onCursorChange={selection => setCursor(selection.getCursor())}
         onSelectionChange={selection => {
           const { start, end } = selection.getRange();
@@ -69,9 +89,7 @@ export default function Editor(props) {
               Cursor is at line {cursor.row + 1}, column {cursor.column + 1}.
             </p>}
           >
-            <code>
-              {cursor.row + 1}:{cursor.column + 1}
-            </code>
+            <code>{cursor.row + 1}:{cursor.column + 1}</code>
           </Tooltip>
           {range.chars > 0 &&
             <Tooltip

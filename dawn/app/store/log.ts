@@ -1,5 +1,12 @@
 import { createSlice } from '@reduxjs/toolkit';
-import { makeUpdateReducer, makeToggleReducer } from './util';
+
+export enum Level {
+  DEBUG = 'debug',
+  INFO = 'info',
+  WARNING = 'warning',
+  ERROR = 'error',
+  CRITICAL = 'critical',
+};
 
 export default createSlice({
   name: 'log',
@@ -8,24 +15,21 @@ export default createSlice({
     showTimestamps: true,
     showSeverity: true,
     showTraceback: true,
-    showContext: true,
     events: [],
     maxEvents: 256,
-    openOnStart: true,
+    // openOnStart: true,  -- open on start, open on error, open never
   },
   reducers: {
+    toggle: (state, action) => ({ ...state, [action.payload]: !state[action.payload] }),
     append: (state, action) => {
       const size = state.events.push(action.payload);
-      if (size >= 2*state.maxEvents) {
-        state.events = state.events.slice(-state.maxEvents);
-      }
+      state.events.splice(0, size - state.maxEvents);
     },
     clear: state => ({ ...state, events: [] }),
-    setMaxEvents: makeUpdateReducer('maxEvents'),
-    truncate: state => ({ ...state }),  // TODO: FIXME
-    toggleSystem: makeToggleReducer('showSystem'),
-    toggleTimestamps: makeToggleReducer('showTimestamps'),
-    toggleSeverity: makeToggleReducer('showSeverity'),
-    toggleTraceback: makeToggleReducer('showTraceback'),
+    truncate: (state, action) => ({
+      ...state,
+      events: state.events.slice(-action.payload),
+      maxEvents: action.payload,
+    }),
   },
 });

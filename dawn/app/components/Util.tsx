@@ -1,7 +1,8 @@
 import * as React from 'react';
-import { Button, Intent, Toaster } from '@blueprintjs/core';
+import { Button, Intent, Position, Toaster } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 
-const toaster = Toaster.create();
+const toaster = Toaster.create({ position: Position.TOP_RIGHT });
 
 export const reportOutcome = (promise, successMsg, errorMsg) =>
   promise
@@ -9,12 +10,14 @@ export const reportOutcome = (promise, successMsg, errorMsg) =>
       toaster.show({
         intent: Intent.SUCCESS,
         message: successMsg,
+        icon: IconNames.TICK,
       });
     })
     .catch(err => {
       toaster.show({
         intent: Intent.DANGER,
         message: errorMsg,
+        icon: IconNames.ERROR,
       });
     });
 

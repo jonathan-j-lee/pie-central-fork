@@ -18,70 +18,65 @@ import {
 import { IconNames } from '@blueprintjs/icons';
 import { useAppDispatch, useAppSelector } from '../hooks';
 import { OutcomeButton, reportOutcome } from './Util';
-import editor, { getThemeClass } from '../store/editor';
+import editor, { getThemeClass, create, open, save, download, upload } from '../store/editor';
 import log from '../store/log';
-import { Mode } from '../store/robot';
+import { exec, Mode } from '../store/robot';
+import { exportSettings } from '../store';
 
-const FileMenu = ({ filePath, openFile, newFile, save }) => (
+const FileMenu = ({ filePath, openFile, newFile, saveFile }) => (
   <Menu>
-    <MenuItem icon={IconNames.DOCUMENT_SHARE} text="New" onClick={newFile} />
-    <MenuItem icon={IconNames.DOCUMENT_OPEN} text="Open" onClick={openFile} />
+    <MenuItem icon={IconNames.DOCUMENT_SHARE} text="New" onClick={() => newFile()} />
+    <MenuItem icon={IconNames.DOCUMENT_OPEN} text="Open" onClick={() => openFile()} />
     <Divider />
-    <MenuItem icon={IconNames.SAVED} text="Save" onClick={() => save(filePath)} />
-    <MenuItem icon={IconNames.SAVED} text="Save As ..." onClick={() => save(null)} />
+    <MenuItem icon={IconNames.SAVED} text="Save" onClick={() => saveFile(filePath)} />
+    <MenuItem icon={IconNames.SAVED} text="Save As ..." onClick={() => saveFile(null)} />
   </Menu>
 );
 
-const EditMenu = ({ editorRef }) => {
+function EditMenu(props) {
   const copy = () =>
-    navigator.clipboard.writeText(editorRef.current.editor.getCopyText());
+    navigator.clipboard.writeText(props.editorRef.current.editor.getCopyText());
   return (
     <Menu>
       <MenuItem
         icon={IconNames.CUT}
         text="Cut"
-        onClick={() => {
-          copy();
-          editorRef.current.editor.execCommand('cut');
-        }}
+        onClick={() => copy()
+          .then(() => props.editorRef.current.editor.execCommand('cut'))
+        }
       />
-      <MenuItem
-        icon={IconNames.DUPLICATE}
-        text="Copy"
-        onClick={copy}
-      />
+      <MenuItem icon={IconNames.DUPLICATE} text="Copy" onClick={() => copy()} />
       <MenuItem
         icon={IconNames.CLIPBOARD}
         text="Paste"
-        onClick={() => navigator.clipboard.readText()
-          .then(text => {
-            const editor = editorRef.current.editor;
-            editor.session.insert(editor.getCursorPosition(), text);
-          })
-        }
+        onClick={() => navigator.clipboard.readText().then((text) => {
+          const editor = props.editorRef.current.editor;
+          editor.session.insert(editor.getCursorPosition(), text);
+        })}
       />
       <Divider />
       <MenuItem
         icon={IconNames.UNDO}
         text="Undo"
-        onClick={() => editorRef.current.editor.undo()}
+        onClick={() => props.editorRef.current.editor.undo()}
       />
       <MenuItem
         icon={IconNames.REDO}
         text="Redo"
-        onClick={() => editorRef.current.editor.redo()}
+        onClick={() => props.editorRef.current.editor.redo()}
       />
       <Divider />
       <MenuItem
         icon={IconNames.SEARCH_TEXT}
         text="Find"
-        onClick={() => editorRef.current.editor.execCommand('find')}
+        onClick={() => props.editorRef.current.editor.execCommand('find')}
       />
     </Menu>
   );
-};
+}
 
 const LogMenu = (props) => {
+  const events = useAppSelector(state => state.log.events);
   const dispatch = useAppDispatch();
   let icon, label;
   if (props.isOpen) {
@@ -94,7 +89,13 @@ const LogMenu = (props) => {
   return (
     <Menu>
       <MenuItem text={label} icon={icon} onClick={props.toggle} />
-      <MenuItem text="Copy" icon={IconNames.DUPLICATE} />
+      <MenuItem
+        text="Copy"
+        icon={IconNames.DUPLICATE}
+        onClick={() => navigator.clipboard.writeText(
+          events.map((event) => JSON.stringify(event)).join('\n'))
+        }
+      />
       <MenuItem
         text="Clear"
         icon={IconNames.CLEAN}
@@ -104,53 +105,120 @@ const LogMenu = (props) => {
   );
 };
 
-const DebugMenu = () => (
-  <Menu>
-    <MenuItem text="Lint" icon={IconNames.CODE} />
-    <MenuItem text="Restart Runtime" icon={IconNames.RESET} />
-    <MenuItem text="Motor check" icon={IconNames.COG} />
-    <MenuItem text="Statistics" icon={IconNames.TIMELINE_LINE_CHART} />
-  </Menu>
-);
+// TODO: lint
+const DebugMenu = () => {
+  const dispatch = useAppDispatch();
+  return (
+    <Menu>
+      <MenuItem
+        text="Lint"
+        icon={IconNames.CODE}
+      />
+      <MenuItem
+        text="Restart Runtime"
+        icon={IconNames.RESET}
+        onClick={() => reportOutcome(
+          dispatch(exec()).unwrap(),
+          'Successfully restarted Runtime.',
+          'Failed to restart Runtime. Are you connected to the robot?',
+        )}
+      />
+      <MenuItem text="Motor check" icon={IconNames.COG} />
+      <MenuItem text="Statistics" icon={IconNames.TIMELINE_LINE_CHART} />
+    </Menu>
+  );
+};
+
+function OverwriteDialog(props) {
+  const { editorTheme, filePath } = useAppSelector(state => state.editor);
+  const confirmOverwrite = () => Promise.resolve(props.overwrite.callback())
+    .then(() => props.clearOverwrite());
+  return (
+    <Dialog
+      isOpen={props.overwrite.callback}
+      icon={IconNames.WARNING_SIGN}
+      title="Unsaved Changes"
+      transitionDuration={100}
+      onClose={() => props.clearOverwrite()}
+      className={getThemeClass(editorTheme)}
+    >
+      <div className={Classes.DIALOG_BODY}>
+        <p>
+          You have unsaved changes on your current file.
+          What would you like to do with these changes?
+        </p>
+      </div>
+      <div className={Classes.DIALOG_FOOTER}>
+        <div className={Classes.DIALOG_FOOTER_ACTIONS}>
+          <Button
+            intent={Intent.DANGER}
+            icon={IconNames.TRASH}
+            text="Discard"
+            onClick={() => confirmOverwrite()}
+          />
+          <Button
+            intent={Intent.PRIMARY}
+            icon={IconNames.IMPORT}
+            text="Save"
+            onClick={() => props.save(filePath).then(() => confirmOverwrite())}
+          />
+        </div>
+      </div>
+    </Dialog>
+  );
+};
 
 export default function Toolbar(props) {
   const {
     dirty,
     editorTheme,
-    encoding,
     filePath,
   } = useAppSelector(state => state.editor);
   const [mode, setMode] = React.useState(Mode.AUTO);
-  const [overwrite, setOverwrite] = React.useState(null);
+  const [overwrite, setOverwrite] = React.useState({ callback: null });
   const dispatch = useAppDispatch();
-  const newFile = () => {
-    props.editorRef.current.editor.setValue("");
-    dispatch(editor.actions.newFile());
-  };
-  const openFile = () => window.file.open(encoding)
-    .then(([filePath, contents]) => {
-      props.editorRef.current.editor.setValue(contents);
-      dispatch(editor.actions.openFile(filePath));
-    })
-    .catch(err => console.log(err));
-  const save = filePath =>
-    (filePath ? Promise.resolve(filePath) : window.file.savePrompt())
-      .then(filePath => {
-        dispatch(editor.actions.save(filePath));
-        const contents = props.editorRef.current.editor.getValue();
-        return window.file.save(filePath, contents, encoding);
-      })
-      .catch(err => console.log(err));
-  const confirmOverwrite = () => {
-    if (overwrite === 'new') {
-      newFile();
-    } else if (overwrite === 'open') {
-      openFile();
-    }
-    setOverwrite(null);
-  };
+  const newFile = () => reportOutcome(
+    dispatch(create({ editorRef: props.editorRef })).unwrap(),
+    'Created a new file.',
+    'Failed to create a new file.',
+  );
+  const openFile = () => reportOutcome(
+    dispatch(open({ editorRef: props.editorRef }))
+      .unwrap()
+      .then(() => dispatch(exportSettings()).unwrap()),
+    'Opened the selected file.',
+    'Failed to open the selected file.',
+  );
+  const uploadFile = () => reportOutcome(
+    dispatch(upload({ editorRef: props.editorRef })).unwrap(),
+    'Uploaded student code to the robot.',
+    'Failed to upload student code to the robot.',
+  );
+  const downloadFile = () => reportOutcome(
+    dispatch(download({ editorRef: props.editorRef })).unwrap(),
+    'Downloaded student code from the robot.',
+    'Failed to download student code from the robot.',
+  );
+  const saveFile = (filePath) => reportOutcome(
+    dispatch(save({ filePath, editorRef: props.editorRef }))
+      .unwrap()
+      .then(() => dispatch(exportSettings()).unwrap()),
+    'Saved the current file.',
+    'Failed to save the current file.',
+  );
+  React.useEffect(() => {
+    window.ipc.on('exit', (replyChannel) => {
+      const callback = () => window.ipc.send(replyChannel);
+      if (dirty) {
+        setOverwrite({ callback });
+      } else {
+        callback();
+      }
+    });
+    return () => window.ipc.removeListeners('exit');
+  }, [dirty]);
   // TODO: ensure estop works
-  // TODO: warn when quitting with unsaved changes
+  // TODO: add loading to upload/download
   return (
     <Navbar>
       <Navbar.Group>
@@ -160,58 +228,32 @@ export default function Toolbar(props) {
           <Popover content={
             <FileMenu
               filePath={filePath}
-              newFile={() => dirty ? setOverwrite('new') : newFile()}
-              openFile={() => dirty ? setOverwrite('open') : openFile()}
-              save={save}
+              newFile={() => dirty ? setOverwrite({ callback: newFile }) : newFile()}
+              openFile={() => dirty ? setOverwrite({ callback: openFile }) : openFile()}
+              saveFile={saveFile}
             />
           }>
-            <Button icon={IconNames.DOCUMENT} rightIcon={IconNames.CARET_DOWN}>
-              File
-            </Button>
+            <Button icon={IconNames.DOCUMENT} rightIcon={IconNames.CARET_DOWN} text="File" />
           </Popover>
-          <Dialog
-            isOpen={overwrite}
-            icon={IconNames.WARNING_SIGN}
-            title="Unsaved Changes"
-            transitionDuration={100}
-            onClose={() => setOverwrite(null)}
-            className={getThemeClass(editorTheme)}
-          >
-            <div className={Classes.DIALOG_BODY}>
-              <p>
-                You are trying to {overwrite === 'open' ? 'open' : 'create'} a new file,
-                but you have unsaved changes on your current file.
-                What would you like to do with these changes?
-              </p>
-            </div>
-            <div className={Classes.DIALOG_FOOTER}>
-              <div className={Classes.DIALOG_FOOTER_ACTIONS}>
-                <Button
-                  intent={Intent.DANGER}
-                  icon={IconNames.TRASH}
-                  text="Discard"
-                  onClick={confirmOverwrite}
-                />
-                <Button
-                  intent={Intent.PRIMARY}
-                  icon={IconNames.IMPORT}
-                  text="Save"
-                  onClick={() => save(filePath).then(confirmOverwrite)}
-                />
-              </div>
-            </div>
-          </Dialog>
-          <Popover content={<EditMenu editorRef={props.editorRef} />}>
-            <Button icon={IconNames.EDIT} rightIcon={IconNames.CARET_DOWN}>
-              Edit
-            </Button>
+          <OverwriteDialog
+            overwrite={overwrite}
+            clearOverwrite={() => setOverwrite({ callback: null })}
+            saveFile={saveFile}
+          />
+          <Popover content={<EditMenu />}>
+            <Button icon={IconNames.EDIT} rightIcon={IconNames.CARET_DOWN} text="Edit" />
           </Popover>
-          <Button icon={IconNames.UPLOAD}>
-            Upload
-          </Button>
-          <Button icon={IconNames.DOWNLOAD}>
-            Download
-          </Button>
+          <Button
+            icon={IconNames.UPLOAD}
+            text="Upload"
+            onClick={() => uploadFile()}
+          />
+          <Button
+            icon={IconNames.DOWNLOAD}
+            text="Download"
+            onClick={() => dirty ?
+              setOverwrite({ callback: downloadFile }) : downloadFile()}
+          />
         </ButtonGroup>
         <Navbar.Divider />
         <ControlGroup>
@@ -226,7 +268,7 @@ export default function Toolbar(props) {
             icon={IconNames.PLAY}
             text="Start"
             onClick={() => reportOutcome(
-              window.runtime.request('executor-service', mode),
+              window.ipc.invoke('request', 'executor-service', mode),
               'Successfully started robot.',
               'Failed to start robot.',
             )}
@@ -235,7 +277,7 @@ export default function Toolbar(props) {
             icon={IconNames.STOP}
             text="Stop"
             onClick={() => reportOutcome(
-              window.runtime.request('executor-service', 'idle'),
+              window.ipc.invoke('request', 'executor-service', 'idle'),
               'Successfully idled robot.',
               'Failed to idle robot.',
             )}
@@ -244,7 +286,7 @@ export default function Toolbar(props) {
             icon={IconNames.FLAME}
             text="Emergency"
             onClick={() => reportOutcome(
-              Promise.resolve(window.runtime.notify('executor-service', 'estop')),
+              Promise.resolve(window.ipc.send('notify', 'executor-service', 'estop')),
               'Successfully e-stopped robot.',
               'Failed to e-stop robot.',
             )}

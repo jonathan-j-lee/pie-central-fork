@@ -1,22 +1,64 @@
 'use strict';
 
+import * as path from 'path';
 import { contextBridge, ipcRenderer } from 'electron';
+import * as shellEscape from 'shell-escape';
 
-contextBridge.exposeInMainWorld('runtime', {
-  connect: (options = {}) => ipcRenderer.invoke('connect', options),
-  handleSetup: handler => ipcRenderer.on('setup', handler),
-  handleUpdate: (handler) => ipcRenderer.on('update', handler),
-  handleEvent: (handler) => ipcRenderer.on('log-event', handler),
-  request: (address, method, ...args) =>
-    ipcRenderer.invoke('request', address, method, ...args),
-  notify: (address, method, ...args) =>
-    ipcRenderer.send('notify', address, method, ...args),
-  sendControl: gamepads => ipcRenderer.send('send-control', gamepads),
+const MAIN_SYNC_CHANNELS = [
+  'request',
+  'exec',
+  'save-settings',
+  'open-file',
+  'open-file-prompt',
+  'save-file',
+  'save-file-prompt',
+];
+const MAIN_ASYNC_CHANNELS = [
+  'notify',
+  'send-control',
+  'quit',
+  'reload',
+  'force-reload',
+];
+const RENDERER_CHANNELS = [
+  'load-settings',
+  'update-devices',
+  'append-event',
+  'exit',
+];
+
+contextBridge.exposeInMainWorld('ipc', {
+  on(channel, handler) {
+    if (RENDERER_CHANNELS.includes(channel)) {
+      ipcRenderer.on(channel, (event, ...args) => handler(...args));
+    }
+  },
+  removeListeners(channel) {
+    if (RENDERER_CHANNELS.includes(channel)) {
+      ipcRenderer.removeAllListeners(channel);
+    }
+  },
+  invoke(channel, ...args) {
+    if (MAIN_SYNC_CHANNELS.includes(channel)) {
+      return ipcRenderer.invoke(channel, ...args);
+    }
+    return Promise.reject(new Error(`invalid channel: ${channel}`));
+  },
+  send(channel, ...args) {
+    if (MAIN_ASYNC_CHANNELS.includes(channel)) {
+      ipcRenderer.send(channel, ...args);
+    }
+  },
 });
 
-contextBridge.exposeInMainWorld('file', {
-  open: (encoding) => ipcRenderer.invoke('file-open', encoding),
-  savePrompt: () => ipcRenderer.invoke('file-save-prompt'),
-  save: (filePath, contents, encoding) =>
-    ipcRenderer.invoke('file-save', filePath, contents, encoding),
+contextBridge.exposeInMainWorld('ssh', {
+  upload: (config, remotePath, contents) => ipcRenderer.invoke(
+    'exec',
+    config,
+    { command: `mkdir -p ${shellEscape([path.dirname(remotePath)])}` },
+    { command: `cat > ${shellEscape([remotePath])}`, options: { stdin: contents } },
+  ),
+  download: (config, remotePath) =>
+    ipcRenderer.invoke('exec', config, { command: `cat ${shellEscape([remotePath])}` })
+      .then(([response]) => response.stdout),
 });

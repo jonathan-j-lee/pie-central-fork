@@ -15,6 +15,9 @@ module.exports = [
         test: /\.ts$/i,
         include: /app/,
         use: 'ts-loader',
+      }, {
+        test: /\.node$/i,
+        loader: 'node-loader',
       }],
     },
     output: {
