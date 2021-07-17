@@ -19,11 +19,20 @@ import Chart from 'chart.js/auto';
 import { Scatter, defaults } from 'react-chartjs-2';
 import * as _ from 'lodash';
 import { useAppDispatch, useAppSelector } from '../hooks';
-import { EditorTheme } from '../store/editor';
-import { updateDevices } from '../store/peripherals';
-import { Alliance, Mode, ConnectionStatus } from '../store/robot';
-import { updateRate } from '../store/robot';
-import { updateGamepads } from '../store/peripherals';
+import { EditorTheme, lint } from '../store/editor';
+import { LogOpenCondition } from '../store/log';
+import { updateDevices, updateGamepads } from '../store/peripherals';
+import {
+  Alliance,
+  Mode,
+  ConnectionStatus,
+  download,
+  upload,
+  changeMode,
+  restart,
+  updateRate,
+} from '../store/robot';
+import { addCommands, reportOutcome } from './Util';
 
 defaults.font.family = 'monospace';
 
@@ -154,7 +163,7 @@ function ModeTag({ mode }) {
       modeName = 'Idle';
       modeIcon = IconNames.OFFLINE;
   }
-  return (<Tag className="status-tag" icon={modeIcon} large minimal>{modeName}</Tag>);
+  return <Tag className="status-tag" icon={modeIcon} large minimal>{modeName}</Tag>;
 }
 
 function AllianceTag({ alliance }) {
@@ -236,10 +245,12 @@ function Status() {
   );
 }
 
-export default function Peripherals() {
+export default function Peripherals(props) {
   const dispatch = useAppDispatch();
+  const openCondition = useAppSelector(state => state.log.openCondition);
   const editorTheme = useAppSelector(state => state.editor.editorTheme);
   const peripherals = useAppSelector(state => state.peripherals);
+  const keybindings = useAppSelector(state => _.pick(state.keybindings, ['robot', 'debug']));
   const status = useAppSelector(state => state.robot.status);
   const peripheralList = Array.from(makePeripheralList(peripherals));
   const [showParams, setShowParams] = React.useState({});
@@ -248,7 +259,85 @@ export default function Peripherals() {
       dispatch(updateDevices({}, { disconnect: true }));
       setShowParams({});
     }
-  });
+  }, [dispatch, setShowParams, peripherals.devices, status]);
+  React.useEffect(() => addCommands(props.editor?.commands, [
+    {
+      name: 'downloadFile',
+      group: 'Robot',
+      bindKey: keybindings.robot.commands.downloadFile,
+      exec: () => reportOutcome(
+        dispatch(download({ editor: props.editor })).unwrap(),
+        'Downloaded student code from the robot.',
+        'Failed to download student code. Are you connected to the robot?',
+      ),
+    },
+    {
+      name: 'uploadFile',
+      group: 'Robot',
+      bindKey: keybindings.robot.commands.uploadFile,
+      exec: () => reportOutcome(
+        dispatch(upload({ editor: props.editor })).unwrap(),
+        'Uploaded student code to the robot.',
+        'Failed to upload student code. Are you connected to the robot?',
+      ),
+    },
+    {
+      name: 'start',
+      group: 'Robot',
+      bindKey: keybindings.robot.commands.start,
+      exec: (editor) => reportOutcome(
+        dispatch(changeMode(props.mode)).unwrap()
+          .then(() => {
+            if (openCondition === LogOpenCondition.START) {
+              props.openLog();
+            }
+          }),
+        'Started robot.',
+        'Failed to start robot.',
+      ),
+    },
+    {
+      name: 'stop',
+      group: 'Robot',
+      bindKey: keybindings.robot.commands.stop,
+      exec: () => reportOutcome(
+        dispatch(changeMode(Mode.IDLE)).unwrap(),
+        'Stopped robot.',
+        'Failed to stop robot.',
+      ),
+    },
+    {
+      name: 'estop',
+      group: 'Robot',
+      bindKey: keybindings.robot.commands.estop,
+      exec: () => reportOutcome(
+        dispatch(changeMode(Mode.ESTOP)).unwrap(),
+        'Emergency-stopped robot.',
+        'Failed to emergency-stop robot.',
+      ),
+    },
+    {
+      name: 'lint',
+      group: 'Debug',
+      bindKey: keybindings.debug.commands.lint,
+      exec: () => reportOutcome(
+        dispatch(upload({ editor: props.editor })).unwrap()
+          .then(() => dispatch(lint()).unwrap()),
+        'Linted student code.',
+        'Failed to lint student code.',
+      ),
+    },
+    {
+      name: 'restart',
+      group: 'Debug',
+      bindKey: keybindings.debug.commands.restart,
+      exec: () => reportOutcome(
+        dispatch(restart()).unwrap(),
+        'Successfully restarted Runtime.',
+        'Failed to restart Runtime. Are you connected to the robot?',
+      ),
+    },
+  ]), [dispatch, props.mode, props.openLog, keybindings, openCondition]);
   return (
     <div className="peripherals">
       <div className="peripheral-list">

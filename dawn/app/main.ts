@@ -17,7 +17,7 @@ import Client from '@pioneers/runtime-client';
 
 const ssh = new NodeSSH();
 const logger = bunyan.createLogger({ name: 'dawn' });
-const client = new Client();
+const client = new Client();  // TODO: fix no membership when not connected
 const isDevelopment = process.env.NODE_ENV === 'development';
 
 const SETTINGS_PATH = path.join(app.getPath('appData'), 'dawn', 'settings.json');
@@ -73,8 +73,12 @@ const MENU_TEMPLATE: MenuItemConstructorOptions[] = [
   },
 ];
 
+// TODO: reset client on error
+
 ipcMain.handle('request', async (event, address, method, ...args) => {
-  return await client.request(address, method, ...args);
+  const result = await client.request(address, method, ...args);
+  logger.info({ address, method, args, result }, 'Sent request to Runtime');
+  return result;
 });
 
 ipcMain.on('notify', (event, address, method, ...args) => {
@@ -164,6 +168,18 @@ ipcMain.on('force-reload', (event) => {
   logger.info('Force reloaded window');
 });
 
+ipcMain.handle('load-settings', async (event) => {
+  try {
+    const contents = await fs.readFile(SETTINGS_PATH, { encoding: 'utf8' });
+    const settings = JSON.parse(contents);
+    logger.info({ path: SETTINGS_PATH }, 'Loaded settings');
+    return settings;
+  } catch (err) {
+    logger.warn({ err }, 'Failed to load settings');
+    return {};
+  }
+});
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
@@ -203,6 +219,7 @@ function createWindow() {
       logger.info({ path: SETTINGS_PATH }, 'Saved settings');
     });
 
+    window.removeAllListeners('close');
     window.on('close', (event) => {
       event.preventDefault();
       window.webContents.send('exit', 'quit');
@@ -210,17 +227,6 @@ function createWindow() {
     });
 
     logger.info('Window loaded');
-
-    fs.readFile(SETTINGS_PATH, { encoding: 'utf8' })
-      .then(contents => {
-        const settings = JSON.parse(contents);
-        logger.info({ path: SETTINGS_PATH }, 'Loaded settings');
-        window.webContents.send('load-settings', settings);
-      })
-      .catch(err => {
-        logger.warn({ err }, 'Failed to load settings');
-        window.webContents.send('load-settings', {});
-      });
   });
 
   window.maximize();

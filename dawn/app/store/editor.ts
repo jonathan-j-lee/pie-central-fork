@@ -1,5 +1,6 @@
 import { Classes } from '@blueprintjs/core';
 import { createAsyncThunk, createSlice, isAnyOf } from '@reduxjs/toolkit';
+import { Store } from 'redux';
 import { makeUpdateReducer } from './util';
 
 export enum EditorTheme {
@@ -10,101 +11,148 @@ export enum EditorTheme {
 export const getThemeClass = theme =>
   theme === EditorTheme.DARK ? Classes.DARK : '';
 
-interface EditorOperation {
-  editorRef: {
-    current?: {
-      editor: any;  // FIXME
-    }
-  };
-  filePath?: string;
-}
+const initialState = {
+  editorTheme: EditorTheme.DARK,
+  syntaxHighlighting: true,
+  lineNumbers: true,
+  longLineMarker: true,
+  highlightLine: true,
+  wrapLines: true,
+  basicAutocompletion: true,
+  liveAutocompletion: true,
+  appendNewline: true,
+  syntaxTheme: 'solarized_dark',
+  fontSize: 13,
+  tabSize: 4,
+  encoding: 'utf-8',
+  filePath: null,
+  dirty: false,
+  prompt: false,
+  confirmed: false,
+  annotations: [],
+};
 
-export const create = createAsyncThunk<{ filePath: null }, EditorOperation>(
+export const prompt = createAsyncThunk<
+  void,
+  void,
+  { extra: { store: Store } }
+>(
+  'editor/prompt',
+  async (arg, thunkAPI) => {
+    return await new Promise((resolve, reject) => {
+      const unsubscribe = thunkAPI.extra.store.subscribe(() => {
+        const { prompt, confirmed } = thunkAPI.getState().editor;
+        if (!prompt) {
+          unsubscribe();
+          if (confirmed) {
+            resolve();
+          } else {
+            reject();
+          }
+        }
+      });
+    });
+  },
+);
+
+export const create = createAsyncThunk<
+  { filePath: null },
+  { editor?: any },
+  { state: { editor: typeof initialState } }
+>(
   'editor/create',
-  async ({ editorRef }, thunkAPI) => {
-    if (editorRef.current) {
-      editorRef.current.editor.setValue('');
+  async ({ editor }, thunkAPI) => {
+    const state = thunkAPI.getState();
+    if (state.editor.dirty) {
+      await thunkAPI.dispatch(prompt()).unwrap();
+    }
+    if (editor) {
+      editor.setValue('');
     }
     return { filePath: null };
   },
 );
 
 export const open = createAsyncThunk<
-    { filePath: string, contents: string },
-    EditorOperation>(
+  { filePath: string, contents: string },
+  { filePath?: string, editor?: any },
+  { state: { editor: typeof initialState } }
+>(
   'editor/open',
-  async ({ filePath, editorRef }, thunkAPI) => {
+  async ({ filePath, editor }, thunkAPI) => {
+    const state = thunkAPI.getState();
+    if (state.editor.dirty) {
+      await thunkAPI.dispatch(prompt()).unwrap();
+    }
     if (!filePath) {
       filePath = await window.ipc.invoke('open-file-prompt');
     }
-    const state = thunkAPI.getState();
     const contents = await window.ipc.invoke('open-file', filePath, state.editor.encoding);
-    if (editorRef.current) {
-      editorRef.current.editor.setValue(contents);
+    if (editor) {
+      editor.setValue(contents);
     }
     return { filePath, contents };
   },
 );
 
-export const save = createAsyncThunk<{ filePath: string }, EditorOperation>(
+export const save = createAsyncThunk<
+  { filePath: string },
+  { filePath?: string, editor?: any },
+  { state: { editor: typeof initialState } }
+>(
   'editor/save',
-  async ({ filePath, editorRef }, thunkAPI) => {
+  async ({ filePath, editor }, thunkAPI) => {
     if (!filePath) {
       filePath = await window.ipc.invoke('save-file-prompt');
     }
     const state = thunkAPI.getState();
-    if (editorRef.current) {
-      const contents = editorRef.current.editor.getValue();
+    if (editor) {
+      const contents = editor.getValue();
       await window.ipc.invoke('save-file', filePath, contents, state.editor.encoding);
     }
     return { filePath };
   },
 );
 
-export const download = createAsyncThunk<{ contents: string }, EditorOperation>(
-  'editor/download',
-  async ({ editorRef }, thunkAPI) => {
-    const state = thunkAPI.getState();
-    const config = { host: state.robot.host, ...state.robot.credentials };
-    const contents = await window.ssh.download(config, state.robot.remotePath);
-    if (editorRef.current) {
-      editorRef.current.editor.setValue(contents);
-    }
-    return { contents };
+const getSeverity = (msgType) => {
+  if (msgType === 'error' || msgType === 'fatal') {
+    return 'error';
+  } else if (msgType === 'warning') {
+    return 'warning';
+  }
+  return 'info';
+};
+
+export const lint = createAsyncThunk(
+  'editor/lint',
+  async (arg, thunkAPI) => {
+    const messages = await window.ipc.invoke('request', 'broker-service', 'lint');
+    return messages.map(({ line, column, ...message }) => ({
+      row: line - 1,
+      column,
+      type: getSeverity(message.type),
+      text: `${message.message} (${message.symbol}, ${message['message-id']})`,
+    }));
   },
 );
 
-export const upload = createAsyncThunk<void, EditorOperation>(
-  'editor/upload',
-  async ({ editorRef }, thunkAPI) => {
-    const state = thunkAPI.getState();
-    const config = { host: state.robot.host, ...state.robot.credentials };
-    if (editorRef.current) {
-      const contents = editorRef.current.editor.getValue();
-      await window.ssh.upload(config, state.robot.remotePath, contents);
+export const exit = createAsyncThunk<void, string>(
+  'editor/refresh',
+  async (replyChannel, thunkAPI) => {
+    try {
+      const state = thunkAPI.getState();
+      if (state.editor.dirty) {
+        await thunkAPI.dispatch(prompt()).unwrap();
+      }
+    } finally {
+      window.ipc.send(replyChannel);
     }
   },
 );
 
 export default createSlice({
   name: 'editor',
-  initialState: {
-    editorTheme: EditorTheme.DARK,
-    syntaxHighlighting: true,
-    lineNumbers: true,
-    longLineMarker: true,
-    highlightLine: true,
-    wrapLines: true,
-    basicAutocompletion: true,
-    liveAutocompletion: true,
-    appendNewline: true,
-    syntaxTheme: 'solarized_dark',
-    fontSize: 13,
-    tabSize: 4,
-    encoding: 'utf-8',
-    filePath: null,
-    dirty: false,
-  },
+  initialState,
   reducers: {
     toggle: (state, action) => ({ ...state, [action.payload]: !state[action.payload] }),
     setEditorTheme: makeUpdateReducer('editorTheme'),
@@ -113,9 +161,14 @@ export default createSlice({
     setTabSize: makeUpdateReducer('tabSize'),
     setEncoding: makeUpdateReducer('encoding'),
     setDirty: (state) => ({ ...state, dirty: true }),
+    confirm: (state) => ({ ...state, prompt: false, confirmed: true }),
+    cancel: (state) => ({ ...state, prompt: false, confirmed: false }),
   },
   extraReducers: (builder) => {
     builder
+      .addCase(prompt.pending, (state) => ({ ...state, prompt: true }))
+      .addCase(lint.fulfilled,
+        (state, action) => ({ ...state, annotations: action.payload }))
       .addMatcher(isAnyOf(
         create.fulfilled,
         open.fulfilled,

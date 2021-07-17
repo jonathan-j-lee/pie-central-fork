@@ -3,7 +3,8 @@
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import { Provider } from 'react-redux';
-import App from './components/App';
+import { HotkeysProvider } from '@blueprintjs/core';
+import App, { ErrorBoundary } from './components/App';
 import store from './store';
 import './assets/custom.scss';
 import { SSHExecCommandOptions, SSHExecCommandResponse } from 'node-ssh';
@@ -20,7 +21,6 @@ interface Command {
   options?: SSHExecCommandOptions,
 };
 
-// FIXME: any -> more specific types
 declare global {
   interface Window {
     ipc: {
@@ -38,7 +38,11 @@ declare global {
 
 ReactDOM.render(
   <Provider store={store}>
-    <App />
+    <HotkeysProvider>
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    </HotkeysProvider>
   </Provider>,
   document.getElementById('content'),
 );

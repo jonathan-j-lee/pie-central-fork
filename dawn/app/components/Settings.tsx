@@ -5,8 +5,10 @@ import {
   Classes,
   Collapse,
   Dialog,
+  EditableText,
   H4,
   HTMLSelect,
+  HTMLTable,
   FormGroup,
   Icon,
   InputGroup,
@@ -20,13 +22,14 @@ import {
   TextArea,
   Tooltip,
 } from '@blueprintjs/core';
+import { useStore } from 'react-redux';
 import { IconNames } from '@blueprintjs/icons';
 import { useAppDispatch, useAppSelector } from '../hooks';
-import { EditorTheme, getThemeClass } from '../store/editor';
 import { OutcomeButton, reportOutcome } from './Util';
-import { selectSettings, importSettings } from '../store';
-import editor from '../store/editor';
-import log from '../store/log';
+import { selectSettings, importSettings, exportSettings } from '../store';
+import editorSlice, { EditorTheme, getThemeClass } from '../store/editor';
+import keybindingsSlice, { bind, generateHotkeys } from '../store/keybindings';
+import log, { LogOpenCondition } from '../store/log';
 import robot from '../store/robot';
 
 // FIXME: reduce spurious redux actions (onChange -> onBlur)
@@ -40,7 +43,7 @@ const EditorSettings = () => {
         inline
         label="Editor Theme"
         selectedValue={editorSettings.editorTheme}
-        onChange={event => dispatch(editor.actions.setEditorTheme(event.currentTarget.value))}
+        onChange={event => dispatch(editorSlice.actions.setEditorTheme(event.currentTarget.value))}
       >
         <Radio value={EditorTheme.LIGHT}>
           <span><Icon icon={IconNames.FLASH} /> Light theme</span>
@@ -52,7 +55,7 @@ const EditorSettings = () => {
       <FormGroup label="Font Size">
         <NumericInput
           value={editorSettings.fontSize}
-          onValueChange={size => dispatch(editor.actions.setFontSize(size))}
+          onValueChange={size => dispatch(editorSlice.actions.setFontSize(size))}
           leftIcon={IconNames.ZOOM_IN}
           min={10}
           max={100}
@@ -62,7 +65,7 @@ const EditorSettings = () => {
       <FormGroup label="Tab Size">
         <NumericInput
           value={editorSettings.tabSize}
-          onValueChange={size => dispatch(editor.actions.setTabSize(size))}
+          onValueChange={size => dispatch(editorSlice.actions.setTabSize(size))}
           leftIcon={IconNames.ZOOM_IN}
           min={1}
           max={32}
@@ -72,7 +75,7 @@ const EditorSettings = () => {
       <FormGroup label="Syntax Theme">
         <HTMLSelect
           value={editorSettings.syntaxTheme}
-          onChange={event => dispatch(editor.actions.setSyntaxTheme(event.currentTarget.value))}
+          onChange={event => dispatch(editorSlice.actions.setSyntaxTheme(event.currentTarget.value))}
         >
           <option value="monokai">Monokai</option>
           <option value="github">GitHub</option>
@@ -90,49 +93,49 @@ const EditorSettings = () => {
         large
         checked={editorSettings.syntaxHighlighting}
         label="Enable syntax highlighting"
-        onChange={() => dispatch(editor.actions.toggle('syntaxHighlighting'))}
+        onChange={() => dispatch(editorSlice.actions.toggle('syntaxHighlighting'))}
       />
       <Switch
         large
         checked={editorSettings.lineNumbers}
         label="Show line numbers"
-        onChange={() => dispatch(editor.actions.toggle('lineNumbers'))}
+        onChange={() => dispatch(editorSlice.actions.toggle('lineNumbers'))}
       />
       <Switch
         large
         checked={editorSettings.longLineMarker}
         label="Show long line marker"
-        onChange={() => dispatch(editor.actions.toggle('longLineMarker'))}
+        onChange={() => dispatch(editorSlice.actions.toggle('longLineMarker'))}
       />
       <Switch
         large
         checked={editorSettings.highlightLine}
         label="Highlight current line"
-        onChange={() => dispatch(editor.actions.toggle('highlightLine'))}
+        onChange={() => dispatch(editorSlice.actions.toggle('highlightLine'))}
       />
       <Switch
         large
         checked={editorSettings.wrapLines}
         label="Wrap long lines"
-        onChange={() => dispatch(editor.actions.toggle('wrapLines'))}
+        onChange={() => dispatch(editorSlice.actions.toggle('wrapLines'))}
       />
       <Switch
         large
         checked={editorSettings.basicAutocompletion}
         label="Enable basic autocompletion"
-        onChange={() => dispatch(editor.actions.toggle('basicAutocompletion'))}
+        onChange={() => dispatch(editorSlice.actions.toggle('basicAutocompletion'))}
       />
       <Switch
         large
         checked={editorSettings.liveAutocompletion}
         label="Enable live autocompletion"
-        onChange={() => dispatch(editor.actions.toggle('liveAutocompletion'))}
+        onChange={() => dispatch(editorSlice.actions.toggle('liveAutocompletion'))}
       />
       <Switch
         large
         checked={editorSettings.appendNewline}
         label="Append a newline character when saving"
-        onChange={() => dispatch(editor.actions.toggle('appendNewline'))}
+        onChange={() => dispatch(editorSlice.actions.toggle('appendNewline'))}
       />
     </div>
   );
@@ -326,6 +329,21 @@ const LogSettings = () => {
           onBlur={() => dispatch(log.actions.truncate(maxEvents))}
         />
       </FormGroup>
+      <FormGroup
+        label="Open console automatically ..."
+        className="form-select"
+      >
+        <HTMLSelect
+          value={settings.openCondition}
+          onChange={event => dispatch(log.actions.set({
+            openCondition: event.currentTarget.value,
+          }))}
+        >
+          <option value={LogOpenCondition.START}>On start</option>
+          <option value={LogOpenCondition.ERROR}>On error</option>
+          <option value={LogOpenCondition.NEVER}>Never</option>
+        </HTMLSelect>
+      </FormGroup>
       <Switch
         large
         checked={settings.showSystem}
@@ -358,30 +376,103 @@ const LogSettings = () => {
       <Switch
         large
         checked={settings.showTraceback}
-        label="Show error tracebacks"
+        labelElement={
+          <Tooltip
+            className={Classes.TOOLTIP_INDICATOR}
+            content={<p className="tooltip-content">
+              A Python traceback shows the functions and line numbers where an error occurred.
+              Tracebacks are useful for debugging Runtime but can be difficult to read.
+            </p>}
+          >
+            Show error tracebacks
+          </Tooltip>
+        }
         onChange={() => dispatch(log.actions.toggle('showTraceback'))}
+      />
+      <Switch
+        large
+        checked={settings.pinToBottom}
+        labelElement={
+          <Tooltip
+            className={Classes.TOOLTIP_INDICATOR}
+            content={<p className="tooltip-content">
+              Follow the most recent events automatically without having to scroll.
+            </p>}
+          >
+            Pin to bottom
+          </Tooltip>
+        }
+        onChange={() => dispatch(log.actions.toggle('pinToBottom'))}
       />
     </div>
   );
 };
 
-export default function Settings(props) {
-  const editorTheme = useAppSelector(state => state.editor.editorTheme);
+/**
+ *  Up-front validation is not ideal because it's hard to get right. However, we cannot
+ *  catch errors from the ``useHotkeys`` hook when the user provides a bad keybinding.
+ */
+function KeybindingsSettings(props) {
   const dispatch = useAppDispatch();
-  const settings = useAppSelector(selectSettings);
+  const keybindings = useAppSelector(state => state.keybindings);
+  return (
+    <>
+      <p>
+        Each shortcut should be a list of keys separated by the <kbd>+</kbd> character.
+        For example: <code>Ctrl+Shift+Alt+Backspace</code>.
+        An invalid keybinding will not trigger the desired action.
+      </p>
+      <p>You can view your keyboard shortcuts by pressing <kbd>?</kbd>.</p>
+      <HTMLTable className="keybindings" striped>
+        <thead>
+          <tr>
+            <th>Group</th>
+            <th>Command</th>
+            <th>Combination</th>
+          </tr>
+        </thead>
+        <tbody>
+          {generateHotkeys(keybindings, props.editor).map((hotkey, index) =>
+            <tr key={index}>
+              <td>{hotkey.group}</td>
+              <td>{hotkey.label}</td>
+              <td>
+                <EditableText
+                  className="keybinding"
+                  defaultValue={hotkey.combo}
+                  onConfirm={(combo) => reportOutcome(
+                    dispatch(bind({
+                      groupId: hotkey.groupId,
+                      commandId: hotkey.commandId,
+                      platform: props.editor.commands.platform,
+                      combo,
+                    })).unwrap(),
+                    null,
+                    `Invalid shortcut for "${hotkey.label}".`,
+                  )}
+                />
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </HTMLTable>
+    </>
+  );
+}
+
+export default function Settings(props) {
+  const dispatch = useAppDispatch();
+  const editorTheme = useAppSelector(state => state.editor.editorTheme);
+  const store = useStore();
   const [oldSettings, setOldSettings] = React.useState({});
   const revert = () => {
     props.close();
-    reportOutcome(
-      dispatch(importSettings(oldSettings)).unwrap(),
-      'Successfully reverted settings.',
-      'Failed to revert settings.',
-    );
+    dispatch(importSettings(oldSettings)).unwrap();
   };
   return (
     <Dialog
       isOpen={props.isOpen}
-      onOpened={() => setOldSettings(settings)}
+      onOpened={() => setOldSettings(selectSettings(store.getState()))}
       onClose={revert}
       className={`settings ${getThemeClass(editorTheme)}`}
       title="Settings"
@@ -391,6 +482,11 @@ export default function Settings(props) {
           <Tab id="robot" title="Robot" panel={<RobotSettings />} />
           <Tab id="editor" title="Editor" panel={<EditorSettings />} />
           <Tab id="console" title="Console" panel={<LogSettings />} />
+          <Tab
+            id="keybindings"
+            title="Keyboard Shortcuts"
+            panel={<KeybindingsSettings editor={props.editor} />}
+          />
         </Tabs>
       </div>
       <div className={Classes.DIALOG_FOOTER}>
@@ -411,7 +507,7 @@ export default function Settings(props) {
             text="Confirm"
             intent={Intent.SUCCESS}
             onClick={() => reportOutcome(
-              window.ipc.invoke('save-settings', settings)
+              dispatch(exportSettings())
                 .finally(() => props.close()),
               'Successfully saved settings.',
               'Failed to save settings.',

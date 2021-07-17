@@ -16,14 +16,14 @@ main {
 }
 
 .editor {
-  block: inline-block;
   float: left;
   width: 70%;
-  height: calc(100% - 2rem);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .editor-status {
-  min-height: 2rem;
   padding: 0.4rem 0 0.4rem 0.8rem;
   font-size: 0.8rem;
 }
@@ -60,25 +60,34 @@ main {
   }
 }
 
-.console {
-  padding: 0.3rem 0.8rem;
+.console-container {
+  padding: 0.3rem 0rem 0.8rem 0.8rem;
   pre {
+    margin: 0;
+  }
+  pre.console {
     height: 400px;
     overflow: auto;
-    line-height: 1.6;
+    line-height: 1.35rem;
   }
-  .log-context {
-    float: right;
-    .context-entry {
-      margin-right: 0.5rem;
-    }
-  }
-  .log-severity {
+  .log-tag {
     float: right;
     min-height: 12px;
-    min-width: 54px;
+    min-width: 68px;
     text-align: center;
     line-height: 12px;
+    margin-left: 0.5rem;
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
+  .log-pin {
+    position: absolute;
+    top: 1.5rem;
+    left: 1.5rem;
+  }
+  .log-context {
+    padding: 0;
+    background-color: rgba(0, 0, 0, 0);
   }
 }
 
@@ -133,4 +142,26 @@ main {
 .private-key {
   min-height: 32rem;
   overflow-x: auto;
+}
+
+.keybindings, .keybinding {
+  width: 100%;
+}
+
+.keybinding {
+  font-family: monospace;
+}
+
+.error-boundary {
+  padding: 1rem;
+  p {
+    font-size: 16px;
+  }
+  .quit {
+    margin-bottom: 1rem;
+  }
+}
+
+.form-select > label.bp3-label {
+  margin-bottom: 0.6rem;
 }

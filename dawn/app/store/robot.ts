@@ -1,5 +1,7 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import * as _ from 'lodash';
+import { Editor } from 'ace-builds';
+import { prompt } from './editor';
 import log, { Level } from './log';
 import peripherals from './peripherals';
 
@@ -26,8 +28,84 @@ const HEALTHY_THRESHOLD = 0.9;
 const DISCONNECT_TIMEOUT = 8;
 const MAX_TIMESTAMPS = 50;
 
-export const exec = createAsyncThunk(
-  'robot/exec',
+const initialState = {
+  status: ConnectionStatus.DISCONNECTED,
+  mode: Mode.IDLE,
+  alliance: null,
+  updates: [],
+  updateRate: 0,
+  relUpdateRate: 0,
+  host: 'localhost',
+  remotePath: 'studentcode.py',
+  restartCommand: 'systemctl restart runtime.service',
+  credentials: {
+    username: '',
+    password: '',
+    privateKey: '',
+  },
+  updateInterval: 0.1,
+  error: false,
+};
+
+export const download = createAsyncThunk<
+  { contents: string },
+  { editor?: Editor },
+  { state: { robot: typeof initialState, editor: { dirty: boolean } } }
+>(
+  'robot/download',
+  async ({ editor }, thunkAPI) => {
+    const state = thunkAPI.getState();
+    if (state.editor.dirty) {
+      await thunkAPI.dispatch(prompt()).unwrap();
+    }
+    const config = { host: state.robot.host, ...state.robot.credentials };
+    const contents = await window.ssh.download(config, state.robot.remotePath);
+    editor?.setValue(contents);
+    return { contents };
+  },
+);
+
+export const upload = createAsyncThunk<
+  void,
+  { editor?: Editor },
+  { state: { robot: typeof initialState } }
+>(
+  'robot/upload',
+  async ({ editor }, thunkAPI) => {
+    const state = thunkAPI.getState();
+    const config = { host: state.robot.host, ...state.robot.credentials };
+    if (editor) {
+      const contents = editor.getValue();
+      await window.ssh.upload(config, state.robot.remotePath, contents);
+    }
+  },
+);
+
+export const changeMode = createAsyncThunk<{ mode?: Mode }, Mode>(
+  'robot/start',
+  async (mode, thunkAPI) => {
+    switch (mode) {
+      case Mode.AUTO:
+      case Mode.TELEOP:
+      case Mode.IDLE:
+        await window.ipc.invoke('request', 'executor-service', mode);
+        break;
+      case Mode.ESTOP:
+        window.ipc.send('notify', 'executor-service', 'estop');
+        break;
+      default:
+        return {};
+    }
+    return { mode };
+  },
+);
+
+export const restart = createAsyncThunk<
+  any,
+  void,
+  { state: { robot: typeof initialState } }
+>(
+  'robot/restart',
   async (arg, thunkAPI) => {
     const state = thunkAPI.getState();
     const config = { host: state.robot.host, ...state.robot.credentials };
@@ -37,24 +115,7 @@ export const exec = createAsyncThunk(
 
 const slice = createSlice({
   name: 'robot',
-  initialState: {
-    status: ConnectionStatus.DISCONNECTED,
-    mode: Mode.IDLE,
-    alliance: null,
-    updates: [],
-    updateRate: 0,
-    relUpdateRate: 0,
-    host: 'localhost',
-    remotePath: 'studentcode.py',
-    restartCommand: 'systemctl restart runtime.service',
-    credentials: {
-      username: '',
-      password: '',
-      privateKey: '',
-    },
-    updateInterval: 0.1,
-    error: false,
-  },
+  initialState,
   reducers: {
     updateRate(state, action) {
       state.updateRate *= RATE_DECAY;
@@ -84,6 +145,14 @@ const slice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      .addCase(changeMode.fulfilled, (state, action) => {
+        state.mode = action.payload.mode || state.mode;
+        if (state.mode === Mode.IDLE) {
+          state.error = false;
+        } else if (state.mode === Mode.ESTOP) {
+          state.error = true;
+        }
+      })
       .addCase(log.actions.append, (state, action) => {
         const { level } = action.payload;
         state.error = state.error || level === Level.ERROR || level === Level.CRITICAL;

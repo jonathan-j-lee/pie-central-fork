@@ -41,13 +41,9 @@ class Broker(rpc.Handler):
     logger: structlog.stdlib.AsyncBoundLogger = dataclasses.field(default_factory=log.get_logger)
 
     PYLINT_EXEC: ClassVar[str] = 'pylint'
-    MESSAGE_TEMPLATE: ClassVar[str] = (
-        '{{"line":{line},"column":{column},"msg":"{msg}","msg_id":"{msg_id}","symbol":"{symbol}",'
-        '"category":"{category}","obj":"{obj}"}}'
-    )
     PYLINT_OPTIONS: ClassVar[list[str]] = [
-        f"--msg-template='{MESSAGE_TEMPLATE}'",
         '--disable=missing-module-docstring,missing-function-docstring',
+        '--output-format=json',
     ]
     PATCHED_SYMBOLS: ClassVar[frozenset[str]] = frozenset(
         typing.get_type_hints(api.StudentCodeModule),
@@ -117,15 +113,19 @@ class Broker(rpc.Handler):
         args = list(self.format_args(current_options))
         await asyncio.to_thread(self.ctx.command.parse_args, self.ctx, args)
 
-    def filter_lint_message(self, message: dict[str, Any]) -> bool:
+    def _filter_lint_message(self, message: dict[str, Any]) -> bool:
         """Exclude spurious lint messages."""
         if message['symbol'] == 'undefined-variable':
-            match = re.match("Undefined variable '(?P<symbol>.+)'", message['msg'])
+            match = re.match("Undefined variable '(?P<symbol>.+)'", message['message'])
             if match and match.group('symbol') in self.PATCHED_SYMBOLS:
                 return False
         return True
 
-    def parse_lint_output(self, stdout: str, _stderr: str) -> Iterable[dict[str, Union[str, int]]]:
+    def _parse_lint_output(
+        self,
+        stdout: str,
+        stderr: str,
+    ) -> list[dict[str, Union[str, int]]]:
         """Parse raw ``pylint`` output into JSON records.
 
         Arguments:
@@ -148,17 +148,18 @@ class Broker(rpc.Handler):
             https://docs.pylint.org/en/1.6.0/output.html
         """
         issue_counter: dict[str, int] = collections.defaultdict(lambda: 0)
-        for line in stdout.splitlines():
-            with contextlib.suppress(json.JSONDecodeError, KeyError):
-                message = json.loads(line)
-                if self.filter_lint_message(message):
-                    yield message
-                    issue_counter[message['symbol']] += 1
+        messages = []
+        for message in filter(self._filter_lint_message, json.loads(stdout)):
+            issue_counter[message['symbol']] += 1
+            messages.append(message)
         self.logger.sync_bl.info(
             'Linted student code',
             module=self.ctx.obj.options['exec_module'],
             issues=dict(issue_counter),
         )
+        if stderr:
+            self.logger.sync_bl.error('Linter wrote to stderr', stderr=stderr)
+        return messages
 
     @rpc.route
     async def lint(self) -> list[dict[str, Union[str, int]]]:
@@ -168,16 +169,16 @@ class Broker(rpc.Handler):
             A list of lint messages, each of which represents one warning. See
             :meth:`Broker.parse_lint_output` for details on the format of the output.
         """
-        shell = await asyncio.create_subprocess_exec(
+        subprocess = await asyncio.create_subprocess_exec(
             self.PYLINT_EXEC,
             *self.PYLINT_OPTIONS,
             shlex.quote(self.ctx.obj.options['exec_module']),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        await asyncio.wait_for(process.run_process(shell), 5)
-        stdout, stderr = await shell.communicate()
-        return list(await asyncio.to_thread(self.parse_lint_output, stdout, stderr))
+        await asyncio.wait_for(process.run_process(subprocess), 5)
+        stdout, stderr = await subprocess.communicate()
+        return await asyncio.to_thread(self._parse_lint_output, stdout, stderr)
 
     @functools.cached_property
     def button_params(self) -> list[Parameter]:

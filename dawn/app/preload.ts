@@ -7,6 +7,7 @@ import * as shellEscape from 'shell-escape';
 const MAIN_SYNC_CHANNELS = [
   'request',
   'exec',
+  'load-settings',
   'save-settings',
   'open-file',
   'open-file-prompt',
@@ -21,7 +22,6 @@ const MAIN_ASYNC_CHANNELS = [
   'force-reload',
 ];
 const RENDERER_CHANNELS = [
-  'load-settings',
   'update-devices',
   'append-event',
   'exit',

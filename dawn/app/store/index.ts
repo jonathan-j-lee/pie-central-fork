@@ -3,44 +3,25 @@ import {
   createReducer,
   configureStore,
 } from '@reduxjs/toolkit';
-import { combineReducers } from 'redux';
+import { combineReducers, Store } from 'redux';
 import * as _ from 'lodash';
 
-import editor from './editor';
+import editor, { open } from './editor';
+import keybindings from './keybindings';
 import log from './log';
-import peripherals, { updateDevices } from './peripherals';
+import peripherals from './peripherals';
 import robot from './robot';
 
-export const selectSettings = ({ editor, log, robot }) => ({
-  editor: _.omit(editor, ['dirty']),
-  log: _.omit(log, ['events']),
-  robot: _.pick(robot, [
-    'host',
-    'remotePath',
-    'restartCommand',
-    'credentials',
-  ]),
-});
-
-export const importSettings = createAsyncThunk<undefined, any>(
+export const importSettings = createAsyncThunk<any, any>(
   'settings/import',
   async (settings, thunkAPI) => {
-    return settings;
-  },
-);
-
-export const exportSettings = createAsyncThunk(
-  'settings/export',
-  async (arg, thunkAPI) => {
-    const state = thunkAPI.getState();
-    const settings = selectSettings(state);
-    await window.ipc.invoke('save-settings', settings);
-    return settings;
+    return settings ?? await window.ipc.invoke('load-settings');
   },
 );
 
 const defaultReducer = combineReducers({
   log: log.reducer,
+  keybindings: keybindings.reducer,
   editor: editor.reducer,
   peripherals: peripherals.reducer,
   robot: robot.reducer,
@@ -51,14 +32,54 @@ const reducer = createReducer(undefined, (builder) => {
       _.merge({}, state, action.payload))
     .addDefaultCase((state, action) => defaultReducer(state, action));
 });
-const store = configureStore({ reducer });
 
-window.ipc.on('update-devices', (err, [update]) =>
-  store.dispatch(updateDevices(update)));
-
-window.ipc.on('append-event', (err, [event]) =>
-  store.dispatch(log.actions.append(event)));
+const extraArgument: { store?: Store } = {};
+const store = configureStore({
+  reducer,
+  middleware: (getDefaultMiddleware) => getDefaultMiddleware({
+    thunk: { extraArgument }
+  }),
+});
+extraArgument.store = store;
 
 export default store;
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
+
+export const selectSettings = (state: RootState) => ({
+  editor: _.omit(state.editor, ['dirty', 'annotations', 'prompt', 'confirmed']),
+  keybindings: state.keybindings,
+  log: _.omit(state.log, ['events', 'timeline']),
+  robot: _.pick(state.robot, [
+    'host',
+    'remotePath',
+    'restartCommand',
+    'credentials',
+  ]),
+});
+
+export const exportSettings = createAsyncThunk<any>(
+  'settings/export',
+  async (arg, thunkAPI) => {
+    const state = thunkAPI.getState();
+    const settings = selectSettings(state);
+    await window.ipc.invoke('save-settings', settings);
+    return settings;
+  },
+);
+
+export const initializeSettings = createAsyncThunk<
+  void,
+  { editor?: any },
+  { state: RootState }
+>(
+  'settings/init',
+  async ({ editor }, thunkAPI) => {
+    await thunkAPI.dispatch(importSettings(null)).unwrap();
+    const { filePath } = thunkAPI.getState().editor;
+    if (filePath) {
+      await thunkAPI.dispatch(open({ filePath, editor })).unwrap();
+    }
+    await thunkAPI.dispatch(exportSettings()).unwrap();
+  },
+);
