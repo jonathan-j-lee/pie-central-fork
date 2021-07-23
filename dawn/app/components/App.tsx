@@ -72,12 +72,13 @@ export default function App() {
     generateHotkeys(keybindings, editor), [keybindings]);
   const { handleKeyDown, handleKeyUp } = useHotkeys(hotkeys);
   const [logOpen, setLogOpen] = React.useState(false);
-  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [settingsOpen, setSettingsOpen] = React.useState(true);
   const [mode, setMode] = React.useState(Mode.AUTO);
   const openLog = () => setLogOpen(true);
   React.useEffect(() => {
     window.ipc.on('update-devices', (err, [update]) => dispatch(updateDevices(update)));
     // TODO: filter keys (e.g., change back to idle)
+    // TODO: watch for low battery
     window.ipc.on('append-event', (err, [event]) => {
       dispatch(log.actions.append(event));
       if (openCondition === LogOpenCondition.ERROR && event.exception) {
@@ -100,6 +101,9 @@ export default function App() {
         editor={editor}
         logOpen={logOpen}
         openSettings={() => setSettingsOpen(true)}
+        closeSettings={() => setSettingsOpen(false)}
+        openLog={() => setLogOpen(true)}
+        closeLog={() => setLogOpen(false)}
         mode={mode}
         setMode={setMode}
       />

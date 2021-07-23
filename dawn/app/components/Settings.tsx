@@ -6,7 +6,7 @@ import {
   Collapse,
   Dialog,
   EditableText,
-  H4,
+  H3,
   HTMLSelect,
   HTMLTable,
   FormGroup,
@@ -16,6 +16,7 @@ import {
   NumericInput,
   Radio,
   RadioGroup,
+  Slider,
   Switch,
   Tab,
   Tabs,
@@ -25,14 +26,16 @@ import {
 import { useStore } from 'react-redux';
 import { IconNames } from '@blueprintjs/icons';
 import { useAppDispatch, useAppSelector } from '../hooks';
-import { OutcomeButton, reportOutcome } from './Util';
+import { OutcomeButton, reportOutcome, DeviceName } from './Util';
 import { selectSettings, importSettings, exportSettings } from '../store';
 import editorSlice, { EditorTheme, getThemeClass } from '../store/editor';
 import keybindingsSlice, { bind, generateHotkeys } from '../store/keybindings';
-import log, { LogOpenCondition } from '../store/log';
-import robot from '../store/robot';
-
-// FIXME: reduce spurious redux actions (onChange -> onBlur)
+import log, { Level, LogOpenCondition } from '../store/log';
+import robot, {
+  BAUD_RATES,
+  deviceNameSelectors,
+  execTimeoutSelectors,
+} from '../store/robot';
 
 const EditorSettings = () => {
   const editorSettings = useAppSelector(state => state.editor);
@@ -43,7 +46,9 @@ const EditorSettings = () => {
         inline
         label="Editor Theme"
         selectedValue={editorSettings.editorTheme}
-        onChange={event => dispatch(editorSlice.actions.setEditorTheme(event.currentTarget.value))}
+        onChange={(event) =>
+          dispatch(editorSlice.actions.set({ editorTheme: event.currentTarget.value }))
+        }
       >
         <Radio value={EditorTheme.LIGHT}>
           <span><Icon icon={IconNames.FLASH} /> Light theme</span>
@@ -55,27 +60,33 @@ const EditorSettings = () => {
       <FormGroup label="Font Size">
         <NumericInput
           value={editorSettings.fontSize}
-          onValueChange={size => dispatch(editorSlice.actions.setFontSize(size))}
+          onValueChange={(size) =>
+            dispatch(editorSlice.actions.set({ fontSize: size }))
+          }
           leftIcon={IconNames.ZOOM_IN}
           min={10}
           max={100}
+          minorStepSize={null}
           clampValueOnBlur
         />
       </FormGroup>
       <FormGroup label="Tab Size">
         <NumericInput
           value={editorSettings.tabSize}
-          onValueChange={size => dispatch(editorSlice.actions.setTabSize(size))}
+          onValueChange={(size) => dispatch(editorSlice.actions.set({ tabSize: size }))}
           leftIcon={IconNames.ZOOM_IN}
           min={1}
           max={32}
+          minorStepSize={null}
           clampValueOnBlur
         />
       </FormGroup>
-      <FormGroup label="Syntax Theme">
+      <FormGroup label="Syntax Theme" className="form-group">
         <HTMLSelect
           value={editorSettings.syntaxTheme}
-          onChange={event => dispatch(editorSlice.actions.setSyntaxTheme(event.currentTarget.value))}
+          onChange={(event) =>
+            dispatch(editorSlice.actions.set({ syntaxTheme: event.currentTarget.value }))
+          }
         >
           <option value="monokai">Monokai</option>
           <option value="github">GitHub</option>
@@ -87,6 +98,19 @@ const EditorSettings = () => {
           <option value="solarized_dark">Solarized Dark</option>
           <option value="solarized_light">Solarized Light</option>
           <option value="terminal">Terminal</option>
+        </HTMLSelect>
+      </FormGroup>
+      <FormGroup label="File Encoding" className="form-group">
+        <HTMLSelect
+          value={editorSettings.encoding}
+          onChange={(event) =>
+            dispatch(editorSlice.actions.set({ encoding: event.currentTarget.value }))
+          }
+        >
+          <option value="ascii">ASCII</option>
+          <option value="utf8">UTF-8</option>
+          <option value="utf16le">UTF-16 LE</option>
+          <option value="latin1">Latin-1</option>
         </HTMLSelect>
       </FormGroup>
       <Switch
@@ -134,8 +158,14 @@ const EditorSettings = () => {
       <Switch
         large
         checked={editorSettings.appendNewline}
-        label="Append a newline character when saving"
+        label="Ensure file ends with newline when saving"
         onChange={() => dispatch(editorSlice.actions.toggle('appendNewline'))}
+      />
+      <Switch
+        large
+        checked={editorSettings.trimWhitespace}
+        label="Remove trailing whitespace from each line"
+        onChange={() => dispatch(editorSlice.actions.toggle('trimWhitespace'))}
       />
     </div>
   );
@@ -152,22 +182,13 @@ const PasswordLockButton = (props) => (
   </Tooltip>
 );
 
-const AdvancedRuntimeSettings = (props) => {
+function AdministrationForm() {
   const dispatch = useAppDispatch();
-  const robotState = useAppSelector(state => state.robot);
-  const [showPassword, setShowPassword] = React.useState(false);
+  const remotePath = useAppSelector(state => state.robot.remotePath);
+  const restartCommand = useAppSelector(state => state.robot.restartCommand);
+  const updateCommand = useAppSelector(state => state.robot.updateCommand);
   return (
-    <Collapse isOpen={props.isOpen}>
-      <Callout intent={Intent.WARNING} className="sep">
-        <p>
-          Do not modify the advanced settings unless you know exactly what you are doing!
-          Improperly configured settings may break some features or corrupt robot data.
-        </p>
-        <p>
-          Modifying these settings is unlikely to solve common issues.
-          We recommend checking with PiE staff before doing so.
-        </p>
-      </Callout>
+    <>
       <FormGroup
         className="sep"
         label="Student code path"
@@ -180,9 +201,10 @@ const AdvancedRuntimeSettings = (props) => {
       >
         <InputGroup
           className="monospace"
+          spellCheck={false}
           leftIcon={IconNames.FOLDER_OPEN}
           placeholder="Example: ~/studentcode.py"
-          defaultValue={robotState.remotePath}
+          defaultValue={remotePath}
           onBlur={(event) => dispatch(robot.actions.updateSettings({
             remotePath: event.currentTarget.value,
           }))}
@@ -195,25 +217,50 @@ const AdvancedRuntimeSettings = (props) => {
       >
         <InputGroup
           className="monospace"
+          spellCheck={false}
           leftIcon={IconNames.APPLICATION}
           placeholder="Example: systemctl restart runtime.service"
-          defaultValue={robotState.restartCommand}
+          defaultValue={restartCommand}
           onBlur={(event) => dispatch(robot.actions.updateSettings({
             restartCommand: event.currentTarget.value,
           }))}
         />
       </FormGroup>
-      <H4>Credentials</H4>
       <FormGroup
-        label="User"
-        labelInfo="(required)"
-        helperText="Username"
+        label="Update command"
+        helperText="Provide a shell command to run to update Runtime."
       >
         <InputGroup
           className="monospace"
+          spellCheck={false}
+          leftIcon={IconNames.APPLICATION}
+          defaultValue={updateCommand}
+          onBlur={(event) => dispatch(robot.actions.updateSettings({
+            updateCommand: event.currentTarget.value,
+          }))}
+        />
+      </FormGroup>
+    </>
+  );
+}
+
+function CredentialsForm() {
+  const dispatch = useAppDispatch();
+  const credentials = useAppSelector(state => state.robot.credentials);
+  const [showPassword, setShowPassword] = React.useState(false);
+  return (
+    <>
+      <FormGroup
+        label="User"
+        labelInfo="(required)"
+        helperText="Username used to log into the remote machine over SSH."
+      >
+        <InputGroup
+          className="monospace"
+          spellCheck={false}
           leftIcon={IconNames.USER}
           placeholder="Example: pioneers"
-          defaultValue={robotState.credentials.username}
+          defaultValue={credentials.username}
           onBlur={(event) => dispatch(robot.actions.updateSettings({
             credentials: { username: event.currentTarget.value },
           }))}
@@ -221,18 +268,18 @@ const AdvancedRuntimeSettings = (props) => {
       </FormGroup>
       <FormGroup
         label="Password"
-        labelInfo=""
-        helperText=""
+        helperText="Password of the user."
       >
         <InputGroup
           className="monospace"
-          leftIcon={IconNames.USER}
+          spellCheck={false}
+          leftIcon={IconNames.KEY}
           rightElement={<PasswordLockButton
             show={showPassword}
             toggleShow={() => setShowPassword(!showPassword)}
           />}
           type={showPassword ? 'text' : 'password'}
-          defaultValue={robotState.credentials.password}
+          defaultValue={credentials.password}
           onBlur={(event) => dispatch(robot.actions.updateSettings({
             credentials: { password: event.currentTarget.value },
           }))}
@@ -240,8 +287,7 @@ const AdvancedRuntimeSettings = (props) => {
       </FormGroup>
       <FormGroup
         label="RSA Private Key"
-        labelInfo=""
-        helperText=""
+        helperText="Private key linked to an SSH-authorized public key."
       >
         <TextArea
           fill
@@ -249,7 +295,7 @@ const AdvancedRuntimeSettings = (props) => {
           small
           spellCheck="false"
           className="monospace private-key"
-          defaultValue={robotState.credentials.privateKey}
+          defaultValue={credentials.privateKey}
           placeholder={[
             '-----BEGIN RSA PRIVATE KEY-----',
             '...',
@@ -260,52 +306,403 @@ const AdvancedRuntimeSettings = (props) => {
           }))}
         />
       </FormGroup>
-    </Collapse>
+    </>
   );
-};
+}
 
-const RobotSettings = () => {
-  const dispatch = useAppDispatch();
-  const { host } = useAppSelector(state => state.robot);
-  const [showAdvanced, setShowAdvanced] = React.useState(false);
+function UpdatingSlider(props) {
+  const [value, setValue] = React.useState(props.defaultValue);
+  return <Slider className="slider" {...props} value={value} onChange={(value) => setValue(value)} />;
+}
+
+function EntityTable(props) {
+  const render = props.render ?? ((row) => []);
   return (
-    <div>
+    <>
+      <HTMLTable striped className="dynamic-table">
+        <thead>
+          <tr>
+            <td></td>
+            {props.headings.map((heading, index) => <td key={index}>{heading}</td>)}
+          </tr>
+        </thead>
+        <tbody>
+          {props.rows.length > 0 ? props.rows.map((row, rowIndex) => <tr key={rowIndex}>
+            <td>
+              <Button
+                minimal
+                intent={Intent.DANGER}
+                icon={IconNames.DELETE}
+                onClick={() => props.removeRow(row)}
+              />
+            </td>
+            {render(row).map((cell, cellIndex) =>
+              <td key={cellIndex}>{cell}</td>
+            )}
+          </tr>) : <tr>
+            <td colSpan={100} className="empty-row">{props.emptyMessage ?? 'No items'}</td>
+          </tr>}
+        </tbody>
+      </HTMLTable>
+      <Button
+        className="sep"
+        intent={Intent.SUCCESS}
+        icon={IconNames.ADD}
+        text={props.addLabel ?? "Add row"}
+        onClick={() => props.addRow()}
+      />
+    </>
+  );
+}
+
+function PerformanceForm() {
+  const dispatch = useAppDispatch();
+  const robotState = useAppSelector(state => state.robot);
+  // FIXME: update permits duplicate ID
+  return (
+    <>
+      <FormGroup
+        label="Thread Pool Max Workers"
+        helperText={`
+          Each process uses a thread pool to perform blocking I/O or compute-bound
+          tasks. This slider sets the maximum number of OS threads to spawn per process.
+          Using too few workers will make Runtime unresponsive as the pool's task queue
+          fills up.
+        `}
+      >
+        <UpdatingSlider
+          min={1}
+          max={8}
+          defaultValue={robotState.threadPoolWorkers}
+          onRelease={(threadPoolWorkers) =>
+            dispatch(robot.actions.updateSettings({ threadPoolWorkers }))
+          }
+        />
+      </FormGroup>
+      <FormGroup
+        label="Service Workers"
+        helperText={`
+          Set the maximum number of requests each service can handle concurrently.
+        `}
+      >
+        <UpdatingSlider
+          min={1}
+          max={8}
+          defaultValue={robotState.serviceWorkers}
+          onRelease={(serviceWorkers) =>
+            dispatch(robot.actions.updateSettings({ serviceWorkers }))
+          }
+        />
+      </FormGroup>
+      <FormGroup
+        label="Device update interval"
+        labelInfo="(in seconds)"
+        helperText="Duration between Smart Device updates from Runtime."
+      >
+        <UpdatingSlider
+          min={0}
+          max={0.25}
+          stepSize={0.005}
+          labelStepSize={0.05}
+          defaultValue={robotState.updateInterval}
+          onRelease={(value) => dispatch(robot.actions.updateSettings({
+            updateInterval: value,
+          }))}
+        />
+      </FormGroup>
+      <FormGroup
+        label="Device polling interval"
+        labelInfo="(in seconds)"
+        helperText="Duration between data writes by Runtime to Smart Devices."
+      >
+        <UpdatingSlider
+          min={0}
+          max={0.25}
+          stepSize={0.005}
+          labelStepSize={0.05}
+          defaultValue={robotState.pollingInterval}
+          onRelease={(value) => dispatch(robot.actions.updateSettings({
+            pollingInterval: value,
+          }))}
+        />
+      </FormGroup>
+      <FormGroup
+        label="Gamepad update interval"
+        labelInfo="(in seconds)"
+        helperText="Duration between Gamepad updates from Dawn."
+      >
+        <UpdatingSlider
+          min={0}
+          max={0.25}
+          stepSize={0.005}
+          labelStepSize={0.05}
+          defaultValue={robotState.controlInterval}
+          onRelease={(value) => dispatch(robot.actions.updateSettings({
+            controlInterval: value,
+          }))}
+        />
+      </FormGroup>
+      <FormGroup
+        label="Baud rate"
+        helperText={`
+          Smart Device Baud rate, which specifies how quickly data is communicated
+          over USB serial.
+        `}
+      >
+        <HTMLSelect
+          value={robotState.baudRate}
+          onChange={(event) => dispatch(robot.actions.updateSettings({
+            baudRate: Number(event.currentTarget.value),
+          }))}
+        >
+          {BAUD_RATES.map((rate, index) =>
+            <option key={index} value={rate}>{rate}</option>)
+          }
+        </HTMLSelect>
+      </FormGroup>
+      <FormGroup
+        label="Execution timeouts"
+      >
+        <EntityTable
+          headings={['Function Name Pattern', 'Duration']}
+          rows={execTimeoutSelectors.selectAll(robotState.execTimeouts)}
+          addRow={() => dispatch(robot.actions.upsertExecTimeout({
+            pattern: '',
+            duration: 0.05,
+          }))}
+          removeRow={(timeout) => dispatch(robot.actions.removeExecTimeout(timeout.pattern))}
+          render={(timeout) => [
+            <EditableText
+              alwaysRenderInput
+              placeholder="Regular expression"
+              maxLength={32}
+              value={timeout.pattern}
+              className="monospace"
+              onChange={(pattern) => dispatch(robot.actions.updateExecTimeout({
+                id: timeout.pattern,
+                changes: { pattern },
+              }))}
+            />,
+            <NumericInput
+              min={0}
+              max={30}
+              minorStepSize={0.01}
+              stepSize={0.05}
+              majorStepSize={0.1}
+              clampValueOnBlur
+              leftIcon={IconNames.STOPWATCH}
+              value={timeout.duration}
+              onValueChange={(duration) => dispatch(robot.actions.updateExecTimeout({
+                id: timeout.pattern,
+                changes: { duration },
+              }))}
+            />,
+          ]}
+        />
+      </FormGroup>
+    </>
+  );
+}
+
+function AddressingForm() {
+  const dispatch = useAppDispatch();
+  const robotState = useAppSelector(state => state.robot);
+  const portConfigs = [
+    {
+      name: 'callPort',
+      label: 'Remote call port',
+      description: 'Port that Runtime should bind to for accepting remote calls.',
+    },
+    {
+      name: 'logPort',
+      label: 'Log publisher port',
+      description: 'Port that Runtime should bind to for publishing logged events.',
+    },
+    {
+      name: 'controlPort',
+      label: 'Control port',
+      description: 'Port that Runtime should bind to for receiving controller (gamepad) inputs',
+    },
+    {
+      name: 'updatePort',
+      label: 'Update port',
+      description: 'Port that Runtime should connect to for publishing Smart Device updates.',
+    },
+    {
+      name: 'vsdPort',
+      label: 'VSD Port',
+      description: 'Port that Runtime should bind to for serving Virtual Smart Devices (VSDs).',
+    },
+  ];
+  return (
+    <>
+      <FormGroup
+        label="Multicast Group"
+        helperText="IP multicast group Runtime uses to broadcast Smart Device updates."
+      >
+        <InputGroup
+          className="monospace"
+          leftIcon={IconNames.IP_ADDRESS}
+          placeholder="Example: 224.1.1.1"
+          defaultValue={robotState.multicastGroup}
+          onBlur={(event) => dispatch(robot.actions.updateSettings({
+            multicastGroup: event.currentTarget.value,
+          }))}
+        />
+      </FormGroup>
+      {portConfigs.map((port, index) =>
+        <FormGroup
+          key={index}
+          label={port.label}
+          helperText={port.description}
+        >
+          <NumericInput
+            clampValueOnBlur
+            leftIcon={IconNames.FLOW_END}
+            min={1}
+            max={65535}
+            minorStepSize={null}
+            value={robotState.ports[port.name]}
+            onValueChange={(value) => dispatch(robot.actions.updateSettings({
+              ports: { [port.name]: value },
+            }))}
+          />
+        </FormGroup>
+      )}
+    </>
+  );
+}
+
+function MonitoringForm() {
+  const dispatch = useAppDispatch();
+  const robotState = useAppSelector(state => state.robot);
+  return (
+    <>
+      <FormGroup
+        label="Health Check Interval"
+        helperText="The number of seconds between status reports sent by Runtime."
+      >
+        <NumericInput
+          clampValueOnBlur
+          leftIcon={IconNames.PULSE}
+          min={10}
+          max={300}
+          minorStepSize={1}
+          stepSize={5}
+          majorStepSize={15}
+          value={robotState.healthCheckInterval}
+          onValueChange={(healthCheckInterval) =>
+            dispatch(robot.actions.updateSettings({ healthCheckInterval }))
+          }
+        />
+      </FormGroup>
+      <FormGroup
+        label="Log level"
+        helperText="Minimum severity of messages Runtime should log."
+        className="form-group"
+      >
+        <HTMLSelect
+          value={robotState.logLevel}
+          onChange={(event) => dispatch(robot.actions.updateSettings({
+            logLevel: event.currentTarget.value,
+          }))}
+        >
+          <option value={Level.DEBUG}>Debug</option>
+          <option value={Level.INFO}>Info</option>
+          <option value={Level.WARNING}>Warning</option>
+          <option value={Level.ERROR}>Error</option>
+          <option value={Level.CRITICAL}>Critical</option>
+        </HTMLSelect>
+      </FormGroup>
+      <Switch
+        large
+        className="sep"
+        checked={robotState.debug}
+        label="Debug event loop and other resources"
+        onChange={() => dispatch(robot.actions.toggle('debug'))}
+      />
+    </>
+  );
+}
+
+// TODO: better validation
+function RobotSettings() {
+  const dispatch = useAppDispatch();
+  const robotState = useAppSelector(state => state.robot);
+  // FIXME: should dispatch on confirm, not on change
+  return (
+    <>
       <FormGroup
         label="Hostname"
         labelInfo="(required)"
         helperText="Provide either an IP address or a domain name."
       >
         <InputGroup
+          id="ip-addr"
           className="monospace"
           leftIcon={IconNames.IP_ADDRESS}
           placeholder="Example: 192.168.1.100"
-          defaultValue={host}
-          onChange={event => dispatch(robot.actions.updateSettings({
+          defaultValue={robotState.host}
+          onBlur={event => dispatch(robot.actions.updateSettings({
             host: event.currentTarget.value,
           }))}
         />
       </FormGroup>
-      <FormGroup label="Log level" helperText="Set">
-        <HTMLSelect>
-          <option>Debug</option>
-          <option>Info</option>
-          <option>Warning</option>
-          <option>Error</option>
-          <option>Critical</option>
-        </HTMLSelect>
+      <FormGroup
+        label="Update"
+        helperText="Check for updates or upload a file containing the update."
+      >
       </FormGroup>
-      <Button
-        onClick={() => setShowAdvanced(!showAdvanced)}
-        icon={showAdvanced ? IconNames.CHEVRON_UP : IconNames.CHEVRON_DOWN}
-        text={`${showAdvanced ? 'Hide' : 'Show'} Advanced Settings`}
-      />
-      <AdvancedRuntimeSettings isOpen={showAdvanced} />
-      <Callout intent={Intent.WARNING} className="sep">
+      <FormGroup
+        label="Device names"
+        helperText="Provide human-readable aliases for Smart Device UIDs."
+      >
+        <EntityTable
+          headings={['UID', 'Device Name']}
+          rows={deviceNameSelectors.selectAll(robotState.deviceNames)}
+          addRow={() => dispatch(robot.actions.upsertDeviceName({ alias: '', uid: '' }))}
+          removeRow={(name) => dispatch(robot.actions.removeDeviceName(name.alias))}
+          render={(name) => [
+            <DeviceName
+              value={name.alias}
+              className="monospace"
+              onChange={(alias) => dispatch(robot.actions.updateDeviceName({
+                id: name.alias,
+                changes: { alias },
+              }))}
+            />,
+            <EditableText
+              alwaysRenderInput
+              placeholder="Assign a UID"
+              maxLength={32}
+              value={name.uid}
+              className="monospace"
+              onChange={(uid) => dispatch(robot.actions.updateDeviceName({
+                id: name.alias,
+                changes: { uid },
+              }))}
+            />
+          ]}
+        />
+      </FormGroup>
+      <Callout intent={Intent.WARNING}>
+        <p>
+          Do not modify the advanced settings below unless you have checked with PiE staff!
+          Modifying these settings is unlikely to solve common issues.
+          Improperly configured settings may break some features or corrupt robot data.
+        </p>
         <p>Some changes may not take effect until Runtime restarts!</p>
       </Callout>
-    </div>
+      <Tabs vertical className="sep">
+        <Tab id="administration" title="Administration" panel={<AdministrationForm />} />
+        <Tab id="credentials" title="Credentials" panel={<CredentialsForm />} />
+        <Tab id="performance" title="Performance" panel={<PerformanceForm />} />
+        <Tab id="addressing" title="Addressing" panel={<AddressingForm />} />
+        <Tab id="monitoring" title="Monitoring" panel={<MonitoringForm />} />
+      </Tabs>
+    </>
   );
-};
+}
 
 const LogSettings = () => {
   const settings = useAppSelector(state => state.log);
@@ -323,7 +720,6 @@ const LogSettings = () => {
           min={0}
           max={1024}
           minorStepSize={null}
-          stepSize={1}
           value={maxEvents}
           onValueChange={value => setMaxEvents(value)}
           onBlur={() => dispatch(log.actions.truncate(maxEvents))}
@@ -331,7 +727,7 @@ const LogSettings = () => {
       </FormGroup>
       <FormGroup
         label="Open console automatically ..."
-        className="form-select"
+        className="form-group"
       >
         <HTMLSelect
           value={settings.openCondition}

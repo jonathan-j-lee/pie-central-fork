@@ -6,8 +6,6 @@ import {
   Card,
   Collapse,
   Colors,
-  EditableText,
-  Elevation,
   H4,
   Icon,
   Intent,
@@ -32,7 +30,7 @@ import {
   restart,
   updateRate,
 } from '../store/robot';
-import { addCommands, reportOutcome } from './Util';
+import { addCommands, reportOutcome, DeviceName } from './Util';
 
 defaults.font.family = 'monospace';
 
@@ -217,18 +215,18 @@ function Status() {
     intent = Intent.SUCCESS;
   }
   return (
-    <Callout title={status} intent={intent}>
+    <Callout id="robot-status" title={status} intent={intent}>
       <div className="status-container">
         <div className="status-description">
           {connected ?
             <p>Update rate: {Math.round(10*robot.updateRate)/10} updates/second</p> :
-            <div>
+            <>
               <p>Dawn is not receiving updates from Runtime.</p>
               <ul>
                 <li>Are you connected to the correct WiFi network?</li>
                 <li>Try restarting Runtime (see the "Debug" menu).</li>
               </ul>
-            </div>
+            </>
           }
         </div>
         <Spinner
@@ -340,8 +338,8 @@ export default function Peripherals(props) {
   ]), [dispatch, props.mode, props.openLog, keybindings, openCondition]);
   return (
     <div className="peripherals">
+      <Status />
       <div className="peripheral-list">
-        <Status />
         {peripheralList.length === 0 &&
           <Callout intent={Intent.WARNING} className="sep">
             <H4>No Devices Detected</H4>
@@ -369,7 +367,7 @@ export default function Peripherals(props) {
               })}
             />
             <div className="dev-id">
-              <EditableText alwaysRenderInput placeholder="Assign a name" maxLength={32} className="dev-name" />
+              <DeviceName className="dev-name" />
               <code className="dev-uid">{peripheral.uid}</code>
             </div>
             <Collapse isOpen={showParams[peripheral.uid]} className="sep">

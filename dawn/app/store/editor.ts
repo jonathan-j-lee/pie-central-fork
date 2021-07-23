@@ -1,7 +1,8 @@
 import { Classes } from '@blueprintjs/core';
 import { createAsyncThunk, createSlice, isAnyOf } from '@reduxjs/toolkit';
 import { Store } from 'redux';
-import { makeUpdateReducer } from './util';
+
+const NEWLINE = '\n';
 
 export enum EditorTheme {
   LIGHT = 'light',
@@ -21,10 +22,11 @@ const initialState = {
   basicAutocompletion: true,
   liveAutocompletion: true,
   appendNewline: true,
+  trimWhitespace: true,
   syntaxTheme: 'solarized_dark',
   fontSize: 13,
   tabSize: 4,
-  encoding: 'utf-8',
+  encoding: 'utf8',
   filePath: null,
   dirty: false,
   prompt: false,
@@ -107,7 +109,15 @@ export const save = createAsyncThunk<
     }
     const state = thunkAPI.getState();
     if (editor) {
-      const contents = editor.getValue();
+      let contents = editor.getValue();
+      if (state.editor.trimWhitespace) {
+        const lines = contents.split(NEWLINE);
+        contents = lines.map((line) => line.replace(/\s+$/g, '')).join(NEWLINE);
+      }
+      if (state.editor.appendNewline && !contents.endsWith(NEWLINE) && contents.length > 0) {
+        contents += NEWLINE;
+      }
+      editor.setValue(contents);
       await window.ipc.invoke('save-file', filePath, contents, state.editor.encoding);
     }
     return { filePath };
@@ -155,11 +165,7 @@ export default createSlice({
   initialState,
   reducers: {
     toggle: (state, action) => ({ ...state, [action.payload]: !state[action.payload] }),
-    setEditorTheme: makeUpdateReducer('editorTheme'),
-    setSyntaxTheme: makeUpdateReducer('syntaxTheme'),
-    setFontSize: makeUpdateReducer('fontSize'),
-    setTabSize: makeUpdateReducer('tabSize'),
-    setEncoding: makeUpdateReducer('encoding'),
+    set: (state, action) => ({ ...state, ...action.payload }),
     setDirty: (state) => ({ ...state, dirty: true }),
     confirm: (state) => ({ ...state, prompt: false, confirmed: true }),
     cancel: (state) => ({ ...state, prompt: false, confirmed: false }),

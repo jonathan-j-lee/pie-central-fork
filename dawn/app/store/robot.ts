@@ -1,4 +1,4 @@
-import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { createAsyncThunk, createEntityAdapter, createSlice } from '@reduxjs/toolkit';
 import * as _ from 'lodash';
 import { Editor } from 'ace-builds';
 import { prompt } from './editor';
@@ -23,10 +23,42 @@ export enum ConnectionStatus {
   DISCONNECTED = 'disconnected',
 };
 
+export const BAUD_RATES = [
+  50,
+  75,
+  110,
+  134,
+  150,
+  200,
+  300,
+  600,
+  1200,
+  1800,
+  2400,
+  4800,
+  9600,
+  19200,
+  38400,
+  57600,
+  115200,
+];
+
 const RATE_DECAY = 0.5;
 const HEALTHY_THRESHOLD = 0.9;
 const DISCONNECT_TIMEOUT = 8;
 const MAX_TIMESTAMPS = 50;
+
+const deviceNameAdapter = createEntityAdapter<{ alias: string, uid: string }>({
+  selectId: (name) => name.alias,
+});
+
+export const deviceNameSelectors = deviceNameAdapter.getSelectors();
+
+const execTimeoutAdapter = createEntityAdapter<{ pattern: string, duration: number }>({
+  selectId: (timeout) => timeout.pattern,
+});
+
+export const execTimeoutSelectors = execTimeoutAdapter.getSelectors();
 
 const initialState = {
   status: ConnectionStatus.DISCONNECTED,
@@ -38,12 +70,38 @@ const initialState = {
   host: 'localhost',
   remotePath: 'studentcode.py',
   restartCommand: 'systemctl restart runtime.service',
+  updateCommand: 'systemctl restart runtime-update.service',
   credentials: {
     username: '',
     password: '',
     privateKey: '',
   },
+  ports: {
+    callPort: 6000,
+    logPort: 6001,
+    controlPort: 6002,
+    updatePort: 6003,
+    vsdPort: 6004,
+  },
   updateInterval: 0.1,
+  pollingInterval: 0.04,
+  controlInterval: 0.05,
+  healthCheckInterval: 30,
+  logLevel: Level.INFO,
+  baudRate: 115200,
+  multicastGroup: '224.1.1.1',
+  debug: false,
+  threadPoolWorkers: 1,
+  serviceWorkers: 5,
+  deviceNames: deviceNameAdapter.getInitialState(),
+  execTimeouts: execTimeoutAdapter.upsertMany(
+    execTimeoutAdapter.getInitialState(),
+    [
+      { pattern: '.*_setup', duration: 1 },
+      { pattern: '.*_teleop', duration: 0.05 },
+    ],
+  ),
+  importTimeout: 1,
   error: false,
 };
 
@@ -113,10 +171,15 @@ export const restart = createAsyncThunk<
   },
 );
 
+const makeEntityReducer = (name, callback) => (state, action) => {
+  state[name] = callback(state[name], action);
+};
+
 const slice = createSlice({
   name: 'robot',
   initialState,
   reducers: {
+    toggle: (state, action) => ({ ...state, [action.payload]: !state[action.payload] }),
     updateRate(state, action) {
       state.updateRate *= RATE_DECAY;
       let timeElapsed = DISCONNECT_TIMEOUT;
@@ -142,6 +205,12 @@ const slice = createSlice({
       }
     },
     updateSettings: (state, action) => _.merge({}, state, action.payload),
+    upsertDeviceName: makeEntityReducer('deviceNames', deviceNameAdapter.upsertOne),
+    updateDeviceName: makeEntityReducer('deviceNames', deviceNameAdapter.updateOne),
+    removeDeviceName: makeEntityReducer('deviceNames', deviceNameAdapter.removeOne),
+    upsertExecTimeout: makeEntityReducer('execTimeouts', execTimeoutAdapter.upsertOne),
+    updateExecTimeout: makeEntityReducer('execTimeouts', execTimeoutAdapter.updateOne),
+    removeExecTimeout: makeEntityReducer('execTimeouts', execTimeoutAdapter.removeOne),
   },
   extraReducers: (builder) => {
     builder

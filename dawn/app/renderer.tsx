@@ -34,6 +34,15 @@ declare global {
       download(config: SSHConfig, path: string): Promise<string>,
     };
   }
+  interface DawnPackageInfo {
+    name: string;
+    version: string;
+    description: string;
+    author: string;
+    license: string;
+    buildTimestamp: number;
+  }
+  const DAWN_PKG_INFO: DawnPackageInfo;
 }
 
 ReactDOM.render(

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Button, Intent, Position, Toaster } from '@blueprintjs/core';
+import { Button, EditableText, Intent, Position, Toaster } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 
 const toaster = Toaster.create({ position: Position.TOP_RIGHT });
@@ -48,3 +48,10 @@ export const OutcomeButton = (props) => {
   };
   return (<Button {...btnProps} />);
 };
+
+export const DeviceName = (props) => <EditableText
+  alwaysRenderInput
+  placeholder="Assign a name"
+  maxLength={32}
+  {...props}
+/>;

@@ -50,7 +50,9 @@ export default function Editor(props) {
     }
   }, [editor]);
   React.useEffect(() => {
-    dispatch(initializeSettings({ editor }));
+    /* Delay slightly so the main process can register a 'save-settings' handler. */
+    const timeout = setTimeout(() => dispatch(initializeSettings({ editor })), 100);
+    return () => clearTimeout(timeout);
   }, []);
   React.useEffect(() => addCommands(editor?.commands, [
     {

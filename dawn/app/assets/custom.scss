@@ -136,7 +136,7 @@ main {
 }
 
 .settings {
-  min-width: 40%;
+  min-width: 40rem;
 }
 
 .private-key {
@@ -144,7 +144,7 @@ main {
   overflow-x: auto;
 }
 
-.keybindings, .keybinding {
+.keybindings, .keybinding, .dynamic-table {
   width: 100%;
 }
 
@@ -162,6 +162,29 @@ main {
   }
 }
 
-.form-select > label.bp3-label {
-  margin-bottom: 0.6rem;
+.form-group {
+  label.bp3-label {
+    margin-bottom: 0.5rem;
+  }
+}
+
+.bp3-tab-panel {
+  flex: 1;
+}
+
+#ip-addr {
+  max-width: 24rem;
+}
+
+.slider {
+  max-width: 90%;
+  margin: 0.5rem auto;
+}
+
+.empty-row {
+  text-align: center !important;
+}
+
+.dynamic-table td {
+  vertical-align: middle !important;
 }

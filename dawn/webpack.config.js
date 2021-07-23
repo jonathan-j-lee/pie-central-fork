@@ -1,6 +1,15 @@
+const fs = require('fs');
 const path = require('path');
 const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+
+const {
+  name,
+  version,
+  description,
+  author,
+  license,
+} = JSON.parse(fs.readFileSync('package.json'));
 
 module.exports = [
   {
@@ -59,11 +68,20 @@ module.exports = [
       path: path.join(__dirname, 'build'),
       filename: 'bundle.js',
     },
+    node: { global: true },
     plugins: [
       new HtmlWebpackPlugin({ template: './app/index.html' }),
       /* BlueprintJS bug workaround: https://github.com/palantir/blueprint/issues/3739 */
       new webpack.DefinePlugin({
         "process.env": "{}",
+        "DAWN_PKG_INFO": JSON.stringify({
+          name,
+          version,
+          description,
+          author,
+          license,
+          buildTimestamp: new Date().getTime(),
+        }),
       }),
     ],
   },
