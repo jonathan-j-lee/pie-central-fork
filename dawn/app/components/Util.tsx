@@ -4,32 +4,22 @@ import { IconNames } from '@blueprintjs/icons';
 
 const toaster = Toaster.create({ position: Position.TOP_RIGHT });
 
-export const addCommands = (commandManager, commands) => {
-  if (!commandManager) {
-    return;
-  }
-  commands.forEach((command) => commandManager.addCommand(command));
-  return () => {
-    commands.map((command) => commandManager.removeCommand(command));
-  };
-};
-
-export const reportOutcome = (promise, successMsg, errorMsg) =>
+export const notify = (promise, success, failure) =>
   promise
     .then(() => {
-      if (successMsg) {
+      if (success) {
         toaster.show({
           intent: Intent.SUCCESS,
-          message: successMsg,
+          message: success,
           icon: IconNames.TICK,
         });
       }
     })
-    .catch(err => {
-      if (errorMsg) {
+    .catch((err) => {
+      if (failure) {
         toaster.show({
           intent: Intent.DANGER,
-          message: errorMsg,
+          message: failure,
           icon: IconNames.ERROR,
         });
       }

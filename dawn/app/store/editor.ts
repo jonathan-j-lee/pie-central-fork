@@ -4,29 +4,7 @@ import { Store } from 'redux';
 
 const NEWLINE = '\n';
 
-export enum EditorTheme {
-  LIGHT = 'light',
-  DARK = 'dark',
-};
-
-export const getThemeClass = theme =>
-  theme === EditorTheme.DARK ? Classes.DARK : '';
-
 const initialState = {
-  editorTheme: EditorTheme.DARK,
-  syntaxHighlighting: true,
-  lineNumbers: true,
-  longLineMarker: true,
-  highlightLine: true,
-  wrapLines: true,
-  basicAutocompletion: true,
-  liveAutocompletion: true,
-  appendNewline: true,
-  trimWhitespace: true,
-  syntaxTheme: 'solarized_dark',
-  fontSize: 13,
-  tabSize: 4,
-  encoding: 'utf8',
   filePath: null,
   dirty: false,
   prompt: false,
@@ -89,7 +67,7 @@ export const open = createAsyncThunk<
     if (!filePath) {
       filePath = await window.ipc.invoke('open-file-prompt');
     }
-    const contents = await window.ipc.invoke('open-file', filePath, state.editor.encoding);
+    const contents = await window.ipc.invoke('open-file', filePath, state.settings.editor.encoding);
     if (editor) {
       editor.setValue(contents);
     }
@@ -99,26 +77,27 @@ export const open = createAsyncThunk<
 
 export const save = createAsyncThunk<
   { filePath: string },
-  { filePath?: string, editor?: any },
+  { editor?: any, forcePrompt?: boolean },
   { state: { editor: typeof initialState } }
 >(
   'editor/save',
-  async ({ filePath, editor }, thunkAPI) => {
-    if (!filePath) {
+  async ({ editor, forcePrompt }, thunkAPI) => {
+    const state = thunkAPI.getState();
+    let filePath = state.editor.filePath;
+    if (!filePath || forcePrompt) {
       filePath = await window.ipc.invoke('save-file-prompt');
     }
-    const state = thunkAPI.getState();
     if (editor) {
       let contents = editor.getValue();
-      if (state.editor.trimWhitespace) {
+      if (state.settings.editor.trimWhitespace) {
         const lines = contents.split(NEWLINE);
         contents = lines.map((line) => line.replace(/\s+$/g, '')).join(NEWLINE);
       }
-      if (state.editor.appendNewline && !contents.endsWith(NEWLINE) && contents.length > 0) {
+      if (state.settings.editor.appendNewline && !contents.endsWith(NEWLINE) && contents.length > 0) {
         contents += NEWLINE;
       }
       editor.setValue(contents);
-      await window.ipc.invoke('save-file', filePath, contents, state.editor.encoding);
+      await window.ipc.invoke('save-file', filePath, contents, state.settings.editor.encoding);
     }
     return { filePath };
   },
@@ -164,8 +143,6 @@ export default createSlice({
   name: 'editor',
   initialState,
   reducers: {
-    toggle: (state, action) => ({ ...state, [action.payload]: !state[action.payload] }),
-    set: (state, action) => ({ ...state, ...action.payload }),
     setDirty: (state) => ({ ...state, dirty: true }),
     confirm: (state) => ({ ...state, prompt: false, confirmed: true }),
     cancel: (state) => ({ ...state, prompt: false, confirmed: false }),

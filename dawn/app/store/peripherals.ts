@@ -3,36 +3,51 @@ import * as _ from 'lodash';
 
 const MAX_VALUES = 50;
 
+type Peripheral = {
+  uid: number,
+  type: 'gamepad' | 'smart-device',
+  params: {
+    [index: string]: Array<[number, any]>;
+  },
+};
+
+const selectId = ({ type, uid }) => `${type}-${uid}`;
+
+const peripheralAdapter = createEntityAdapter<Peripheral>({
+  selectId,
+  sortComparer: (a, b) =>
+    a.type === b.type ? a.uid - b.uid : a.type.localeCompare(b.type),
+});
+
+export const peripheralSelectors = peripheralAdapter.getSelectors();
+
 const slice = createSlice({
   name: 'peripherals',
-  initialState: {
-    devices: {},
-    gamepads: {},
-  },
+  initialState: peripheralAdapter.getInitialState(),
   reducers: {
-    updatePeripherals(state, action) {
-      const { peripheralType, timestamp, update } = action.payload;
-      const peripherals = state[peripheralType];
-      if (!peripherals) {
-        return;
-      }
-      for (const [uid, params] of _.toPairs(update)) {
-        _.defaults(peripherals, { [uid]: {} });
-        const timelines = peripherals[uid];
-        for (const [param, value] of _.toPairs(params)) {
-          _.defaults(timelines, { [param]: [] });
-          const timeline = timelines[param];
-          const size = timeline.push([timestamp, value]);
-          timeline.splice(0, size - MAX_VALUES);
+    update(state, action) {
+      const { type, timestamp, update } = action.payload;
+      const expiredUids = new Set(peripheralSelectors.selectAll(state)
+        .filter((peripheral) => peripheral.type === type)
+        .map((peripheral) => selectId(peripheral)));
+      for (const [uid, values] of _.toPairs(update)) {
+        const id = selectId({ type, uid });
+        const params = { ...(peripheralSelectors.selectById(state, id)?.params) };
+        for (const [param, value] of _.toPairs(values)) {
+          const timeline = (params[param] ?? []).slice(-(MAX_VALUES - 1));
+          timeline.push([timestamp, value]);
+          params[param] = timeline;
         }
+        peripheralAdapter.upsertOne(state, { uid, type, params });
+        expiredUids.delete(id);
       }
-      state[peripheralType] = _.pick(peripherals, _.keys(update));
+      peripheralAdapter.removeMany(state, Array.from(expiredUids));
     },
   },
 });
 
 export default slice;
-export const updateDevices = (update, options = {}) => slice.actions.updatePeripherals(
-  { peripheralType: 'devices', timestamp: Date.now(), update, ...options });
-export const updateGamepads = (update, options = {}) => slice.actions.updatePeripherals(
-  { peripheralType: 'gamepads', timestamp: Date.now(), update, ...options });
+export const updateDevices = (update, other = {}) => slice.actions.update(
+  { type: 'smart-device', timestamp: Date.now(), update, ...other });
+export const updateGamepads = (update, other = {}) => slice.actions.update(
+  { type: 'gamepad', timestamp: Date.now(), update, ...other });

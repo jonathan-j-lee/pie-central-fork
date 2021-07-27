@@ -9,7 +9,6 @@ import {
   H4,
   Icon,
   Intent,
-  Spinner,
   Tag,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -17,20 +16,10 @@ import Chart from 'chart.js/auto';
 import { Scatter, defaults } from 'react-chartjs-2';
 import * as _ from 'lodash';
 import { useAppDispatch, useAppSelector } from '../hooks';
-import { EditorTheme, lint } from '../store/editor';
-import { LogOpenCondition } from '../store/log';
-import { updateDevices, updateGamepads } from '../store/peripherals';
-import {
-  Alliance,
-  Mode,
-  ConnectionStatus,
-  download,
-  upload,
-  changeMode,
-  restart,
-  updateRate,
-} from '../store/robot';
-import { addCommands, reportOutcome, DeviceName } from './Util';
+import { peripheralSelectors, updateDevices, updateGamepads } from '../store/peripherals';
+import { ConnectionStatus } from '../store/robot';
+import { EditorTheme } from '../store/settings';
+import { DeviceName } from './Util';
 
 defaults.font.family = 'monospace';
 
@@ -53,15 +42,17 @@ const makeMask = bits => (BigInt(1) << BigInt(bits)) - BigInt(1);
 const DEVICE_MASK = makeMask(16);
 const getDeviceId = uid => Number((BigInt(uid) >> BigInt(72)) & DEVICE_MASK);
 
-function *makePeripheralList({ devices }) {
-  for (const uid of _.keys(devices).sort()) {
-    yield {
-      icon: IconNames.HELP,
-      name: 'Unknown device',
-      uid,
-      params: devices[uid],
-      ...CATALOG[getDeviceId(uid)],
-    };
+function *makePeripheralList(peripherals) {
+  for (const peripheral of peripheralSelectors.selectAll(peripherals)) {
+    if (peripheral.type === 'smart-device') {
+      yield {
+        icon: IconNames.HELP,
+        name: 'Unknown device',
+        uid: peripheral.uid,
+        params: peripheral.params,
+        ...CATALOG[getDeviceId(peripheral.uid)],
+      };
+    }
   }
 }
 
@@ -146,236 +137,61 @@ function ParameterList({ params, editorTheme }) {
   );
 }
 
-function ModeTag({ mode }) {
-  let modeName, modeIcon;
-  switch (mode) {
-    case Mode.AUTO:
-      modeName = 'Autonomous';
-      modeIcon = IconNames.DESKTOP;
-      break;
-    case Mode.TELEOP:
-      modeName = 'Teleop';
-      modeIcon = IconNames.SATELLITE;
-      break;
-    default:
-      modeName = 'Idle';
-      modeIcon = IconNames.OFFLINE;
-  }
-  return <Tag className="status-tag" icon={modeIcon} large minimal>{modeName}</Tag>;
-}
-
-function AllianceTag({ alliance }) {
-  const theme = useAppSelector(state => state.editor.editorTheme);
-  let allianceName, allianceColor;
-  switch (alliance) {
-    case Alliance.BLUE:
-      allianceName = 'Blue';
-      allianceColor = theme === EditorTheme.DARK ? Colors.BLUE2 : Colors.BLUE5;
-      break;
-    case Alliance.GOLD:
-      allianceName = 'Gold';
-      allianceColor = theme === EditorTheme.DARK ? Colors.GOLD2 : Colors.GOLD5;
-      break;
-    default:
-      allianceName = 'No Alliance';
-      allianceColor = null;
-  }
-  return (
-    <Tag
-      className="status-tag"
-      icon={IconNames.FLAG}
-      large
-      minimal
-      style={{ backgroundColor: allianceColor }}
-    >
-      {allianceName}
-    </Tag>
-  );
-}
-
-function Status() {
-  const dispatch = useAppDispatch();
-  const robot = useAppSelector(state => state.robot);
-  let status, intent;
-  const connected = robot.status !== ConnectionStatus.DISCONNECTED;
-  React.useEffect(() => {
-    const interval = setInterval(() => dispatch(updateRate()), 200);
-    return () => clearInterval(interval);
-  }, [dispatch]);
-  if (!connected) {
-    status = 'Disconnected';
-  } else if (robot.error) {
-    status = 'Errors Detected';
-    intent = Intent.DANGER;
-  } else if (robot.status === ConnectionStatus.UNHEALTHY) {
-    status = 'Increased Latency';
-    intent = Intent.WARNING;
-  } else {
-    status = 'Connected';
-    intent = Intent.SUCCESS;
-  }
-  return (
-    <Callout id="robot-status" title={status} intent={intent}>
-      <div className="status-container">
-        <div className="status-description">
-          {connected ?
-            <p>Update rate: {Math.round(10*robot.updateRate)/10} updates/second</p> :
-            <>
-              <p>Dawn is not receiving updates from Runtime.</p>
-              <ul>
-                <li>Are you connected to the correct WiFi network?</li>
-                <li>Try restarting Runtime (see the "Debug" menu).</li>
-              </ul>
-            </>
-          }
-        </div>
-        <Spinner
-          size={40}
-          value={connected ? robot.relUpdateRate : null}
-          intent={intent}
-        />
-      </div>
-      {connected && <div>
-        <ModeTag mode={robot.mode} />
-        <AllianceTag alliance={robot.alliance} />
-      </div>}
-    </Callout>
-  );
-}
+const Placeholder = () => (
+  <Callout intent={Intent.WARNING} className="sep">
+    <H4>No Devices Detected</H4>
+    <ul>
+      <li>Check your connection to the robot.</li>
+      <li>Ensure all cables are plugged in snugly.</li>
+      <li>Press any button to connect a Gamepad.</li>
+    </ul>
+  </Callout>
+);
 
 export default function Peripherals(props) {
   const dispatch = useAppDispatch();
-  const openCondition = useAppSelector(state => state.log.openCondition);
-  const editorTheme = useAppSelector(state => state.editor.editorTheme);
-  const peripherals = useAppSelector(state => state.peripherals);
-  const keybindings = useAppSelector(state => _.pick(state.keybindings, ['robot', 'debug']));
-  const status = useAppSelector(state => state.robot.status);
+  const editorTheme = useAppSelector((state) => state.settings.editor.editorTheme);
+  const peripherals = useAppSelector((state) => state.peripherals);
+  const status = useAppSelector((state) => state.robot.status);
   const peripheralList = Array.from(makePeripheralList(peripherals));
   const [showParams, setShowParams] = React.useState({});
+  /*
+  FIXME
   React.useEffect(() => {
     if (_.keys(peripherals.devices).length && status === ConnectionStatus.DISCONNECTED) {
       dispatch(updateDevices({}, { disconnect: true }));
       setShowParams({});
     }
   }, [dispatch, setShowParams, peripherals.devices, status]);
-  React.useEffect(() => addCommands(props.editor?.commands, [
-    {
-      name: 'downloadFile',
-      group: 'Robot',
-      bindKey: keybindings.robot.commands.downloadFile,
-      exec: () => reportOutcome(
-        dispatch(download({ editor: props.editor })).unwrap(),
-        'Downloaded student code from the robot.',
-        'Failed to download student code. Are you connected to the robot?',
-      ),
-    },
-    {
-      name: 'uploadFile',
-      group: 'Robot',
-      bindKey: keybindings.robot.commands.uploadFile,
-      exec: () => reportOutcome(
-        dispatch(upload({ editor: props.editor })).unwrap(),
-        'Uploaded student code to the robot.',
-        'Failed to upload student code. Are you connected to the robot?',
-      ),
-    },
-    {
-      name: 'start',
-      group: 'Robot',
-      bindKey: keybindings.robot.commands.start,
-      exec: (editor) => reportOutcome(
-        dispatch(changeMode(props.mode)).unwrap()
-          .then(() => {
-            if (openCondition === LogOpenCondition.START) {
-              props.openLog();
-            }
-          }),
-        'Started robot.',
-        'Failed to start robot.',
-      ),
-    },
-    {
-      name: 'stop',
-      group: 'Robot',
-      bindKey: keybindings.robot.commands.stop,
-      exec: () => reportOutcome(
-        dispatch(changeMode(Mode.IDLE)).unwrap(),
-        'Stopped robot.',
-        'Failed to stop robot.',
-      ),
-    },
-    {
-      name: 'estop',
-      group: 'Robot',
-      bindKey: keybindings.robot.commands.estop,
-      exec: () => reportOutcome(
-        dispatch(changeMode(Mode.ESTOP)).unwrap(),
-        'Emergency-stopped robot.',
-        'Failed to emergency-stop robot.',
-      ),
-    },
-    {
-      name: 'lint',
-      group: 'Debug',
-      bindKey: keybindings.debug.commands.lint,
-      exec: () => reportOutcome(
-        dispatch(upload({ editor: props.editor })).unwrap()
-          .then(() => dispatch(lint()).unwrap()),
-        'Linted student code.',
-        'Failed to lint student code.',
-      ),
-    },
-    {
-      name: 'restart',
-      group: 'Debug',
-      bindKey: keybindings.debug.commands.restart,
-      exec: () => reportOutcome(
-        dispatch(restart()).unwrap(),
-        'Successfully restarted Runtime.',
-        'Failed to restart Runtime. Are you connected to the robot?',
-      ),
-    },
-  ]), [dispatch, props.mode, props.openLog, keybindings, openCondition]);
+  */
   return (
-    <div className="peripherals">
-      <Status />
-      <div className="peripheral-list">
-        {peripheralList.length === 0 &&
-          <Callout intent={Intent.WARNING} className="sep">
-            <H4>No Devices Detected</H4>
-            <ul>
-              <li>Check your connection to the robot.</li>
-              <li>Ensure all cables are plugged in snugly.</li>
-              <li>Press any button to connect a Gamepad.</li>
-            </ul>
-          </Callout>
-        }
-        {peripheralList.map((peripheral, index) => (
-          <Card key={index} className="sep">
-            <p className="dev-type">
-              <Icon icon={peripheral.icon} className="dev-icon" />
-              {peripheral.name}
-            </p>
-            <Button
-              className="dev-show-param"
-              small
-              outlined
-              text="Show Parameters"
-              onClick={() => setShowParams({
-                ...showParams,
-                [peripheral.uid]: !showParams[peripheral.uid],
-              })}
-            />
-            <div className="dev-id">
-              <DeviceName className="dev-name" />
-              <code className="dev-uid">{peripheral.uid}</code>
-            </div>
-            <Collapse isOpen={showParams[peripheral.uid]} className="sep">
-              <ParameterList params={peripheral.params} editorTheme={editorTheme} />
-            </Collapse>
-          </Card>
-        ))}
-      </div>
+    <div className="peripheral-list">
+      {peripheralList.length === 0 && <Placeholder />}
+      {peripheralList.map((peripheral, index) => (
+        <Card key={index} className="sep">
+          <p className="dev-type">
+            <Icon icon={peripheral.icon} className="dev-icon" />
+            {peripheral.name}
+          </p>
+          <Button
+            className="dev-show-param"
+            small
+            outlined
+            text="Show Parameters"
+            onClick={() => setShowParams({
+              ...showParams,
+              [peripheral.uid]: !showParams[peripheral.uid],
+            })}
+          />
+          <div className="dev-id">
+            <DeviceName className="dev-name" />
+            <code className="dev-uid">{peripheral.uid}</code>
+          </div>
+          <Collapse isOpen={showParams[peripheral.uid]} className="sep">
+            <ParameterList params={peripheral.params} editorTheme={editorTheme} />
+          </Collapse>
+        </Card>
+      ))}
     </div>
   );
 };

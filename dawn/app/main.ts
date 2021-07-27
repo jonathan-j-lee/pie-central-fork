@@ -212,7 +212,7 @@ function createWindow() {
       await client.open(
         (err, update) => window.webContents.send('update-devices', err, update),
         (err, event) => window.webContents.send('append-event', err, event),
-        { host: settings.robot.host },
+        { host: settings.runtime.host },
       );
       await fs.mkdir(path.dirname(SETTINGS_PATH), { recursive: true });
       await fs.writeFile(SETTINGS_PATH, JSON.stringify(settings));

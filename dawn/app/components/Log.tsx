@@ -4,31 +4,30 @@ import { IconName, IconNames } from '@blueprintjs/icons';
 import Highlight from 'react-highlight';
 import * as _ from 'lodash';
 import { useAppDispatch, useAppSelector } from '../hooks';
-import { EditorTheme } from '../store/editor';
-import logSlice, { copy } from '../store/log';
-import { addCommands, reportOutcome } from './Util';
+import logSlice, { copy, logEventSelectors } from '../store/log';
+import settingsSlice, { EditorTheme, LogLevel } from '../store/settings';
 
 const NOT_CONTEXT_FIELDS = ['timestamp', 'exception', 'event', 'level'];
 
-const renderLevel = (level) => {
-  let shortLevel = level;
+const LogLevelTag = (props) => {
+  let shortLevel = props.level.toLowerCase();
   let intent = null;
   let icon: IconName = IconNames.PULSE;
-  switch (level) {
-    case 'INFO':
+  switch (shortLevel) {
+    case LogLevel.INFO:
       intent = Intent.PRIMARY;
       icon = IconNames.INFO_SIGN;
       break;
-    case 'WARNING':
-      shortLevel = 'WARN';
-    case 'WARN':
+    case LogLevel.WARNING:
+      shortLevel = 'warn';
+    case 'warn':
       intent = Intent.WARNING;
       icon = IconNames.WARNING_SIGN;
       break;
-    case 'CRITICAL':
-      shortLevel = 'CRIT';
-    case 'CRIT':
-    case 'ERROR':
+    case LogLevel.CRITICAL:
+      shortLevel = 'crit';
+    case 'crit':
+    case LogLevel.ERROR:
       intent = Intent.DANGER;
       icon = IconNames.ERROR;
       break;
@@ -40,17 +39,18 @@ const renderLevel = (level) => {
       intent={intent}
       className="log-tag"
     >
-      {shortLevel}
+      {shortLevel.toUpperCase()}
     </Tag>
   );
 };
 
 export default function Log(props) {
   const dispatch = useAppDispatch();
-  const editorTheme = useAppSelector(state => state.editor.editorTheme);
-  const log = useAppSelector(state => state.log);
-  const keybindings = useAppSelector(state => state.keybindings.log);
+  const editorTheme = useAppSelector((state) => state.settings.editor.editorTheme);
+  const log = useAppSelector((state) => state.log);
+  const settings = useAppSelector((state) => state.settings.log);
   const bottom = React.useRef();
+  const timestamps = logEventSelectors.selectIds(log);
   React.useEffect(() => {
     for (const theme in EditorTheme) {
       const stylesheet = document.getElementById(`highlight-${EditorTheme[theme]}`) as HTMLLinkElement;
@@ -64,45 +64,20 @@ export default function Log(props) {
     }
   }, [editorTheme]);
   React.useEffect(() => {
-    if (log.pinToBottom) {
+    if (settings.pinToBottom) {
       bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
-  }, [log.events]);
-  React.useEffect(() => addCommands(props.editor?.commands, [
-    {
-      name: 'toggleConsole',
-      group: 'Console',
-      bindKey: keybindings.commands.toggleConsole,
-      exec: () => props.toggleOpen(),
-    },
-    {
-      name: 'copyConsole',
-      group: 'Console',
-      bindKey: keybindings.commands.copyConsole,
-      exec: () => reportOutcome(
-        dispatch(copy()).unwrap(),
-        'Copied console output.',
-        'Failed to copy console output.',
-      ),
-    },
-    {
-      name: 'clearConsole',
-      group: 'Console',
-      bindKey: keybindings.commands.clearConsole,
-      exec: () => dispatch(logSlice.actions.clear()),
-    },
-  ]), [dispatch, props.toggleOpen, keybindings]);
+  }, [timestamps[timestamps.length - 1]]);
   return (
-    <Collapse isOpen={props.isOpen} className="console-container">
+    <Collapse isOpen={log.open} className="console-container">
       <Pre className="console">
-        {log.timeline
-          .map((timestamp) => log.events[timestamp])
-          .filter(({ payload }) => payload.student_code || log.showSystem)
-          .map(({ payload, showContext }, index) => (
+        {logEventSelectors.selectAll(log)
+          .filter(({ payload }) => payload.student_code || settings.showSystem)
+          .map(({ id, payload, showContext }, index) => (
             <span key={index}>
-              {log.showTimestamps && <span>[{payload.timestamp}] </span>}
+              {settings.showTimestamp && <span>[{payload.timestamp}] </span>}
               <span>{payload.event}</span>
-              {log.showSeverity && renderLevel(payload.level.toUpperCase())}
+              {settings.showLevel && <LogLevelTag level={payload.level} />}
               <Tag
                 round
                 className="log-tag"
@@ -111,11 +86,11 @@ export default function Log(props) {
                   icon={showContext ? IconNames.CHEVRON_UP : IconNames.CHEVRON_DOWN}
                   size={12}
                 />}
-                onClick={() => dispatch(logSlice.actions.toggleContext(payload.timestamp))}
+                onClick={() => dispatch(logSlice.actions.toggleContext(id))}
               >
                 {showContext ? 'Hide' : 'Show'} Context
               </Tag>
-              {log.showTraceback && payload.exception && <>
+              {settings.showTraceback && payload.exception && <>
                 <br />
                 {payload.exception.trim()}
               </>}
@@ -132,8 +107,10 @@ export default function Log(props) {
         className="log-pin"
         intent={Intent.PRIMARY}
         icon={IconNames.AUTOMATIC_UPDATES}
-        onClick={() => dispatch(logSlice.actions.toggle('pinToBottom'))}
-        active={log.pinToBottom}
+        onClick={() => dispatch(settingsSlice.actions.update({
+          log: { pinToBottom: !settings.pinToBottom },
+        }))}
+        active={settings.pinToBottom}
       />
     </Collapse>
   );

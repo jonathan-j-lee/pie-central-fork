@@ -15,7 +15,7 @@ main {
   overflow: auto;
 }
 
-.editor {
+#editor-pane {
   float: left;
   width: 70%;
   height: 100%;
@@ -23,16 +23,26 @@ main {
   flex-direction: column;
 }
 
+#runtime-pane {
+  block: inline-block;
+  float: right;
+  width: 30%;
+  height: 100%;
+  padding: 1rem;
+  overflow: auto;
+  ul {
+    padding-left: 1.5rem;
+  }
+}
+
 .editor-status {
   padding: 0.4rem 0 0.4rem 0.8rem;
   font-size: 0.8rem;
 }
 
-.cursor-status {
+.cursor-status-tooltip {
   float: right;
-  .cursor-status-tooltip {
-    margin-left: 0.6rem;
-  }
+  margin-left: 0.6rem;
 }
 
 .status-container {
@@ -46,18 +56,6 @@ main {
 
 .status-tag {
   margin-right: 0.5rem;
-}
-
-.peripherals {
-  block: inline-block;
-  float: right;
-  width: 30%;
-  height: 100%;
-  padding: 1rem;
-  overflow: auto;
-  ul {
-    padding-left: 1.5rem;
-  }
 }
 
 .console-container {
@@ -95,6 +93,10 @@ main {
   margin-top: 1rem;
 }
 
+.sep-small {
+  margin-top: 0.5rem;
+}
+
 .dev-type {
   padding: 5px 0;
   display: inline-block;
@@ -115,6 +117,7 @@ main {
 
 .monospace {
   font-family: monospace;
+  font-size: 0.9rem;
 }
 
 .dev-name {
@@ -144,8 +147,20 @@ main {
   overflow-x: auto;
 }
 
-.keybindings, .keybinding, .dynamic-table {
+.keybindings, .keybinding, .entity-table {
   width: 100%;
+}
+
+.entity-table {
+  overflow-x: auto;
+  td {
+    padding: 0.4rem !important;
+    vertical-align: middle !important;
+  }
+  .empty-row {
+    padding: 0.8rem !important;
+    text-align: center !important;
+  }
 }
 
 .keybinding {
@@ -179,12 +194,4 @@ main {
 .slider {
   max-width: 90%;
   margin: 0.5rem auto;
-}
-
-.empty-row {
-  text-align: center !important;
-}
-
-.dynamic-table td {
-  vertical-align: middle !important;
 }

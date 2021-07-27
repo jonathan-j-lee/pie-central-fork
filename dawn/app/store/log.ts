@@ -1,30 +1,27 @@
-import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { createAsyncThunk, createEntityAdapter, createSlice } from '@reduxjs/toolkit';
+import { LogLevel, LogOpenCondition } from './settings';
 
-export enum Level {
-  DEBUG = 'debug',
-  INFO = 'info',
-  WARNING = 'warning',
-  ERROR = 'error',
-  CRITICAL = 'critical',
+type LogEventPayload = {
+  timestamp: string,
+  level: LogLevel,
+  event: string,
+  exception?: string,
+  student_code?: boolean,
 };
 
-export enum LogOpenCondition {
-  START = 'start',
-  ERROR = 'error',
-  NEVER = 'never',
+type LogEvent = {
+  id: number,
+  showContext: boolean,
+  payload: LogEventPayload,
 };
 
-const initialState = {
-  showSystem: true,
-  showTimestamps: true,
-  showSeverity: true,
-  showTraceback: true,
-  pinToBottom: true,
-  openCondition: LogOpenCondition.START,
-  timeline: [],
-  events: {},
-  maxEvents: 256,
-};
+const logEventAdapter = createEntityAdapter<LogEvent>({
+  sortComparer: (a, b) => a.id - b.id,
+});
+
+export const logEventSelectors = logEventAdapter.getSelectors();
+
+const initialState = logEventAdapter.getInitialState({ open: false });
 
 export const copy = createAsyncThunk<
   void,
@@ -33,45 +30,60 @@ export const copy = createAsyncThunk<
 >(
   'log/copy',
   async (arg, thunkAPI) => {
-    const { events, timeline } = thunkAPI.getState().log;
-    return await navigator.clipboard.writeText(
-      timeline
-        .map((timestamp) => events[timestamp])
-        .map((event) => JSON.stringify(event))
-        .join('\n'));
+    const events = logEventSelectors.selectAll(thunkAPI.getState().log);
+    const text = events.map((event) => JSON.stringify(event)).join('\n');
+    await navigator.clipboard.writeText(text);
   },
 );
 
-const expire = (state) => {
-  const expiredCount = state.timeline.length - state.maxEvents;
-  const expiredTimestamps = state.timeline.splice(0, expiredCount);
-  for (const timestamp of expiredTimestamps) {
-    delete state.events[timestamp];
-  }
-};
+export const append = createAsyncThunk<
+  { maxEvents: number, payload: LogEventPayload },
+  LogEventPayload
+>(
+  'log/append',
+  async (payload, thunkAPI) => {
+    const { maxEvents, openCondition } = thunkAPI.getState().settings.log;
+    if (openCondition === LogOpenCondition.ERROR && payload.exception) {
+      thunkAPI.dispatch(slice.actions.open());
+    }
+    return { maxEvents, payload };
+  },
+);
 
-export default createSlice({
+const slice = createSlice({
   name: 'log',
   initialState,
   reducers: {
-    toggle: (state, action) => ({ ...state, [action.payload]: !state[action.payload] }),
-    set: (state, action) => ({ ...state, ...action.payload }),
+    open: (state) => ({ ...state, open: true }),
+    close: (state) => ({ ...state, open: false }),
+    toggleOpen: (state) => ({ ...state, open: !state.open }),
     toggleContext: (state, action) => {
-      const event = state.events[action.payload];
+      const event = logEventSelectors.selectById(state, action.payload);
       if (event) {
-        event.showContext = !event.showContext;
+        logEventAdapter.updateOne(state, {
+          id: action.payload,
+          changes: { showContext: !event.showContext },
+        });
       }
     },
-    append: (state, action) => {
-      const event = action.payload;
-      state.events[event.timestamp] = { payload: event, showContext: false };
-      state.timeline.push(event.timestamp);
-      expire(state);
-    },
-    clear: state => ({ ...state, timeline: [], events: {} }),
-    truncate(state, action) {
-      state.maxEvents = action.payload;
-      expire(state);
-    },
+    clear: logEventAdapter.removeAll,
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(append.fulfilled, (state, action) => {
+        const { maxEvents, payload } = action.payload;
+        logEventAdapter.addOne(state, {
+          id: Date.parse(payload.timestamp),
+          showContext: false,
+          payload,
+        });
+        const excessCount = logEventSelectors.selectTotal(state) - maxEvents;
+        if (excessCount > 0) {
+          const expired = logEventSelectors.selectIds(state).slice(0, excessCount);
+          logEventAdapter.removeMany(state, expired);
+        }
+      });
   },
 });
+
+export default slice;
