@@ -4,32 +4,32 @@ import { EditableText } from './Forms';
 
 export const COMMANDS = [
   {
-      command: 'newFile',
-      label: 'New file',
-      group: 'File',
-      success: 'Created a new file.',
-      failure: 'Failed to create a new file.',
+    command: 'newFile',
+    label: 'New file',
+    group: 'File',
+    success: 'Created a new file.',
+    failure: 'Failed to create a new file.',
   },
   {
-      command: 'openFile',
-      label: 'Open file',
-      group: 'File',
-      success: 'Opened the selected file.',
-      failure: 'Failed to open file.',
+    command: 'openFile',
+    label: 'Open file',
+    group: 'File',
+    success: 'Opened the selected file.',
+    failure: 'Failed to open file.',
   },
   {
-      command: 'saveFile',
-      label: 'Save file',
-      group: 'File',
-      success: 'Saved the current file.',
-      failure: 'Failed to save file.',
+    command: 'saveFile',
+    label: 'Save file',
+    group: 'File',
+    success: 'Saved the current file.',
+    failure: 'Failed to save file.',
   },
   {
-      command: 'saveFileAs',
-      label: 'Save file as ...',
-      group: 'File',
-      success: 'Saved the file to the selected path.',
-      failure: 'Failed to save file to the selected path.',
+    command: 'saveFileAs',
+    label: 'Save file as ...',
+    group: 'File',
+    success: 'Saved the file to the selected path.',
+    failure: 'Failed to save file to the selected path.',
   },
   {
     command: 'downloadFile',
@@ -101,7 +101,9 @@ export default function KeybindingSettings(props) {
         Each shortcut should be a list of keys separated by the <kbd>+</kbd> character.
         For example: <code>Ctrl+Shift+Alt+Backspace</code>.
       </p>
-      <p>You can view your keyboard shortcuts by pressing <kbd>?</kbd>.</p>
+      <p>
+        You can view your keyboard shortcuts by pressing <kbd>?</kbd>.
+      </p>
       <HTMLTable striped className="keybindings">
         <thead>
           <tr>
@@ -111,7 +113,7 @@ export default function KeybindingSettings(props) {
           </tr>
         </thead>
         <tbody>
-          {COMMANDS.map(({ command, label, group }, index) =>
+          {COMMANDS.map(({ command, label, group }, index) => (
             <tr key={index}>
               <td>{group}</td>
               <td>{label}</td>
@@ -130,9 +132,9 @@ export default function KeybindingSettings(props) {
                 />
               </td>
             </tr>
-          )}
+          ))}
         </tbody>
       </HTMLTable>
     </>
   );
-};
+}

@@ -19,12 +19,13 @@ export default class ErrorBoundary extends React.Component<{}, { err: null | Err
         <div className="error-boundary">
           <H1>Dawn Crashed</H1>
           <p>
-            Dawn did not handle an unexpected error and cannot recover.
-            If you can read this message, it is likely that Dawn has an unidentified bug.
+            Dawn did not handle an unexpected error and cannot recover. If you can read
+            this message, it is likely that Dawn has an unidentified bug.
           </p>
           <p>
-            Copy the diagnostic information below into a text file and file an issue with the developers.
-            Try to remember what sequence of actions you performed to produce this error.
+            Copy the diagnostic information below into a text file and file an issue
+            with the developers. Try to remember what sequence of actions you performed
+            to produce this error.
           </p>
           <Button
             text="Quit"
@@ -33,13 +34,9 @@ export default class ErrorBoundary extends React.Component<{}, { err: null | Err
             onClick={() => window.ipc.send('quit')}
           />
           <H2>Stack Trace</H2>
-          <Pre>
-            {this.state.err.stack}
-          </Pre>
+          <Pre>{this.state.err.stack}</Pre>
           <H2>Redux State Tree</H2>
-          <Pre>
-            {JSON.stringify(store.getState(), null, 2)}
-          </Pre>
+          <Pre>{JSON.stringify(store.getState(), null, 2)}</Pre>
         </div>
       );
     }

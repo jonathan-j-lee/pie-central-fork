@@ -3,13 +3,9 @@ const path = require('path');
 const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 
-const {
-  name,
-  version,
-  description,
-  author,
-  license,
-} = JSON.parse(fs.readFileSync('package.json'));
+const { name, version, description, author, license } = JSON.parse(
+  fs.readFileSync('package.json')
+);
 
 module.exports = [
   {
@@ -20,14 +16,17 @@ module.exports = [
     },
     target: 'electron-main',
     module: {
-      rules: [{
-        test: /\.ts$/i,
-        include: /app/,
-        use: 'ts-loader',
-      }, {
-        test: /\.node$/i,
-        loader: 'node-loader',
-      }],
+      rules: [
+        {
+          test: /\.ts$/i,
+          include: /app/,
+          use: 'ts-loader',
+        },
+        {
+          test: /\.node$/i,
+          loader: 'node-loader',
+        },
+      ],
     },
     output: {
       path: path.join(__dirname, 'build'),
@@ -46,17 +45,17 @@ module.exports = [
         {
           test: /\.tsx?$/i,
           include: /app/,
-          use: 'ts-loader'
+          use: 'ts-loader',
         },
         {
           test: /\.(sa|sc|c)ss$/i,
           use: [
             // Creates `style` nodes from JS strings
-            "style-loader",
+            'style-loader',
             // Translates CSS into CommonJS
-            "css-loader",
+            'css-loader',
             // Compiles Sass to CSS
-            "sass-loader",
+            'sass-loader',
           ],
         },
       ],
@@ -73,8 +72,8 @@ module.exports = [
       new HtmlWebpackPlugin({ template: './app/index.html' }),
       /* BlueprintJS bug workaround: https://github.com/palantir/blueprint/issues/3739 */
       new webpack.DefinePlugin({
-        "process.env": "{}",
-        "DAWN_PKG_INFO": JSON.stringify({
+        'process.env': '{}',
+        DAWN_PKG_INFO: JSON.stringify({
           name,
           version,
           description,

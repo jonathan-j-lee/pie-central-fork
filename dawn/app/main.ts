@@ -17,7 +17,7 @@ import Client from '@pioneers/runtime-client';
 
 const ssh = new NodeSSH();
 const logger = bunyan.createLogger({ name: 'dawn' });
-const client = new Client();  // TODO: fix no membership when not connected
+const client = new Client(); // TODO: fix no membership when not connected
 const isDevelopment = process.env.NODE_ENV === 'development';
 
 const SETTINGS_PATH = path.join(app.getPath('appData'), 'dawn', 'settings.json');
@@ -53,7 +53,7 @@ const MENU_TEMPLATE: MenuItemConstructorOptions[] = [
       { role: 'zoomIn' },
       { role: 'zoomOut' },
       { type: 'separator' },
-      { role: 'togglefullscreen' }
+      { role: 'togglefullscreen' },
     ],
   },
   { role: 'windowMenu' },
@@ -74,6 +74,7 @@ const MENU_TEMPLATE: MenuItemConstructorOptions[] = [
 ];
 
 // TODO: reset client on error
+// TODO: fix out-of-order messages
 
 ipcMain.handle('request', async (event, address, method, ...args) => {
   const result = await client.request(address, method, ...args);
@@ -90,22 +91,26 @@ ipcMain.on('send-control', (event, gamepads) => {
 });
 
 ipcMain.handle('exec', (event, config, ...commands) =>
-  commands.reduce(
-    (connection, { command, options }) => connection
-      .then((responses) => Promise.all([responses, ssh.execCommand(command, options)]))
-      .then(([responses, response]) => {
-        if (response.code) {
-          throw new Error(response.stderr);
-        }
-        logger.info({ command, username: config.username, host: config.host },
-          'Executed command on remote machine');
-        return responses.concat([response]);
-      }),
-    ssh
-      .connect(config)
-      .then(() => [])
+  commands
+    .reduce(
+      (connection, { command, options }) =>
+        connection
+          .then((responses) =>
+            Promise.all([responses, ssh.execCommand(command, options)])
+          )
+          .then(([responses, response]) => {
+            if (response.code) {
+              throw new Error(response.stderr);
+            }
+            logger.info(
+              { command, username: config.username, host: config.host },
+              'Executed command on remote machine'
+            );
+            return responses.concat([response]);
+          }),
+      ssh.connect(config).then(() => [])
     )
-    .catch(err => {
+    .catch((err) => {
       logger.error({ err, commands, username: config.username, host: config.host });
       throw err;
     })
@@ -113,7 +118,8 @@ ipcMain.handle('exec', (event, config, ...commands) =>
 );
 
 ipcMain.handle('open-file-prompt', () =>
-  dialog.showOpenDialog({ title: 'Open Student Code', filters: FILE_FILTERS })
+  dialog
+    .showOpenDialog({ title: 'Open Student Code', filters: FILE_FILTERS })
     .then(({ canceled, filePaths: [filePath] }) => {
       if (canceled || !filePath) {
         throw new Error('file not selected');
@@ -123,18 +129,19 @@ ipcMain.handle('open-file-prompt', () =>
 );
 
 ipcMain.handle('open-file', (event, filePath, encoding) =>
-  fs.readFile(filePath, { encoding })
-    .then((contents) => {
-      logger.info({ filePath, encoding }, 'Opened file');
-      return contents;
-    }));
+  fs.readFile(filePath, { encoding }).then((contents) => {
+    logger.info({ filePath, encoding }, 'Opened file');
+    return contents;
+  })
+);
 
 ipcMain.handle('save-file-prompt', () =>
-  dialog.showSaveDialog({
-    title: 'Save Student Code',
-    filters: FILE_FILTERS,
-    properties: ['showOverwriteConfirmation'],
-  })
+  dialog
+    .showSaveDialog({
+      title: 'Save Student Code',
+      filters: FILE_FILTERS,
+      properties: ['showOverwriteConfirmation'],
+    })
     .then(({ canceled, filePath }) => {
       if (canceled || !filePath) {
         throw new Error('file not selected');
@@ -144,10 +151,10 @@ ipcMain.handle('save-file-prompt', () =>
 );
 
 ipcMain.handle('save-file', (event, filePath, contents, encoding) =>
-  fs.writeFile(filePath, contents, { encoding })
-    .then(() => {
-      logger.info({ filePath, encoding }, 'Saved file');
-    }));
+  fs.writeFile(filePath, contents, { encoding }).then(() => {
+    logger.info({ filePath, encoding }, 'Saved file');
+  })
+);
 
 ipcMain.on('quit', (event) => {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -210,9 +217,21 @@ function createWindow() {
     ipcMain.handle('save-settings', async (event, settings) => {
       client.close(true);
       await client.open(
-        (err, update) => window.webContents.send('update-devices', err, update),
-        (err, event) => window.webContents.send('append-event', err, event),
-        { host: settings.runtime.host },
+        (err, update) => {
+          if (err) {
+            logger.error({ err }, 'Error receiving update');
+          } else {
+            window.webContents.send('update-devices', update);
+          }
+        },
+        (err, event) => {
+          if (err) {
+            logger.error({ err }, 'Error receiving log event');
+          } else {
+            window.webContents.send('append-event', err, event);
+          }
+        },
+        { host: settings.runtime.host }
       );
       await fs.mkdir(path.dirname(SETTINGS_PATH), { recursive: true });
       await fs.writeFile(SETTINGS_PATH, JSON.stringify(settings));
@@ -235,7 +254,7 @@ function createWindow() {
    *  https://github.com/electron/electron/issues/13829
    */
   window.loadURL(`file://${path.join(dir, 'index.html')}`);
-};
+}
 
 app.whenReady().then(() => {
   createWindow();

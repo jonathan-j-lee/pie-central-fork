@@ -1,11 +1,12 @@
 import * as React from 'react';
 import { Button, Classes, Dialog, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { Editor } from 'ace-builds/src-min/ace';
 import { useAppDispatch, useAppSelector } from '../hooks';
 import editorSlice, { save } from '../store/editor';
 
 // TODO: select only necessary state
-export default function OverwriteDialog(props) {
+export default function OverwriteDialog(props: { editor?: Editor }) {
   const dispatch = useAppDispatch();
   const prompt = useAppSelector((state) => state.editor.prompt);
   return (
@@ -18,8 +19,8 @@ export default function OverwriteDialog(props) {
     >
       <div className={Classes.DIALOG_BODY}>
         <p>
-          You have unsaved changes on your current file.
-          What would you like to do with these changes?
+          You have unsaved changes on your current file. What would you like to do with
+          these changes?
         </p>
       </div>
       <div className={Classes.DIALOG_FOOTER}>
@@ -44,4 +45,4 @@ export default function OverwriteDialog(props) {
       </div>
     </Dialog>
   );
-};
+}

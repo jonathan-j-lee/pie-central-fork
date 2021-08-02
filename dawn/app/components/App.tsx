@@ -5,7 +5,7 @@ import { useAppDispatch } from '../hooks';
 import { exit } from '../store/editor';
 import { append } from '../store/log';
 import { updateDevices } from '../store/peripherals';
-import { Mode } from '../store/robot';
+import { Mode } from '../store/runtime';
 
 import Log from './Log';
 import Editor from './Editor';
@@ -27,10 +27,10 @@ export default function App() {
   const closeSettings = () => setSettingsOpen(false);
   const [mode, setMode] = React.useState(Mode.AUTO);
   React.useEffect(() => {
-    window.ipc.on('update-devices', (err, [update]) => dispatch(updateDevices(update)));
+    window.ipc.on('update-devices', ([update]) => dispatch(updateDevices(update)));
     // TODO: filter keys (e.g., change back to idle)
     // TODO: watch for low battery
-    window.ipc.on('append-event', (err, [event]) => dispatch(append(event)));
+    window.ipc.on('append-event', ([event]) => dispatch(append(event)));
     window.ipc.on('exit', (replyChannel) => dispatch(exit(replyChannel)));
     return () => {
       for (const channel of ['update-devices', 'append-event', 'exit']) {
@@ -52,11 +52,11 @@ export default function App() {
           <main>
             <div id="editor-pane">
               <Editor editor={editor} setEditor={setEditor} />
-              <Log editor={editor} />
+              <Log />
             </div>
             <div id="runtime-pane">
               <RuntimeStatusCard />
-              <Peripherals editor={editor} />
+              <Peripherals />
             </div>
           </main>
           <Settings
@@ -69,4 +69,4 @@ export default function App() {
       </KeybindingMapper>
     </ThemeProvider>
   );
-};
+}

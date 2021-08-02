@@ -1,18 +1,25 @@
 import * as React from 'react';
 import { FormGroup, Icon } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-
 import { EditorTheme } from '../../store/settings';
 import { NumericInput, Radio, Select, Switch } from './Forms';
 
 const EDITOR_THEMES = [
   {
     id: EditorTheme.LIGHT,
-    display: <span><Icon icon={IconNames.FLASH} /> Light theme</span>,
+    display: (
+      <span>
+        <Icon icon={IconNames.FLASH} /> Light theme
+      </span>
+    ),
   },
   {
     id: EditorTheme.DARK,
-    display: <span><Icon icon={IconNames.MOON} /> Dark theme</span>,
+    display: (
+      <span>
+        <Icon icon={IconNames.MOON} /> Dark theme
+      </span>
+    ),
   },
 ];
 
@@ -85,11 +92,9 @@ export default function EditorSettings(props) {
           We recommend using UTF-8, which is nearly universal on modern platforms.
         `}
       >
-        <Select options={FILE_ENCODINGS} path="editor.encoding"/>
+        <Select options={FILE_ENCODINGS} path="editor.encoding" />
       </FormGroup>
-      <FormGroup
-        label="Editor Features"
-      >
+      <FormGroup label="Editor Features">
         <Switch label="Enable syntax highlighting" path="editor.syntaxHighlighting" />
         <Switch label="Show line numbers" path="editor.lineNumbers" />
         <Switch label="Show long line marker" path="editor.marginMarker" />
@@ -108,4 +113,4 @@ export default function EditorSettings(props) {
       </FormGroup>
     </>
   );
-};
+}

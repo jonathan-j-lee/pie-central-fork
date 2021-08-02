@@ -33,17 +33,21 @@ function makeSettingInput(Input) {
         <Input
           {...props}
           value={setting}
-          update={(rawValue) => validate(rawValue)
-            .then((value) => {
-              dispatch(settingsSlice.actions.update({ path: props.path, value }))
+          update={async (rawValue) => {
+            try {
+              const value = await validate(rawValue);
+              dispatch(settingsSlice.actions.update({ path: props.path, value }));
               setError(null);
-            })
-            .catch((err) => setError(err))
-          }
+            } catch (err) {
+              setError(err);
+            }
+          }}
         />
-        {error &&
-          <Callout intent={Intent.WARNING} className="sep-small">{error.message}</Callout>
-        }
+        {error && (
+          <Callout intent={Intent.WARNING} className="sep-small">
+            {error.message}
+          </Callout>
+        )}
       </>
     );
   };
@@ -126,9 +130,9 @@ export const NumericInput = makeSettingInput((props) => (
     className={props.className}
     defaultValue={props.value}
     onButtonClick={(value) => props.update(value)}
-    onBlur={(event) => props.update(
-      clamp(Number(event.currentTarget.value), props.min, props.max)
-    )}
+    onBlur={(event) =>
+      props.update(clamp(Number(event.currentTarget.value), props.min, props.max))
+    }
     placeholder={props.placeholder}
     leftIcon={props.leftIcon}
     min={props.min}
@@ -147,9 +151,11 @@ export const Radio = makeSettingInput((props) => (
     selectedValue={props.value}
     onChange={(event) => props.update(event.currentTarget.value)}
   >
-    {props.options.map(({ id, display }, index) =>
-      <BlueprintRadio key={index} value={id}>{display}</BlueprintRadio>
-    )}
+    {props.options.map(({ id, display }, index) => (
+      <BlueprintRadio key={index} value={id}>
+        {display}
+      </BlueprintRadio>
+    ))}
   </BlueprintRadioGroup>
 ));
 
@@ -160,9 +166,11 @@ export const Select = makeSettingInput((props) => (
     value={props.value}
     onChange={(event) => props.update(event.currentTarget.value)}
   >
-    {props.options.map(({ id, display }, index) =>
-      <option value={id} key={index}>{display}</option>
-    )}
+    {props.options.map(({ id, display }, index) => (
+      <option value={id} key={index}>
+        {display}
+      </option>
+    ))}
   </BlueprintSelect>
 ));
 
@@ -188,14 +196,18 @@ export const Switch = makeSettingInput((props) => (
     className={props.className}
     checked={props.value}
     onChange={() => props.update(!props.value)}
-    {...(props.tooltip ? { labelElement:
-      <Tooltip
-        className={Classes.TOOLTIP_INDICATOR}
-        content={<p className="tooltip-content">{props.tooltip}</p>}
-      >
-        {props.label}
-      </Tooltip>
-    } : { label: props.label })}
+    {...(props.tooltip
+      ? {
+          labelElement: (
+            <Tooltip
+              className={Classes.TOOLTIP_INDICATOR}
+              content={<p className="tooltip-content">{props.tooltip}</p>}
+            >
+              {props.label}
+            </Tooltip>
+          ),
+        }
+      : { label: props.label })}
   />
 ));
 
@@ -205,45 +217,56 @@ export const EntityTable = makeSettingInput((props) => {
     setRows(newRows);
     props.update(_.fromPairs(newRows));
   };
-  const widths = props.widths ?? Array(props.headings.length).fill(100 / props.headings.length);
+  const widths =
+    props.widths ?? Array(props.headings.length).fill(100 / props.headings.length);
   return (
     <>
-      <BlueprintTable striped={props.striped ?? true} className={`entity-table ${props.className ?? ''}`}>
+      <BlueprintTable
+        striped={props.striped ?? true}
+        className={`entity-table ${props.className ?? ''}`}
+      >
         <colgroup>
           <col />
-          {widths.map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}
+          {widths.map((width, index) => (
+            <col key={index} style={{ width: `${width}%` }} />
+          ))}
         </colgroup>
         <thead>
           <tr>
             <td></td>
-            {props.headings.map((heading, index) => <td key={index}>{heading}</td>)}
+            {props.headings.map((heading, index) => (
+              <td key={index}>{heading}</td>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {rows.length > 0 ?
-            rows.map((row, rowIndex) => <tr key={rowIndex}>
-              <td>
-                <Button
-                  minimal
-                  intent={Intent.DANGER}
-                  icon={IconNames.DELETE}
-                  onClick={() =>
-                    update([...rows.slice(0, rowIndex), ...rows.slice(rowIndex + 1)])
-                  }
-                />
-              </td>
-              {props.render(row, (newRow) => update(_.set(rows, rowIndex, newRow)))
-                .map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)
-              }
-            </tr>) : <tr>
-              <td
-                colSpan={1 + props.headings.length}
-                className="empty-row"
-              >
+          {rows.length > 0 ? (
+            rows.map((row, rowIndex) => (
+              <tr key={rowIndex}>
+                <td>
+                  <Button
+                    minimal
+                    intent={Intent.DANGER}
+                    icon={IconNames.DELETE}
+                    onClick={() =>
+                      update([...rows.slice(0, rowIndex), ...rows.slice(rowIndex + 1)])
+                    }
+                  />
+                </td>
+                {props
+                  .render(row, (newRow) => update(_.set(rows, rowIndex, newRow)))
+                  .map((cell, cellIndex) => (
+                    <td key={cellIndex}>{cell}</td>
+                  ))}
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={1 + props.headings.length} className="empty-row">
                 {props.emptyMessage ?? 'No items'}
               </td>
             </tr>
-          }
+          )}
         </tbody>
       </BlueprintTable>
       <Button

@@ -1,7 +1,6 @@
 import * as React from 'react';
 import {
   Button,
-  ButtonGroup,
   Callout,
   Card,
   Collapse,
@@ -9,15 +8,14 @@ import {
   H4,
   Icon,
   Intent,
-  Tag,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import Chart from 'chart.js/auto';
 import { Scatter, defaults } from 'react-chartjs-2';
 import * as _ from 'lodash';
 import { useAppDispatch, useAppSelector } from '../hooks';
-import { peripheralSelectors, updateDevices, updateGamepads } from '../store/peripherals';
-import { ConnectionStatus } from '../store/robot';
+import { Peripheral, peripheralSelectors, updateDevices } from '../store/peripherals';
+import { ConnectionStatus } from '../store/runtime';
 import { EditorTheme } from '../store/settings';
 import { DeviceName } from './Util';
 
@@ -38,11 +36,11 @@ const CATALOG = {
   13: { name: 'KoalaBear (Motor)', icon: IconNames.COG },
 };
 
-const makeMask = bits => (BigInt(1) << BigInt(bits)) - BigInt(1);
+const makeMask = (bits) => (BigInt(1) << BigInt(bits)) - BigInt(1);
 const DEVICE_MASK = makeMask(16);
-const getDeviceId = uid => Number((BigInt(uid) >> BigInt(72)) & DEVICE_MASK);
+const getDeviceId = (uid) => Number((BigInt(uid) >> BigInt(72)) & DEVICE_MASK);
 
-function *makePeripheralList(peripherals) {
+function* makePeripheralList(peripherals) {
   for (const peripheral of peripheralSelectors.selectAll(peripherals)) {
     if (peripheral.type === 'smart-device') {
       yield {
@@ -56,21 +54,30 @@ function *makePeripheralList(peripherals) {
   }
 }
 
-const StyledPlot = ({ innerRef, param, color, ...props }) => {
+interface StyledPlotProps {
+  innerRef: React.RefObject<HTMLElement>;
+  param: string;
+  color: string;
+}
+
+const StyledPlot = ({ innerRef, param, color, ...props }: StyledPlotProps) => {
   const tickColors = { color, backdropColor: color, textStrokeColor: color };
   return (
     <Scatter
+      className="sep"
       {...props}
       ref={innerRef}
       data={{
-        datasets: [{
-          label: param,
-          data: [],
-          color,
-          backgroundColor: color,
-          borderColor: color,
-          showLine: true,
-        }],
+        datasets: [
+          {
+            label: param,
+            data: [],
+            color,
+            backgroundColor: color,
+            borderColor: color,
+            showLine: true,
+          },
+        ],
       }}
       options={{
         backgroundColor: color,
@@ -91,11 +98,17 @@ const StyledPlot = ({ innerRef, param, color, ...props }) => {
       }}
     />
   );
-}
+};
 
 const Plot = React.memo(StyledPlot);
 
-function ParameterPlot({ param, data, editorTheme }) {
+interface ParameterPlotProps {
+  param: string;
+  data: any;
+  editorTheme: EditorTheme;
+}
+
+function ParameterPlot({ param, data, editorTheme }: ParameterPlotProps) {
   const color = editorTheme === EditorTheme.DARK ? Colors.GRAY4 : Colors.GRAY2;
   const ref = React.useRef();
   const chart: Chart | null = ref.current;
@@ -106,10 +119,15 @@ function ParameterPlot({ param, data, editorTheme }) {
       chart.update();
     }
   }
-  return <Plot className="sep" innerRef={ref} param={param} color={color} />;
+  return <Plot innerRef={ref} param={param} color={color} />;
 }
 
-function ParameterList({ params, editorTheme }) {
+interface ParameterListProps {
+  editorTheme: EditorTheme;
+  params: Peripheral['params'];
+}
+
+function ParameterList({ params, editorTheme }: ParameterListProps) {
   const now = Date.now();
   return (
     <>
@@ -117,12 +135,18 @@ function ParameterList({ params, editorTheme }) {
         .sort()
         .map((param, index) => {
           const values = params[param];
-          const [_timestamp, latestValue] = values[values.length - 1];
+          const [, latestValue] = values[values.length - 1];
           if (isNaN(latestValue)) {
-            return <pre key={index}>{param}: {latestValue.toString()}</pre>;
+            return (
+              <pre key={index}>
+                {param}: {latestValue.toString()}
+              </pre>
+            );
           }
-          const data = values.map(([timestamp, value]) =>
-            ({ x: (timestamp - now)/1000, y: Number(value) }));
+          const data = values.map(([timestamp, value]) => ({
+            x: (timestamp - now) / 1000,
+            y: Number(value),
+          }));
           return (
             <ParameterPlot
               key={index}
@@ -131,8 +155,7 @@ function ParameterList({ params, editorTheme }) {
               editorTheme={editorTheme}
             />
           );
-        })
-      }
+        })}
     </>
   );
 }
@@ -148,22 +171,22 @@ const Placeholder = () => (
   </Callout>
 );
 
-export default function Peripherals(props) {
+export default function Peripherals() {
   const dispatch = useAppDispatch();
   const editorTheme = useAppSelector((state) => state.settings.editor.editorTheme);
   const peripherals = useAppSelector((state) => state.peripherals);
-  const status = useAppSelector((state) => state.robot.status);
+  const status = useAppSelector((state) => state.runtime.status);
   const peripheralList = Array.from(makePeripheralList(peripherals));
   const [showParams, setShowParams] = React.useState({});
-  /*
-  FIXME
   React.useEffect(() => {
-    if (_.keys(peripherals.devices).length && status === ConnectionStatus.DISCONNECTED) {
+    const deviceCount = peripheralSelectors
+      .selectAll(peripherals)
+      .filter((peripheral) => peripheral.type === 'smart-device').length;
+    if (deviceCount > 0 && status === ConnectionStatus.DISCONNECTED) {
       dispatch(updateDevices({}, { disconnect: true }));
       setShowParams({});
     }
-  }, [dispatch, setShowParams, peripherals.devices, status]);
-  */
+  }, [dispatch, setShowParams, peripherals, status]);
   return (
     <div className="peripheral-list">
       {peripheralList.length === 0 && <Placeholder />}
@@ -178,10 +201,12 @@ export default function Peripherals(props) {
             small
             outlined
             text="Show Parameters"
-            onClick={() => setShowParams({
-              ...showParams,
-              [peripheral.uid]: !showParams[peripheral.uid],
-            })}
+            onClick={() =>
+              setShowParams({
+                ...showParams,
+                [peripheral.uid]: !showParams[peripheral.uid],
+              })
+            }
           />
           <div className="dev-id">
             <DeviceName className="dev-name" />
@@ -194,4 +219,4 @@ export default function Peripherals(props) {
       ))}
     </div>
   );
-};
+}

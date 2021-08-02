@@ -9,7 +9,9 @@ export const TOUR_IDLE_STEP = -1;
 const TOUR_STEPS = [
   {
     title: 'Welcome',
-    content: <p>Let's look at the features of Dawn you'll probably use most often.</p>,
+    content: (
+      <p>Let&#39;s look at the features of Dawn you&#39;ll probably use most often.</p>
+    ),
     placement: 'center' as const,
     target: 'body',
   },
@@ -25,30 +27,34 @@ const TOUR_STEPS = [
   },
   {
     title: 'Uploading Code',
-    content: <p>
-      When you are ready to run your code, click this button to upload the editor's
-      contents to the robot.
-    </p>,
+    content: (
+      <p>
+        When you are ready to run your code, click this button to upload the
+        editor&#39;s contents to the robot.
+      </p>
+    ),
     target: '#upload-btn',
   },
   {
     title: 'Start Running Code',
     content: <p>Press this button to run the code you uploaded.</p>,
-    target: '#start-btn'
+    target: '#start-btn',
   },
   {
     title: 'Stop Running Code',
     content: <p>Press this button to stop running your code.</p>,
-    target: '#stop-btn'
+    target: '#stop-btn',
   },
   {
     title: 'Emergency Stop',
-    content: <p>
-      Press this button when the robot is operating unsafely.
-      E-Stop, or emergency stop, will freeze all motors and then halt Runtime.
-      The robot will become inoperable until you cycle its power supply.
-    </p>,
-    target: '#estop-btn'
+    content: (
+      <p>
+        Press this button when the robot is operating unsafely. E-Stop, or emergency
+        stop, will freeze all motors and then halt Runtime. The robot will become
+        inoperable until you cycle its power supply.
+      </p>
+    ),
+    target: '#estop-btn',
   },
   {
     title: 'Console',
@@ -57,10 +63,12 @@ const TOUR_STEPS = [
   },
   {
     title: 'Console',
-    content: <p>
-      This console contains messages emitted by the robot, including the output of your
-      print statements.
-    </p>,
+    content: (
+      <p>
+        This console contains messages emitted by the robot, including the output of
+        your print statements.
+      </p>
+    ),
     target: '.console',
   },
   {
@@ -70,19 +78,22 @@ const TOUR_STEPS = [
   },
   {
     title: 'IP Address',
-    content: <p>
-      To connect to your robot, enter its IP address address in this field.
-      An IP address takes the form of four integer separated by periods, such as: <code>192.168.1.1</code>
-    </p>,
+    content: (
+      <p>
+        To connect to your robot, enter its IP address address in this field. An IP
+        address takes the form of four integer separated by periods, such as:{' '}
+        <code>192.168.1.1</code>
+      </p>
+    ),
     target: '#ip-addr',
   },
   // TODO: show how to update the robot
   {
     title: 'Connection Status',
-    content: <p>
-      The status of your connection to the robot is shown here in real time.
-    </p>,
-    target: '#robot-status'
+    content: (
+      <p>The status of your connection to the robot is shown here in real time.</p>
+    ),
+    target: '#runtime-status',
   },
   {
     title: 'Device Status',
@@ -91,7 +102,11 @@ const TOUR_STEPS = [
   },
   {
     title: 'Keyboard Shortcuts',
-    content: <p>Press <kbd>?</kbd> to see a list of Dawn's keyboard shortcuts.</p>,
+    content: (
+      <p>
+        Press <kbd>?</kbd> to see a list of Dawn&#39;s keyboard shortcuts.
+      </p>
+    ),
     placement: 'center' as const,
     target: 'body',
   },
@@ -123,43 +138,58 @@ function handleTransition(transition, { dispatch, openSettings, closeSettings })
   return delay;
 }
 
-export default function Tour(props) {
+interface TourProps {
+  stepIndex: number;
+  setStepIndex: (number) => void;
+  openSettings: () => void;
+  closeSettings: () => void;
+}
+
+// TODO: paused tour crashes (manually close file menu)
+export default function Tour(props: TourProps) {
   const dispatch = useAppDispatch();
-  const editorTheme = useAppSelector(state => state.settings.editor.editorTheme);
-  const textColor = editorTheme === EditorTheme.DARK ? Colors.LIGHT_GRAY5 : Colors.DARK_GRAY1;
-  const backgroundColor = editorTheme === EditorTheme.DARK ? Colors.DARK_GRAY5 : Colors.LIGHT_GRAY4;
-  return <Joyride
-    showSkipButton
-    showProgress
-    scrollToFirstStep
-    continuous
-    run={props.stepIndex >= 0}
-    stepIndex={props.stepIndex}
-    steps={TOUR_STEPS}
-    locale={{
-      back: 'Previous',
-      next: 'Next',
-      close: 'Close',
-      last: 'End Tour',
-      skip: 'Skip Tour',
-    }}
-    callback={(transition) => {
-      if (([STATUS.FINISHED, STATUS.SKIPPED] as string[]).includes(transition.status)) {
-        props.setStepIndex(TOUR_IDLE_STEP);
-      } else if (props.stepIndex === transition.index &&
-          ([EVENTS.STEP_AFTER, EVENTS.TARGET_NOT_FOUND] as string[]).includes(transition.type)) {
-        const delay = handleTransition(transition, { dispatch, ...props });
-        const change = transition.action === ACTIONS.PREV ? -1 : 1;
-        setTimeout(() => props.setStepIndex(props.stepIndex + change), delay);
-      }
-    }}
-    styles={{
-      options: {
-        arrowColor: backgroundColor,
-        backgroundColor,
-        textColor,
-        primaryColor: Colors.BLUE3,
-      },
-    }}
-  />;
+  const editorTheme = useAppSelector((state) => state.settings.editor.editorTheme);
+  const dark = editorTheme === EditorTheme.DARK;
+  const textColor = dark ? Colors.LIGHT_GRAY5 : Colors.DARK_GRAY1;
+  const backgroundColor = dark ? Colors.DARK_GRAY5 : Colors.LIGHT_GRAY4;
+  return (
+    <Joyride
+      showSkipButton
+      showProgress
+      scrollToFirstStep
+      continuous
+      run={props.stepIndex >= 0}
+      stepIndex={props.stepIndex}
+      steps={TOUR_STEPS}
+      locale={{
+        back: 'Previous',
+        next: 'Next',
+        close: 'Close',
+        last: 'End Tour',
+        skip: 'Skip Tour',
+      }}
+      callback={(transition) => {
+        const FINISHED = [STATUS.FINISHED, STATUS.SKIPPED] as string[];
+        const NEXT = [EVENTS.STEP_AFTER, EVENTS.TARGET_NOT_FOUND] as string[];
+        if (FINISHED.includes(transition.status)) {
+          props.setStepIndex(TOUR_IDLE_STEP);
+        } else if (
+          props.stepIndex === transition.index &&
+          NEXT.includes(transition.type)
+        ) {
+          const delay = handleTransition(transition, { dispatch, ...props });
+          const change = transition.action === ACTIONS.PREV ? -1 : 1;
+          setTimeout(() => props.setStepIndex(props.stepIndex + change), delay);
+        }
+      }}
+      styles={{
+        options: {
+          arrowColor: backgroundColor,
+          backgroundColor,
+          textColor,
+          primaryColor: Colors.BLUE3,
+        },
+      }}
+    />
+  );
 }

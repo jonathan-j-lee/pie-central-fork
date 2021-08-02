@@ -19,9 +19,7 @@ export default function LogSettings(props) {
       >
         <NumericInput path="log.maxEvents" min={0} max={1000} majorStepSize={20} />
       </FormGroup>
-      <FormGroup
-        label="Open console automatically ..."
-      >
+      <FormGroup label="Open console automatically ...">
         <Select path="log.openCondition" options={LOG_OPEN_CONDITIONS} />
       </FormGroup>
       <FormGroup label="Visibility Options">
@@ -52,4 +50,4 @@ export default function LogSettings(props) {
       </FormGroup>
     </>
   );
-};
+}

@@ -73,10 +73,7 @@ const AdminSettings = () => (
         validate={validateNonempty}
       />
     </FormGroup>
-    <FormGroup
-      label="Password"
-      helperText="Password of the user."
-    >
+    <FormGroup label="Password" helperText="Password of the user.">
       <PasswordInput monospace path="runtime.credentials.password" />
     </FormGroup>
     <FormGroup
@@ -160,9 +157,12 @@ const PerformanceSettings = () => (
     <FormGroup
       label="Setup function timeout"
       labelInfo="(in seconds)"
-      helperText={<span>
-        Maximum duration <code>autonomous_setup</code> or <code>teleop_setup</code> should run for.
-      </span>}
+      helperText={
+        <span>
+          Maximum duration <code>autonomous_setup</code> or <code>teleop_setup</code>{' '}
+          should run for.
+        </span>
+      }
     >
       <Slider
         min={0}
@@ -175,9 +175,12 @@ const PerformanceSettings = () => (
     <FormGroup
       label="Main function interval"
       labelInfo="(in seconds)"
-      helperText={<span>
-        Duration between calls to <code>autonomous_main</code> or <code>teleop_main</code>.
-      </span>}
+      helperText={
+        <span>
+          Duration between calls to <code>autonomous_main</code> or{' '}
+          <code>teleop_main</code>.
+        </span>
+      }
     >
       <Slider
         min={0}
@@ -312,8 +315,7 @@ export default function RuntimeSettings(props) {
       <FormGroup
         label="Update"
         helperText="Check for updates or upload a file containing the update."
-      >
-      </FormGroup>
+      ></FormGroup>
       <FormGroup
         label="Device names"
         helperText="Human-readable names for Smart Devices."
@@ -344,9 +346,9 @@ export default function RuntimeSettings(props) {
       </FormGroup>
       <Callout intent={Intent.WARNING}>
         <p>
-          Do not modify the advanced settings below unless you have checked with PiE staff!
-          Modifying these settings is unlikely to solve common issues.
-          Improperly configured settings may break some features or corrupt robot data.
+          Do not modify the advanced settings below unless you have checked with PiE
+          staff! Modifying these settings is unlikely to solve common issues. Improperly
+          configured settings may break some features or corrupt robot data.
         </p>
         <p>Some changes may not take effect until Runtime restarts!</p>
       </Callout>
@@ -385,4 +387,4 @@ export default function RuntimeSettings(props) {
       </FormGroup>
     </>
   );
-};
+}

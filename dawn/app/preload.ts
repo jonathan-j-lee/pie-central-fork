@@ -21,11 +21,7 @@ const MAIN_ASYNC_CHANNELS = [
   'reload',
   'force-reload',
 ];
-const RENDERER_CHANNELS = [
-  'update-devices',
-  'append-event',
-  'exit',
-];
+const RENDERER_CHANNELS = ['update-devices', 'append-event', 'exit'];
 
 contextBridge.exposeInMainWorld('ipc', {
   on(channel, handler) {
@@ -52,13 +48,15 @@ contextBridge.exposeInMainWorld('ipc', {
 });
 
 contextBridge.exposeInMainWorld('ssh', {
-  upload: (config, remotePath, contents) => ipcRenderer.invoke(
-    'exec',
-    config,
-    { command: `mkdir -p ${shellEscape([path.dirname(remotePath)])}` },
-    { command: `cat > ${shellEscape([remotePath])}`, options: { stdin: contents } },
-  ),
+  upload: (config, remotePath, contents) =>
+    ipcRenderer.invoke(
+      'exec',
+      config,
+      { command: `mkdir -p ${shellEscape([path.dirname(remotePath)])}` },
+      { command: `cat > ${shellEscape([remotePath])}`, options: { stdin: contents } }
+    ),
   download: (config, remotePath) =>
-    ipcRenderer.invoke('exec', config, { command: `cat ${shellEscape([remotePath])}` })
+    ipcRenderer
+      .invoke('exec', config, { command: `cat ${shellEscape([remotePath])}` })
       .then(([response]) => response.stdout),
 });

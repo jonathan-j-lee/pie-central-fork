@@ -15,7 +15,7 @@ export const notify = (promise, success, failure) =>
         });
       }
     })
-    .catch((err) => {
+    .catch(() => {
       if (failure) {
         toaster.show({
           intent: Intent.DANGER,
@@ -25,23 +25,25 @@ export const notify = (promise, success, failure) =>
       }
     });
 
-export const OutcomeButton = (props) => {
+type ClickCallback = (event: React.MouseEvent<HTMLButtonElement>) => Promise<void>;
+
+export const OutcomeButton = (props: { onClick: ClickCallback }) => {
   const [loading, setLoading] = React.useState(false);
-  const onClick = props.onClick;
-  const btnProps = {
-    ...props,
+  const extra = {
     loading,
-    onClick: event => {
+    onClick: (event) => {
       setLoading(true);
-      onClick(event).finally(() => setLoading(false));
+      props.onClick(event).finally(() => setLoading(false));
     },
   };
-  return (<Button {...btnProps} />);
+  return <Button {...props} {...extra} />;
 };
 
-export const DeviceName = (props) => <EditableText
-  alwaysRenderInput
-  placeholder="Assign a name"
-  maxLength={32}
-  {...props}
-/>;
+export const DeviceName = (props) => (
+  <EditableText
+    alwaysRenderInput
+    placeholder="Assign a name"
+    maxLength={32}
+    {...props}
+  />
+);

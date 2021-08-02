@@ -3,13 +3,11 @@ import * as _ from 'lodash';
 
 const MAX_VALUES = 50;
 
-type Peripheral = {
-  uid: number,
-  type: 'gamepad' | 'smart-device',
-  params: {
-    [index: string]: Array<[number, any]>;
-  },
-};
+export interface Peripheral {
+  uid: number;
+  type: 'gamepad' | 'smart-device';
+  params: { [name: string]: Array<[number, any]> };
+}
 
 const selectId = ({ type, uid }) => `${type}-${uid}`;
 
@@ -27,12 +25,15 @@ const slice = createSlice({
   reducers: {
     update(state, action) {
       const { type, timestamp, update } = action.payload;
-      const expiredUids = new Set(peripheralSelectors.selectAll(state)
-        .filter((peripheral) => peripheral.type === type)
-        .map((peripheral) => selectId(peripheral)));
+      const expiredUids = new Set(
+        peripheralSelectors
+          .selectAll(state)
+          .filter((peripheral) => peripheral.type === type)
+          .map((peripheral) => selectId(peripheral))
+      );
       for (const [uid, values] of _.toPairs(update)) {
         const id = selectId({ type, uid });
-        const params = { ...(peripheralSelectors.selectById(state, id)?.params) };
+        const params = { ...peripheralSelectors.selectById(state, id)?.params };
         for (const [param, value] of _.toPairs(values)) {
           const timeline = (params[param] ?? []).slice(-(MAX_VALUES - 1));
           timeline.push([timestamp, value]);
@@ -47,7 +48,12 @@ const slice = createSlice({
 });
 
 export default slice;
-export const updateDevices = (update, other = {}) => slice.actions.update(
-  { type: 'smart-device', timestamp: Date.now(), update, ...other });
-export const updateGamepads = (update, other = {}) => slice.actions.update(
-  { type: 'gamepad', timestamp: Date.now(), update, ...other });
+export const updateDevices = (update, other = {}) =>
+  slice.actions.update({
+    type: 'smart-device',
+    timestamp: Date.now(),
+    update,
+    ...other,
+  });
+export const updateGamepads = (update, other = {}) =>
+  slice.actions.update({ type: 'gamepad', timestamp: Date.now(), update, ...other });

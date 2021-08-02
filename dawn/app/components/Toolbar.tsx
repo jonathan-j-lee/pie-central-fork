@@ -13,12 +13,27 @@ import {
   Navbar,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { Editor } from 'ace-builds/src-min/ace';
 import { useAppSelector } from '../hooks';
-import Tour, { TOUR_IDLE_STEP } from './Tour';
-import { Mode } from '../store/robot';
 import { COMMANDS } from './Settings/KeybindingSettings';
+import Tour, { TOUR_IDLE_STEP } from './Tour';
+import { Mode } from '../store/runtime';
+import { SettingsState } from '../store/settings';
 
-const selectCommand = (editor, keybindings, name) => {
+interface DawnPackageInfo {
+  name: string;
+  version: string;
+  description: string;
+  author: string;
+  license: string;
+  buildTimestamp: number;
+}
+
+declare const DAWN_PKG_INFO: DawnPackageInfo;
+
+type Keybindings = SettingsState['keybindings'];
+
+const selectCommand = (editor: Editor, keybindings: Keybindings, name: string) => {
   const { label } = COMMANDS.find(({ command }) => command === name) ?? {};
   const keybinding = keybindings[name] ?? {};
   return {
@@ -30,7 +45,12 @@ const selectCommand = (editor, keybindings, name) => {
   };
 };
 
-const FileMenu = (props) => (
+interface MenuProps {
+  editor?: Editor;
+  keybindings: Keybindings;
+}
+
+const FileMenu = (props: MenuProps) => (
   <Menu id="file-menu">
     <Menu.Item
       icon={IconNames.DOCUMENT_SHARE}
@@ -52,7 +72,7 @@ const FileMenu = (props) => (
   </Menu>
 );
 
-const EditMenu = (props) => (
+const EditMenu = (props: MenuProps) => (
   <Menu>
     <Menu.Item
       icon={IconNames.CUT}
@@ -91,7 +111,7 @@ const EditMenu = (props) => (
   </Menu>
 );
 
-const LogMenu = (props) => {
+const LogMenu = (props: MenuProps) => {
   const isOpen = useAppSelector((state) => state.log.open);
   let icon, label;
   if (isOpen) {
@@ -120,7 +140,7 @@ const LogMenu = (props) => {
   );
 };
 
-const DebugMenu = (props) => (
+const DebugMenu = (props: MenuProps) => (
   <Menu>
     <Menu.Item
       icon={IconNames.CODE}
@@ -130,48 +150,76 @@ const DebugMenu = (props) => (
       icon={IconNames.RESET}
       {...selectCommand(props.editor, props.keybindings, 'restart')}
     />
-    <Menu.Item
-      text="Motor check"
-      icon={IconNames.COG}
-    />
-    <Menu.Item
-      text="Statistics"
-      icon={IconNames.TIMELINE_LINE_CHART}
-    />
+    <Menu.Item text="Motor check" icon={IconNames.COG} />
+    <Menu.Item text="Statistics" icon={IconNames.TIMELINE_LINE_CHART} />
   </Menu>
 );
 
-const HelpMenu = (props) => (
+interface HelpMenuProps {
+  startTour: () => void;
+  showAbout: () => void;
+}
+
+const HelpMenu = (props: HelpMenuProps) => (
   <Menu>
-    <Menu.Item icon={IconNames.MAP_MARKER} text="Tour" onClick={() => props.startTour()} />
+    <Menu.Item
+      icon={IconNames.MAP_MARKER}
+      text="Tour"
+      onClick={() => props.startTour()}
+    />
     <Menu.Item icon={IconNames.MANUAL} text="API Docs" />
-    <Menu.Item icon={IconNames.LAB_TEST} text="About" onClick={() => props.showAbout()} />
+    <Menu.Item
+      icon={IconNames.LAB_TEST}
+      text="About"
+      onClick={() => props.showAbout()}
+    />
   </Menu>
 );
 
-function AboutDialog(props) {
+interface AboutDialogProps {
+  isOpen: boolean;
+  hide: () => void;
+}
+
+function AboutDialog(props: AboutDialogProps) {
   return (
     <Dialog
       isOpen={props.isOpen}
       icon={IconNames.INFO_SIGN}
       title="About"
       transitionDuration={100}
-      onClose={() => props.hideAbout()}
+      onClose={() => props.hide()}
       portalContainer={document.getElementById('app')}
     >
       <div className={Classes.DIALOG_BODY}>
         <H3>Dawn</H3>
-        <p>Package info: <code>{DAWN_PKG_INFO.name} {DAWN_PKG_INFO.version}</code></p>
-        <p>Build timestamp: <code>{DAWN_PKG_INFO.buildTimestamp}</code></p>
+        <p>
+          Package info:{' '}
+          <code>
+            {DAWN_PKG_INFO.name} {DAWN_PKG_INFO.version}
+          </code>
+        </p>
+        <p>
+          Build timestamp: <code>{DAWN_PKG_INFO.buildTimestamp}</code>
+        </p>
         <p>{DAWN_PKG_INFO.description}</p>
-        <p>Licensed under {DAWN_PKG_INFO.license} by {DAWN_PKG_INFO.author}.</p>
+        <p>
+          Licensed under {DAWN_PKG_INFO.license} by {DAWN_PKG_INFO.author}.
+        </p>
       </div>
     </Dialog>
   );
 }
 
-export default function Toolbar(props) {
-  const dirty = useAppSelector((state) => state.editor.dirty);
+interface ToolbarProps {
+  editor?: Editor;
+  openSettings: () => void;
+  closeSettings: () => void;
+  mode: Mode;
+  setMode: (Mode) => void;
+}
+
+export default function Toolbar(props: ToolbarProps) {
   const keybindings = useAppSelector((state) => state.settings.keybindings);
   const [stepIndex, setStepIndex] = React.useState(TOUR_IDLE_STEP);
   const [showAbout, setShowAbout] = React.useState(false);
@@ -181,16 +229,29 @@ export default function Toolbar(props) {
   return (
     <Navbar>
       <Tour {...props} stepIndex={stepIndex} setStepIndex={setStepIndex} />
-      <AboutDialog isOpen={showAbout} hideAbout={() => setShowAbout(false)} />
+      <AboutDialog isOpen={showAbout} hide={() => setShowAbout(false)} />
       <Navbar.Group>
         <Navbar.Heading>Dawn</Navbar.Heading>
         <Navbar.Divider />
         <ButtonGroup>
-          <Popover content={<FileMenu editor={props.editor} keybindings={keybindings} />}>
-            <Button id="file-btn" icon={IconNames.DOCUMENT} rightIcon={IconNames.CARET_DOWN} text="File" />
+          <Popover
+            content={<FileMenu editor={props.editor} keybindings={keybindings} />}
+          >
+            <Button
+              id="file-btn"
+              icon={IconNames.DOCUMENT}
+              rightIcon={IconNames.CARET_DOWN}
+              text="File"
+            />
           </Popover>
-          <Popover content={<EditMenu editor={props.editor} keybindings={keybindings} />}>
-            <Button icon={IconNames.EDIT} rightIcon={IconNames.CARET_DOWN} text="Edit" />
+          <Popover
+            content={<EditMenu editor={props.editor} keybindings={keybindings} />}
+          >
+            <Button
+              icon={IconNames.EDIT}
+              rightIcon={IconNames.CARET_DOWN}
+              text="Edit"
+            />
           </Popover>
           <Button
             id="upload-btn"
@@ -207,7 +268,7 @@ export default function Toolbar(props) {
           <HTMLSelect
             id="mode-menu"
             value={props.mode}
-            onChange={event => props.setMode(event.currentTarget.value)}
+            onChange={(event) => props.setMode(event.currentTarget.value)}
           >
             <option value={Mode.AUTO}>Autonomous</option>
             <option value={Mode.TELEOP}>Teleop</option>
@@ -231,25 +292,43 @@ export default function Toolbar(props) {
         </ControlGroup>
         <Navbar.Divider />
         <ButtonGroup>
-          <Popover content={
-            <LogMenu editor={props.editor} keybindings={keybindings} />
-          }>
-            <Button id="log-btn" icon={IconNames.CONSOLE} rightIcon={IconNames.CARET_DOWN} text="Console" />
-          </Popover>
-          <Popover content={<DebugMenu editor={props.editor} keybindings={keybindings} />}>
-            <Button icon={IconNames.DASHBOARD} rightIcon={IconNames.CARET_DOWN} text="Debug" />
-          </Popover>
-          <Button id="settings-btn" icon={IconNames.SETTINGS} onClick={props.openSettings} text="Settings" />
-          <Popover content={
-            <HelpMenu
-              showAbout={() => setShowAbout(true)}
-              startTour={() => setStepIndex(0)}
+          <Popover
+            content={<LogMenu editor={props.editor} keybindings={keybindings} />}
+          >
+            <Button
+              id="log-btn"
+              icon={IconNames.CONSOLE}
+              rightIcon={IconNames.CARET_DOWN}
+              text="Console"
             />
-          }>
+          </Popover>
+          <Popover
+            content={<DebugMenu editor={props.editor} keybindings={keybindings} />}
+          >
+            <Button
+              icon={IconNames.DASHBOARD}
+              rightIcon={IconNames.CARET_DOWN}
+              text="Debug"
+            />
+          </Popover>
+          <Button
+            id="settings-btn"
+            icon={IconNames.SETTINGS}
+            onClick={props.openSettings}
+            text="Settings"
+          />
+          <Popover
+            content={
+              <HelpMenu
+                showAbout={() => setShowAbout(true)}
+                startTour={() => setStepIndex(0)}
+              />
+            }
+          >
             <Button icon={IconNames.HELP} text="Help" />
           </Popover>
         </ButtonGroup>
       </Navbar.Group>
     </Navbar>
   );
-};
+}

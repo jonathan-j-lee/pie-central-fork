@@ -1,22 +1,26 @@
 import { createAsyncThunk, createEntityAdapter, createSlice } from '@reduxjs/toolkit';
-import { LogLevel, LogOpenCondition } from './settings';
+import { LogLevel, LogOpenCondition, SettingsState } from './settings';
 
-type LogEventPayload = {
-  timestamp: string,
-  level: LogLevel,
-  event: string,
-  exception?: string,
-  student_code?: boolean,
-};
+interface LogEventPayload {
+  timestamp: string;
+  level: LogLevel;
+  event: string;
+  exception?: string;
+  student_code?: boolean; // eslint-disable-line camelcase
+}
 
-type LogEvent = {
-  id: number,
-  showContext: boolean,
-  payload: LogEventPayload,
-};
+export interface LogEvent {
+  showContext: boolean;
+  payload: LogEventPayload;
+}
+
+const isError = (level: LogLevel) =>
+  level === LogLevel.ERROR || level === LogLevel.CRITICAL;
 
 const logEventAdapter = createEntityAdapter<LogEvent>({
-  sortComparer: (a, b) => a.id - b.id,
+  selectId: (event) => event.payload.timestamp,
+  sortComparer: (a, b) =>
+    Date.parse(a.payload.timestamp) - Date.parse(b.payload.timestamp),
 });
 
 export const logEventSelectors = logEventAdapter.getSelectors();
@@ -27,30 +31,26 @@ export const copy = createAsyncThunk<
   void,
   void,
   { state: { log: typeof initialState } }
->(
-  'log/copy',
-  async (arg, thunkAPI) => {
-    const events = logEventSelectors.selectAll(thunkAPI.getState().log);
-    const text = events.map((event) => JSON.stringify(event)).join('\n');
-    await navigator.clipboard.writeText(text);
-  },
-);
+>('log/copy', async (arg, thunkAPI) => {
+  const events = logEventSelectors.selectAll(thunkAPI.getState().log);
+  const text = events.map((event) => JSON.stringify(event)).join('\n');
+  await navigator.clipboard.writeText(text);
+});
 
 export const append = createAsyncThunk<
-  { maxEvents: number, payload: LogEventPayload },
-  LogEventPayload
->(
-  'log/append',
-  async (payload, thunkAPI) => {
-    const { maxEvents, openCondition } = thunkAPI.getState().settings.log;
-    if (openCondition === LogOpenCondition.ERROR && payload.exception) {
-      thunkAPI.dispatch(slice.actions.open());
-    }
-    return { maxEvents, payload };
-  },
-);
+  { maxEvents: number; payload: LogEventPayload; open: boolean },
+  LogEventPayload,
+  { state: { settings: SettingsState; log: typeof initialState } }
+>('log/append', async (payload, thunkAPI) => {
+  const state = thunkAPI.getState();
+  const { maxEvents, openCondition } = state.settings.log;
+  const open =
+    state.log.open ||
+    (isError(payload.level) && openCondition === LogOpenCondition.ERROR);
+  return { maxEvents, payload, open };
+});
 
-const slice = createSlice({
+export default createSlice({
   name: 'log',
   initialState,
   reducers: {
@@ -69,21 +69,15 @@ const slice = createSlice({
     clear: logEventAdapter.removeAll,
   },
   extraReducers: (builder) => {
-    builder
-      .addCase(append.fulfilled, (state, action) => {
-        const { maxEvents, payload } = action.payload;
-        logEventAdapter.addOne(state, {
-          id: Date.parse(payload.timestamp),
-          showContext: false,
-          payload,
-        });
-        const excessCount = logEventSelectors.selectTotal(state) - maxEvents;
-        if (excessCount > 0) {
-          const expired = logEventSelectors.selectIds(state).slice(0, excessCount);
-          logEventAdapter.removeMany(state, expired);
-        }
-      });
+    builder.addCase(append.fulfilled, (state, action) => {
+      const { maxEvents, payload, open } = action.payload;
+      logEventAdapter.addOne(state, { showContext: false, payload });
+      const excessCount = logEventSelectors.selectTotal(state) - maxEvents;
+      if (excessCount > 0) {
+        const expired = logEventSelectors.selectIds(state).slice(0, excessCount);
+        logEventAdapter.removeMany(state, expired);
+      }
+      state.open = open;
+    });
   },
 });
-
-export default slice;

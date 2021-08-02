@@ -15,12 +15,12 @@ interface SSHConfig {
   username: string;
   password: string;
   privateKey: string;
-};
+}
 
 interface Command {
   command: string;
-  options?: SSHExecCommandOptions,
-};
+  options?: SSHExecCommandOptions;
+}
 
 declare global {
   interface Window {
@@ -31,19 +31,10 @@ declare global {
       send(channel: string, ...args: any[]);
     };
     ssh: {
-      upload(config: SSHConfig, path: string, contents: string): Promise<void>,
-      download(config: SSHConfig, path: string): Promise<string>,
+      upload(config: SSHConfig, path: string, contents: string): Promise<void>;
+      download(config: SSHConfig, path: string): Promise<string>;
     };
   }
-  interface DawnPackageInfo {
-    name: string;
-    version: string;
-    description: string;
-    author: string;
-    license: string;
-    buildTimestamp: number;
-  }
-  const DAWN_PKG_INFO: DawnPackageInfo;
 }
 
 ReactDOM.render(
@@ -54,5 +45,5 @@ ReactDOM.render(
       </ErrorBoundary>
     </HotkeysProvider>
   </Provider>,
-  document.getElementById('content'),
+  document.getElementById('content')
 );

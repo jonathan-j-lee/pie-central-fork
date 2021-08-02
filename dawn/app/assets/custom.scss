@@ -1,4 +1,4 @@
-@import "~@blueprintjs/core/lib/scss/variables";
+@import '~@blueprintjs/core/lib/scss/variables';
 
 #app {
   height: 100vh;
@@ -147,7 +147,9 @@ main {
   overflow-x: auto;
 }
 
-.keybindings, .keybinding, .entity-table {
+.keybindings,
+.keybinding,
+.entity-table {
   width: 100%;
 }
 

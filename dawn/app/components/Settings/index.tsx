@@ -1,13 +1,6 @@
 import * as React from 'react';
 import { useStore } from 'react-redux';
-import {
-  Button,
-  Classes,
-  Dialog,
-  Intent,
-  Tab,
-  Tabs,
-} from '@blueprintjs/core';
+import { Button, Classes, Dialog, Intent, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import * as _ from 'lodash';
 
@@ -41,16 +34,8 @@ export default function Settings(props) {
       <div className={Classes.DIALOG_BODY}>
         <Tabs defaultSelectedTabId="runtime" large>
           <Tab id="runtime" title="Runtime" panel={<RuntimeSettings />} />
-          <Tab
-            id="editor"
-            title="Editor"
-            panel={<EditorSettings />}
-          />
-          <Tab
-            id="log"
-            title="Console"
-            panel={<LogSettings />}
-          />
+          <Tab id="editor" title="Editor" panel={<EditorSettings />} />
+          <Tab id="log" title="Console" panel={<LogSettings />} />
           <Tab
             id="keybindings"
             title="Keybindings"
@@ -66,23 +51,21 @@ export default function Settings(props) {
             intent={Intent.DANGER}
             onClick={revert}
           />
-          <Button
-            icon={IconNames.CROSS}
-            text="Cancel"
-            onClick={revert}
-          />
+          <Button icon={IconNames.CROSS} text="Cancel" onClick={revert} />
           <Button
             icon={IconNames.CONFIRM}
             text="Confirm"
             intent={Intent.SUCCESS}
-            onClick={() => notify(
-              dispatch(save()).finally(() => props.close()),
-              'Saved settings.',
-              'Failed to save settings.',
-            )}
+            onClick={() =>
+              notify(
+                dispatch(save()).finally(() => props.close()),
+                'Saved settings.',
+                'Failed to save settings.'
+              )
+            }
           />
         </div>
       </div>
     </Dialog>
   );
-};
+}
