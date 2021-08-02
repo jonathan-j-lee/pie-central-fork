@@ -18,6 +18,7 @@ interface KeybindingMapperProps {
 export default function KeybindingMapper(props: KeybindingMapperProps) {
   const dispatch = useAppDispatch();
   const keybindings = useAppSelector((state) => state.settings.keybindings);
+  // TODO: don't write settings if the file path does not change.
   const commandHandlers = React.useMemo(
     () => ({
       async newFile(editor) {
@@ -50,8 +51,7 @@ export default function KeybindingMapper(props: KeybindingMapperProps) {
         await navigator.clipboard.writeText(editor.getCopyText());
       },
       async pasteText(editor) {
-        const text = await navigator.clipboard.readText();
-        editor.session.insert(editor.getCursorPosition(), text);
+        editor.insert(await navigator.clipboard.readText());
       },
       async start() {
         await dispatch(changeMode(props.mode)).unwrap();
@@ -105,16 +105,26 @@ export default function KeybindingMapper(props: KeybindingMapperProps) {
     }))
       .filter(({ combo }) => combo)
       .map(({ combo, command, group, label }) => ({
-        combo,
+        combo: combo.toLowerCase(),
         label,
         group,
-        global: true,
         onKeyDown: () => props.editor?.execCommand(command),
       }));
   }, [props.editor, keybindings]);
   const { handleKeyDown, handleKeyUp } = useHotkeys(hotkeys);
+  /* Blueprint uses a deprecated property that we have to set here:
+       https://github.com/palantir/blueprint/issues/4165 */
   return (
-    <div onKeyDown={handleKeyDown} onKeyUp={handleKeyUp}>
+    <div
+      onKeyDown={(event) => {
+        Object.defineProperty(event.nativeEvent, 'which', { value: event.which });
+        return handleKeyDown(event);
+      }}
+      onKeyUp={(event) => {
+        Object.defineProperty(event.nativeEvent, 'which', { value: event.which });
+        return handleKeyUp(event);
+      }}
+    >
       {props.children}
     </div>
   );

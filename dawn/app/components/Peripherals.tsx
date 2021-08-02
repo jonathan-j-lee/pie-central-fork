@@ -67,6 +67,7 @@ const StyledPlot = ({ innerRef, param, color, ...props }: StyledPlotProps) => {
       className="sep"
       {...props}
       ref={innerRef}
+      type="scatter"
       data={{
         datasets: [
           {
@@ -171,6 +172,7 @@ const Placeholder = () => (
   </Callout>
 );
 
+// TODO: rename to PeripheralList
 export default function Peripherals() {
   const dispatch = useAppDispatch();
   const editorTheme = useAppSelector((state) => state.settings.editor.editorTheme);
@@ -178,6 +180,7 @@ export default function Peripherals() {
   const status = useAppSelector((state) => state.runtime.status);
   const peripheralList = Array.from(makePeripheralList(peripherals));
   const [showParams, setShowParams] = React.useState({});
+  // FIXME: https://redux.js.org/style-guide/style-guide#put-as-much-logic-as-possible-in-reducers
   React.useEffect(() => {
     const deviceCount = peripheralSelectors
       .selectAll(peripherals)

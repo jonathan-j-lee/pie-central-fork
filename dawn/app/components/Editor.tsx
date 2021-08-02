@@ -2,7 +2,6 @@ import * as React from 'react';
 import AceEditor from 'react-ace';
 import { Classes, Tooltip } from '@blueprintjs/core';
 import { useAppSelector, useAppDispatch } from '../hooks';
-import { initializeSettings } from '../store';
 import editorSlice from '../store/editor';
 
 import { Editor as EditorBackend } from 'ace-builds/src-min/ace';
@@ -23,8 +22,6 @@ import 'ace-builds/src-noconflict/theme-textmate';
 import 'ace-builds/src-noconflict/theme-solarized_dark';
 import 'ace-builds/src-noconflict/theme-solarized_light';
 import 'ace-builds/src-noconflict/theme-terminal';
-
-const INITIALIZE_DELAY = 100;
 
 interface EditorStatusProps {
   filePath: null | string;
@@ -86,6 +83,7 @@ const EditorStatus = (props: EditorStatusProps) => (
 );
 
 interface EditorProps {
+  name?: string;
   editor?: EditorBackend;
   setEditor: (EditorBackend) => void;
 }
@@ -94,14 +92,9 @@ interface EditorProps {
 // TODO: convert to async/await syntax
 export default function Editor(props: EditorProps) {
   const dispatch = useAppDispatch();
-  const { dirty, filePath, annotations } = useAppSelector((state) => state.editor);
+  const filePath = useAppSelector((state) => state.settings.editor.filePath);
+  const { dirty, annotations } = useAppSelector((state) => state.editor);
   const settings = useAppSelector((state) => state.settings.editor);
-  React.useEffect(() => {
-    /* Delay slightly so the main process can register a 'save-settings' handler. */
-    const initialize = () => dispatch(initializeSettings({ editor: props.editor }));
-    const timeoutId = setTimeout(initialize, INITIALIZE_DELAY);
-    return () => clearTimeout(timeoutId);
-  }, []);
   const [cursor, setCursor] = React.useState({ row: 0, column: 0 });
   const [range, setRange] = React.useState({ rows: 1, chars: 0 });
   return (
@@ -116,6 +109,7 @@ export default function Editor(props: EditorProps) {
           }
           props.setEditor(editor);
         }}
+        name={props.name ?? 'editor'}
         mode={settings.syntaxHighlighting ? 'python' : null}
         theme={settings.syntaxTheme}
         width="100%"

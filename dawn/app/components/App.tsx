@@ -2,6 +2,7 @@ import * as React from 'react';
 import { FocusStyleManager } from '@blueprintjs/core';
 
 import { useAppDispatch } from '../hooks';
+import { initializeSettings } from '../store';
 import { exit } from '../store/editor';
 import { append } from '../store/log';
 import { updateDevices } from '../store/peripherals';
@@ -16,6 +17,8 @@ import RuntimeStatusCard from './RuntimeStatusCard';
 import Settings from './Settings';
 import ThemeProvider from './ThemeProvider';
 import Toolbar from './Toolbar';
+
+const INITIALIZE_DELAY = 100;
 
 FocusStyleManager.onlyShowFocusOnTabs();
 
@@ -38,6 +41,14 @@ export default function App() {
       }
     };
   }, [dispatch]);
+  React.useEffect(() => {
+    /* Delay slightly so the main process can register a 'save-settings' handler. */
+    if (editor) {
+      const initialize = () => dispatch(initializeSettings({ editor }));
+      const timeoutId = setTimeout(initialize, INITIALIZE_DELAY);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [editor]);
   return (
     <ThemeProvider>
       <KeybindingMapper editor={editor} mode={mode}>

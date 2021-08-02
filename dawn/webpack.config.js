@@ -19,6 +19,7 @@ module.exports = [
       rules: [
         {
           test: /\.ts$/i,
+          exclude: /\.test\.tsx?$/,
           include: /app/,
           use: 'ts-loader',
         },
@@ -44,6 +45,7 @@ module.exports = [
       rules: [
         {
           test: /\.tsx?$/i,
+          exclude: /\.test\.tsx?$/,
           include: /app/,
           use: 'ts-loader',
         },

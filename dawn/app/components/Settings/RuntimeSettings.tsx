@@ -21,6 +21,7 @@ const AdminSettings = () => (
     <FormGroup
       label="Student code path"
       labelInfo="(required)"
+      labelFor="student-code-path"
       helperText={`
         The path on the remote machine where student code is located.
         Relative paths are with respect to the user's home directory.
@@ -29,6 +30,7 @@ const AdminSettings = () => (
     >
       <TextInput
         monospace
+        id="student-code-path"
         path="runtime.admin.remotePath"
         leftIcon={IconNames.FOLDER_OPEN}
         placeholder="Example: /path/to/studentcode.py"
@@ -38,10 +40,12 @@ const AdminSettings = () => (
     <FormGroup
       label="Restart command"
       labelInfo="(required)"
+      labelFor="restart-command"
       helperText="A shell command executed to restart Runtime."
     >
       <TextInput
         monospace
+        id="restart-command"
         path="runtime.admin.restartCommand"
         leftIcon={IconNames.APPLICATION}
         placeholder="Example: systemctl restart runtime.service"
@@ -51,10 +55,12 @@ const AdminSettings = () => (
     <FormGroup
       label="Update command"
       labelInfo="(required)"
+      labelFor="update-command"
       helperText="A shell command executed to update Runtime."
     >
       <TextInput
         monospace
+        id="update-command"
         path="runtime.admin.updateCommand"
         leftIcon={IconNames.APPLICATION}
         placeholder="Example: systemctl restart runtime-update.service"
@@ -64,25 +70,29 @@ const AdminSettings = () => (
     <FormGroup
       label="User"
       labelInfo="(required)"
+      labelFor="user"
       helperText="Username used to log into the remote machine over SSH."
     >
       <TextInput
         monospace
+        id="user"
         path="runtime.credentials.username"
         placeholder="Example: pioneers"
         validate={validateNonempty}
       />
     </FormGroup>
-    <FormGroup label="Password" helperText="Password of the user.">
-      <PasswordInput monospace path="runtime.credentials.password" />
+    <FormGroup label="Password" labelFor="password" helperText="Password of the user.">
+      <PasswordInput monospace id="password" path="runtime.credentials.password" />
     </FormGroup>
     <FormGroup
       label="Private key"
+      labelFor="private-key"
       helperText="Private key linked to an SSH public key authorized by the user."
     >
       <TextArea
         small
         monospace
+        id="private-key"
         className="private-key"
         path="runtime.credentials.privateKey"
         placeholder={[
@@ -192,9 +202,11 @@ const PerformanceSettings = () => (
     </FormGroup>
     <FormGroup
       label="Baud rate"
+      labelFor="baud-rate"
       helperText="Smart Device Baud rate, which specifies how quickly data is communicated over USB serial."
     >
       <Select
+        id="baud-rate"
         options={BAUD_RATES.map((baudRate) => ({ id: baudRate, display: baudRate }))}
         validate={async (value) => Number(value)}
         path="runtime.perf.baudRate"
@@ -214,10 +226,12 @@ const AddressSettings = () => (
   <>
     <FormGroup
       label="Multicast group"
+      labelFor="multicast-group"
       helperText="IP multicast group Runtime uses to broadcast Smart Device updates."
     >
       <TextInput
         monospace
+        id="multicast-group"
         leftIcon={IconNames.IP_ADDRESS}
         placeholder="Example: 224.1.1.1"
         path="runtime.addressing.multicastGroup"
@@ -226,33 +240,58 @@ const AddressSettings = () => (
     </FormGroup>
     <FormGroup
       label="Remote call port"
+      labelFor="remote-call-port"
       helperText="Port that Runtime should bind to for accepting calls."
     >
-      <NumericInput {...portInputOptions} path="runtime.addressing.callPort" />
+      <NumericInput
+        {...portInputOptions}
+        id="remote-call-port"
+        path="runtime.addressing.callPort"
+      />
     </FormGroup>
     <FormGroup
       label="Log publisher port"
+      labelFor="log-publisher-port"
       helperText="Port that Runtime should bind to for publishing logged events."
     >
-      <NumericInput {...portInputOptions} path="runtime.addressing.logPort" />
+      <NumericInput
+        {...portInputOptions}
+        id="log-publisher-port"
+        path="runtime.addressing.logPort"
+      />
     </FormGroup>
     <FormGroup
       label="Control port"
+      labelFor="control-port"
       helperText="Port that Runtime should bind to for receiving controller (gamepad) inputs."
     >
-      <NumericInput {...portInputOptions} path="runtime.addressing.controlPort" />
+      <NumericInput
+        {...portInputOptions}
+        id="control-port"
+        path="runtime.addressing.controlPort"
+      />
     </FormGroup>
     <FormGroup
       label="Update port"
+      labelFor="update-port"
       helperText="Port that Runtime should connect to for publishing Smart Device updates."
     >
-      <NumericInput {...portInputOptions} path="runtime.addressing.updatePort" />
+      <NumericInput
+        {...portInputOptions}
+        id="update-port"
+        path="runtime.addressing.updatePort"
+      />
     </FormGroup>
     <FormGroup
       label="VSD port"
+      labelFor="vsd-port"
       helperText="Port that Runtime should bind to for serving Virtual Smart Devices (VSDs)."
     >
-      <NumericInput {...portInputOptions} path="runtime.addressing.vsdPort" />
+      <NumericInput
+        {...portInputOptions}
+        id="vsd-port"
+        path="runtime.addressing.vsdPort"
+      />
     </FormGroup>
   </>
 );
@@ -269,10 +308,12 @@ const MonitoringSettings = () => (
   <>
     <FormGroup
       label="Health check interval"
+      labelFor="health-check-interval"
       labelInfo="(in seconds)"
       helperText="Duration between status reports sent by Runtime."
     >
       <NumericInput
+        id="health-check-interval"
         leftIcon={IconNames.PULSE}
         min={10}
         max={300}
@@ -284,16 +325,16 @@ const MonitoringSettings = () => (
     </FormGroup>
     <FormGroup
       label="Log level"
+      labelFor="log-level"
       helperText="Minimum severity of messages Runtime should log."
     >
-      <Select options={LOG_LEVELS} path="runtime.monitoring.logLevel" />
+      <Select id="log-level" options={LOG_LEVELS} path="runtime.monitoring.logLevel" />
     </FormGroup>
     <Switch path="runtime.monitoring.debug" label="Enable debug mode" />
   </>
 );
 
 // TODO: better validation
-// TODO: manual override of env vars
 export default function RuntimeSettings(props) {
   const deviceNames = useAppSelector((state) => state.settings.runtime.deviceNames);
   return (

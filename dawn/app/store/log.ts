@@ -1,5 +1,6 @@
 import { createAsyncThunk, createEntityAdapter, createSlice } from '@reduxjs/toolkit';
-import { LogLevel, LogOpenCondition, SettingsState } from './settings';
+import { LogLevel, LogOpenCondition } from './settings';
+import type { RootState } from '.';
 
 interface LogEventPayload {
   timestamp: string;
@@ -14,9 +15,6 @@ export interface LogEvent {
   payload: LogEventPayload;
 }
 
-const isError = (level: LogLevel) =>
-  level === LogLevel.ERROR || level === LogLevel.CRITICAL;
-
 const logEventAdapter = createEntityAdapter<LogEvent>({
   selectId: (event) => event.payload.timestamp,
   sortComparer: (a, b) =>
@@ -27,27 +25,25 @@ export const logEventSelectors = logEventAdapter.getSelectors();
 
 const initialState = logEventAdapter.getInitialState({ open: false });
 
-export const copy = createAsyncThunk<
-  void,
-  void,
-  { state: { log: typeof initialState } }
->('log/copy', async (arg, thunkAPI) => {
-  const events = logEventSelectors.selectAll(thunkAPI.getState().log);
-  const text = events.map((event) => JSON.stringify(event)).join('\n');
-  await navigator.clipboard.writeText(text);
-});
+export const copy = createAsyncThunk<void, void, { state: RootState }>(
+  'log/copy',
+  async (arg, thunkAPI) => {
+    const events = logEventSelectors.selectAll(thunkAPI.getState().log);
+    const text = events.map((event) => JSON.stringify(event.payload)).join('\n');
+    await navigator.clipboard.writeText(text);
+  }
+);
 
 export const append = createAsyncThunk<
-  { maxEvents: number; payload: LogEventPayload; open: boolean },
-  LogEventPayload,
-  { state: { settings: SettingsState; log: typeof initialState } }
+  { maxEvents: number; payload: LogEventPayload; open: boolean; error: boolean },
+  LogEventPayload & { [key: string]: any },
+  { state: RootState }
 >('log/append', async (payload, thunkAPI) => {
   const state = thunkAPI.getState();
   const { maxEvents, openCondition } = state.settings.log;
-  const open =
-    state.log.open ||
-    (isError(payload.level) && openCondition === LogOpenCondition.ERROR);
-  return { maxEvents, payload, open };
+  const error = payload.level === LogLevel.ERROR || payload.level === LogLevel.CRITICAL;
+  const open = state.log.open || (error && openCondition === LogOpenCondition.ERROR);
+  return { maxEvents, payload, open, error };
 });
 
 export default createSlice({

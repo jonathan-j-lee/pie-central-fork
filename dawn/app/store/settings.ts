@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import * as _ from 'lodash';
+import type { RootState } from '.';
 
 export enum EditorTheme {
   LIGHT = 'light',
@@ -26,6 +27,7 @@ export const BAUD_RATES = [
 ];
 
 interface EditorSettingsState {
+  filePath: null | string;
   editorTheme: EditorTheme;
   syntaxTheme: string;
   fontSize: number;
@@ -106,8 +108,9 @@ const slice = createSlice({
   name: 'settings',
   initialState: {
     editor: {
-      editorTheme: EditorTheme.DARK,
-      syntaxTheme: 'solarized_dark',
+      filePath: null,
+      editorTheme: EditorTheme.LIGHT,
+      syntaxTheme: 'tomorrow',
       fontSize: 13,
       tabSize: 4,
       encoding: 'utf8',
@@ -202,13 +205,12 @@ const slice = createSlice({
 
 export default slice;
 
-export const save = createAsyncThunk<
-  void,
-  void,
-  { state: { settings: SettingsState } }
->('settings/save', async (arg, thunkAPI) => {
-  await window.ipc.invoke('save-settings', thunkAPI.getState().settings);
-});
+export const save = createAsyncThunk<void, void, { state: RootState }>(
+  'settings/save',
+  async (arg, thunkAPI) => {
+    await window.ipc.invoke('save-settings', thunkAPI.getState().settings);
+  }
+);
 
 export const load = createAsyncThunk('settings/load', async (arg, thunkAPI) => {
   const settings = await window.ipc.invoke('load-settings');

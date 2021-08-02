@@ -196,6 +196,7 @@ export const Switch = makeSettingInput((props) => (
     className={props.className}
     checked={props.value}
     onChange={() => props.update(!props.value)}
+    aria-label={props.label}
     {...(props.tooltip
       ? {
           labelElement: (
@@ -222,6 +223,7 @@ export const EntityTable = makeSettingInput((props) => {
   return (
     <>
       <BlueprintTable
+        id={props.id}
         striped={props.striped ?? true}
         className={`entity-table ${props.className ?? ''}`}
       >

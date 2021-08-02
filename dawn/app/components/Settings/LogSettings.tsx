@@ -10,17 +10,29 @@ const LOG_OPEN_CONDITIONS = [
   { id: LogOpenCondition.NEVER, display: 'Never' },
 ];
 
+// TODO: add log level filtering
 export default function LogSettings(props) {
   return (
     <>
       <FormGroup
         label="Max lines"
+        labelFor="max-lines"
         helperText="The number of lines to truncate the console output to."
       >
-        <NumericInput path="log.maxEvents" min={0} max={1000} majorStepSize={20} />
+        <NumericInput
+          id="max-lines"
+          path="log.maxEvents"
+          min={0}
+          max={1000}
+          majorStepSize={20}
+        />
       </FormGroup>
-      <FormGroup label="Open console automatically ...">
-        <Select path="log.openCondition" options={LOG_OPEN_CONDITIONS} />
+      <FormGroup label="Open console automatically ..." labelFor="open-condition">
+        <Select
+          id="open-condition"
+          path="log.openCondition"
+          options={LOG_OPEN_CONDITIONS}
+        />
       </FormGroup>
       <FormGroup label="Visibility Options">
         <Switch

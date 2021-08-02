@@ -137,7 +137,8 @@ export default function Log() {
         onClick={() =>
           dispatch(
             settingsSlice.actions.update({
-              log: { pinToBottom: !settings.pinToBottom },
+              path: 'log.pinToBottom',
+              value: !settings.pinToBottom,
             })
           )
         }

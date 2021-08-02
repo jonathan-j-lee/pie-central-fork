@@ -228,7 +228,7 @@ function createWindow() {
           if (err) {
             logger.error({ err }, 'Error receiving log event');
           } else {
-            window.webContents.send('append-event', err, event);
+            window.webContents.send('append-event', event);
           }
         },
         { host: settings.runtime.host }

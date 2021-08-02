@@ -51,18 +51,21 @@ export default function EditorSettings(props) {
       </FormGroup>
       <FormGroup
         label="Syntax Theme"
+        labelFor="syntax-theme"
         helperText="The editor's syntax highlighting style."
       >
-        <Select options={SYNTAX_THEMES} path="editor.syntaxTheme" />
+        <Select id="syntax-theme" options={SYNTAX_THEMES} path="editor.syntaxTheme" />
       </FormGroup>
       <FormGroup
         label="Font Size"
+        labelFor="font-size"
         helperText={`
           The editor's font size.
           Use the 'View' menu in the toolbar to adjust the size of all UI elements.
         `}
       >
         <NumericInput
+          id="font-size"
           path="editor.fontSize"
           leftIcon={IconNames.ZOOM_IN}
           min={10}
@@ -72,12 +75,14 @@ export default function EditorSettings(props) {
       </FormGroup>
       <FormGroup
         label="Tab Size"
+        labelFor="tab-size"
         helperText={`
           The number of spaces each tab keypress should render as.
           By convention, standard Python code should use four spaces per indent.
         `}
       >
         <NumericInput
+          id="tab-size"
           path="editor.tabSize"
           leftIcon={IconNames.KEY_TAB}
           min={1}
@@ -87,12 +92,13 @@ export default function EditorSettings(props) {
       </FormGroup>
       <FormGroup
         label="File Encoding"
+        labelFor="encoding"
         helperText={`
           The encoding used to open and save files.
           We recommend using UTF-8, which is nearly universal on modern platforms.
         `}
       >
-        <Select options={FILE_ENCODINGS} path="editor.encoding" />
+        <Select id="encoding" options={FILE_ENCODINGS} path="editor.encoding" />
       </FormGroup>
       <FormGroup label="Editor Features">
         <Switch label="Enable syntax highlighting" path="editor.syntaxHighlighting" />

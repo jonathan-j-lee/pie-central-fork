@@ -95,6 +95,7 @@ export default function RuntimeStatusCard() {
               </ul>
             </>
           )}
+          {runtime.error && <p>Check the console for messages.</p>}
         </div>
         <Spinner
           size={40}

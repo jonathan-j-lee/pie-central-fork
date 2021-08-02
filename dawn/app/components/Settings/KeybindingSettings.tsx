@@ -32,18 +32,18 @@ export const COMMANDS = [
     failure: 'Failed to save file to the selected path.',
   },
   {
-    command: 'downloadFile',
-    label: 'Download',
-    group: 'File',
-    success: 'Downloaded code from the robot.',
-    failure: 'Failed to download code from the robot.',
-  },
-  {
     command: 'uploadFile',
     label: 'Upload',
     group: 'File',
     success: 'Uploaded code to the robot.',
     failure: 'Failed to upload code to the robot.',
+  },
+  {
+    command: 'downloadFile',
+    label: 'Download',
+    group: 'File',
+    success: 'Downloaded code from the robot.',
+    failure: 'Failed to download code from the robot.',
   },
   { command: 'cutText', label: 'Cut', group: 'Edit' },
   { command: 'copyText', label: 'Copy', group: 'Edit' },
@@ -121,11 +121,11 @@ export default function KeybindingSettings(props) {
                 <EditableText
                   monospace
                   path={`keybindings.${command}.${props.platform ?? 'win'}`}
-                  placeholder="Example: Ctrl+Shift+P"
+                  placeholder="Example: ctrl+shift+p"
                   validate={async (combo) => {
                     const parts = combo.replace(/\s/g, '').toLowerCase().split('+');
                     if (parts.some((part) => !part)) {
-                      throw new Error('Invalid hotkey configuration.');
+                      throw new Error('Invalid keybinding.');
                     }
                     return combo;
                   }}

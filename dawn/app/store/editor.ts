@@ -1,7 +1,8 @@
 import { createAsyncThunk, createSlice, isAnyOf } from '@reduxjs/toolkit';
 import { Editor } from 'ace-builds/src-min/ace';
 import { Store } from 'redux';
-import { SettingsState } from './settings';
+import settingsSlice from './settings';
+import type { RootState } from '.';
 
 const NEWLINE = '\n';
 
@@ -13,7 +14,6 @@ interface EditorAnnotation {
 }
 
 export interface EditorState {
-  filePath: null | string;
   dirty: boolean;
   prompt: boolean;
   confirmed: boolean;
@@ -23,7 +23,7 @@ export interface EditorState {
 export const prompt = createAsyncThunk<
   void,
   void,
-  { extra: { store: Store }; state: { editor: EditorState } }
+  { extra: { store: Store }; state: RootState }
 >('editor/prompt', async (arg, thunkAPI) => {
   return await new Promise((resolve, reject) => {
     const unsubscribe = thunkAPI.extra.store.subscribe(() => {
@@ -43,7 +43,7 @@ export const prompt = createAsyncThunk<
 export const create = createAsyncThunk<
   { filePath: null },
   { editor?: Editor },
-  { state: { editor: EditorState } }
+  { state: RootState }
 >('editor/create', async ({ editor }, thunkAPI) => {
   const state = thunkAPI.getState();
   if (state.editor.dirty) {
@@ -52,13 +52,19 @@ export const create = createAsyncThunk<
   if (editor) {
     editor.setValue('');
   }
+  thunkAPI.dispatch(
+    settingsSlice.actions.update({
+      path: 'editor.filePath',
+      value: null,
+    })
+  );
   return { filePath: null };
 });
 
 export const open = createAsyncThunk<
   { filePath: string; contents: string },
   { filePath?: string; editor?: Editor },
-  { state: { editor: EditorState; settings: SettingsState } }
+  { state: RootState }
 >('editor/open', async ({ filePath, editor }, thunkAPI) => {
   const state = thunkAPI.getState();
   if (state.editor.dirty) {
@@ -74,6 +80,12 @@ export const open = createAsyncThunk<
   );
   if (editor) {
     editor.setValue(contents);
+    thunkAPI.dispatch(
+      settingsSlice.actions.update({
+        path: 'editor.filePath',
+        value: filePath,
+      })
+    );
   }
   return { filePath, contents };
 });
@@ -81,10 +93,10 @@ export const open = createAsyncThunk<
 export const save = createAsyncThunk<
   { filePath: string },
   { editor?: Editor; forcePrompt?: boolean },
-  { state: { editor: EditorState; settings: SettingsState } }
+  { state: RootState }
 >('editor/save', async ({ editor, forcePrompt }, thunkAPI) => {
   const state = thunkAPI.getState();
-  let filePath = state.editor.filePath;
+  let filePath = state.settings.editor.filePath;
   if (!filePath || forcePrompt) {
     filePath = await window.ipc.invoke('save-file-prompt');
   }
@@ -107,6 +119,12 @@ export const save = createAsyncThunk<
       filePath,
       contents,
       state.settings.editor.encoding
+    );
+    thunkAPI.dispatch(
+      settingsSlice.actions.update({
+        path: 'editor.filePath',
+        value: filePath,
+      })
     );
   }
   return { filePath };
@@ -131,7 +149,7 @@ export const lint = createAsyncThunk('editor/lint', async () => {
   }));
 });
 
-export const exit = createAsyncThunk<void, string, { state: { editor: EditorState } }>(
+export const exit = createAsyncThunk<void, string, { state: RootState }>(
   'editor/refresh',
   async (replyChannel, thunkAPI) => {
     try {
@@ -168,8 +186,7 @@ export default createSlice({
       }))
       .addMatcher(
         isAnyOf(create.fulfilled, open.fulfilled, save.fulfilled),
-        (state, action) => {
-          state.filePath = action.payload.filePath;
+        (state) => {
           state.dirty = false;
         }
       );
