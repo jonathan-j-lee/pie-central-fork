@@ -1,5 +1,7 @@
 import * as React from 'react';
-import ace from 'ace-builds/src-min/ace';
+import { Ace } from 'ace-builds/ace';
+// @ts-ignore
+import ace from 'ace-builds/src-min-noconflict/ace';
 import {
   act,
   fireEvent,
@@ -23,11 +25,11 @@ const openSettings = jest.fn();
 const closeSettings = jest.fn();
 
 beforeEach(() => {
-  const TestEditor = (props) => {
-    const [editor, setEditor] = React.useState(null);
+  const TestEditor = () => {
+    const [editor, setEditor] = React.useState<Ace.Editor | undefined>();
     return (
       <>
-        <KeybindingMapper editor={editor} mode={Mode.TELEOP}>
+        <KeybindingMapper editor={editor} mode={Mode.TELEOP} platform="win">
           <div id="app">
             <Toolbar
               editor={editor}

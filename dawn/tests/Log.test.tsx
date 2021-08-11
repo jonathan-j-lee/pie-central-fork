@@ -65,7 +65,7 @@ describe('log event', () => {
     fireEvent.click(await screen.findByText(/show context/i));
     const [node] = await screen.findAllByText((content, element) => {
       try {
-        return _.isEqual(JSON.parse(element.textContent), {
+        return _.isEqual(JSON.parse(element?.textContent ?? '{}'), {
           process: 'device',
           pid: 133298,
         });

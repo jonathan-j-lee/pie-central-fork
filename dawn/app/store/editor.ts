@@ -1,8 +1,8 @@
 import { createAsyncThunk, createSlice, isAnyOf } from '@reduxjs/toolkit';
-import { Editor } from 'ace-builds/src-min/ace';
+import { Ace } from 'ace-builds/ace';
 import { Store } from 'redux';
 import settingsSlice from './settings';
-import type { RootState } from '.';
+import type { AppDispatch, RootState } from '.';
 
 const NEWLINE = '\n';
 
@@ -20,15 +20,22 @@ export interface EditorState {
   annotations: Array<EditorAnnotation>;
 }
 
+const PROMPT_TIMEOUT = 60000;
+
 export const prompt = createAsyncThunk<
   void,
   void,
-  { extra: { store: Store }; state: RootState }
+  { extra: { store?: Store }; state: RootState; dispatch: AppDispatch }
 >('editor/prompt', async (arg, thunkAPI) => {
-  return await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
+    if (!thunkAPI.extra.store) {
+      reject(new Error('store not provided'));
+      return;
+    }
     const unsubscribe = thunkAPI.extra.store.subscribe(() => {
       const { prompt, confirmed } = thunkAPI.getState().editor;
       if (!prompt) {
+        clearTimeout(timeout);
         unsubscribe();
         if (confirmed) {
           resolve();
@@ -37,13 +44,17 @@ export const prompt = createAsyncThunk<
         }
       }
     });
+    const timeout = setTimeout(() => {
+      unsubscribe();
+      reject(new Error('timed out waiting for user confirmation'));
+    }, PROMPT_TIMEOUT);
   });
 });
 
 export const create = createAsyncThunk<
   { filePath: null },
-  { editor?: Editor },
-  { state: RootState }
+  { editor?: Ace.Editor },
+  { state: RootState; dispatch: AppDispatch }
 >('editor/create', async ({ editor }, thunkAPI) => {
   const state = thunkAPI.getState();
   if (state.editor.dirty) {
@@ -63,8 +74,8 @@ export const create = createAsyncThunk<
 
 export const open = createAsyncThunk<
   { filePath: string; contents: string },
-  { filePath?: string; editor?: Editor },
-  { state: RootState }
+  { filePath?: string; editor?: Ace.Editor },
+  { state: RootState; dispatch: AppDispatch }
 >('editor/open', async ({ filePath, editor }, thunkAPI) => {
   const state = thunkAPI.getState();
   if (state.editor.dirty) {
@@ -92,7 +103,7 @@ export const open = createAsyncThunk<
 
 export const save = createAsyncThunk<
   { filePath: string },
-  { editor?: Editor; forcePrompt?: boolean },
+  { editor?: Ace.Editor; forcePrompt?: boolean },
   { state: RootState }
 >('editor/save', async ({ editor, forcePrompt }, thunkAPI) => {
   const state = thunkAPI.getState();
@@ -103,7 +114,7 @@ export const save = createAsyncThunk<
   if (editor) {
     let contents = editor.getValue();
     if (state.settings.editor.trimWhitespace) {
-      const lines = contents.split(NEWLINE);
+      const lines: Array<string> = contents.split(NEWLINE);
       contents = lines.map((line) => line.replace(/\s+$/g, '')).join(NEWLINE);
     }
     if (
@@ -130,7 +141,17 @@ export const save = createAsyncThunk<
   return { filePath };
 });
 
-const getSeverity = (msgType) => {
+type LintMessageType = 'convention' | 'refactor' | 'warning' | 'error' | 'fatal';
+interface LintMessage {
+  type: LintMessageType;
+  line: number;
+  column: number;
+  message: string;
+  symbol: string;
+  'message-id': string;
+}
+
+const getSeverity = (msgType: LintMessageType) => {
   if (msgType === 'error' || msgType === 'fatal') {
     return 'error';
   } else if (msgType === 'warning') {
@@ -141,27 +162,28 @@ const getSeverity = (msgType) => {
 
 export const lint = createAsyncThunk('editor/lint', async () => {
   const messages = await window.ipc.invoke('request', 'broker-service', 'lint');
-  return messages.map(({ line, column, ...message }) => ({
-    row: line - 1,
-    column,
+  return messages.map((message: LintMessage) => ({
+    row: message.line - 1,
+    column: message.column,
     type: getSeverity(message.type),
     text: `${message.message} (${message.symbol}, ${message['message-id']})`,
   }));
 });
 
-export const exit = createAsyncThunk<void, string, { state: RootState }>(
-  'editor/refresh',
-  async (replyChannel, thunkAPI) => {
-    try {
-      const state = thunkAPI.getState();
-      if (state.editor.dirty) {
-        await thunkAPI.dispatch(prompt()).unwrap();
-      }
-    } finally {
-      window.ipc.send(replyChannel);
+export const exit = createAsyncThunk<
+  void,
+  string,
+  { state: RootState; dispatch: AppDispatch }
+>('editor/exit', async (replyChannel, thunkAPI) => {
+  try {
+    const state = thunkAPI.getState();
+    if (state.editor.dirty) {
+      await thunkAPI.dispatch(prompt()).unwrap();
     }
+  } finally {
+    window.ipc.send(replyChannel);
   }
-);
+});
 
 export default createSlice({
   name: 'editor',

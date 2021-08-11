@@ -1,5 +1,3 @@
-'use strict';
-
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as bunyan from 'bunyan';
@@ -90,71 +88,69 @@ ipcMain.on('send-control', (event, gamepads) => {
   client.sendControl(gamepads);
 });
 
-ipcMain.handle('exec', (event, config, ...commands) =>
-  commands
-    .reduce(
-      (connection, { command, options }) =>
-        connection
-          .then((responses) =>
-            Promise.all([responses, ssh.execCommand(command, options)])
-          )
-          .then(([responses, response]) => {
-            if (response.code) {
-              throw new Error(response.stderr);
-            }
-            logger.info(
-              { command, username: config.username, host: config.host },
-              'Executed command on remote machine'
-            );
-            return responses.concat([response]);
-          }),
-      ssh.connect(config).then(() => [])
-    )
-    .catch((err) => {
-      logger.error({ err, commands, username: config.username, host: config.host });
-      throw err;
-    })
-    .finally(() => ssh.dispose())
-);
-
-ipcMain.handle('open-file-prompt', () =>
-  dialog
-    .showOpenDialog({ title: 'Open Student Code', filters: FILE_FILTERS })
-    .then(({ canceled, filePaths: [filePath] }) => {
-      if (canceled || !filePath) {
-        throw new Error('file not selected');
+ipcMain.handle('exec', async (event, config, ...commands) => {
+  const connection = await ssh.connect(config);
+  try {
+    const results = [];
+    for (const { command, options } of commands) {
+      const response = await ssh.execCommand(command, options);
+      if (response.code) {
+        throw new Error(response.stderr);
       }
-      return filePath;
-    })
-);
+      logger.info(
+        { command, username: config.username, host: config.host },
+        'Executed command on remote machine'
+      );
+      results.push(response);
+    }
+    return results;
+  } catch (err) {
+    logger.error(
+      { err, commands, username: config.username, host: config.host },
+      'Failed to execute commands on remote machine'
+    );
+    throw err;
+  } finally {
+    ssh.dispose();
+  }
+});
 
-ipcMain.handle('open-file', (event, filePath, encoding) =>
-  fs.readFile(filePath, { encoding }).then((contents) => {
-    logger.info({ filePath, encoding }, 'Opened file');
-    return contents;
-  })
-);
+ipcMain.handle('open-file-prompt', async () => {
+  const {
+    canceled,
+    filePaths: [filePath],
+  } = await dialog.showOpenDialog({
+    title: 'Open Student Code',
+    filters: FILE_FILTERS,
+  });
+  if (canceled || !filePath) {
+    throw new Error('file not selected');
+  }
+  return filePath;
+});
 
-ipcMain.handle('save-file-prompt', () =>
-  dialog
-    .showSaveDialog({
-      title: 'Save Student Code',
-      filters: FILE_FILTERS,
-      properties: ['showOverwriteConfirmation'],
-    })
-    .then(({ canceled, filePath }) => {
-      if (canceled || !filePath) {
-        throw new Error('file not selected');
-      }
-      return filePath;
-    })
-);
+ipcMain.handle('open-file', async (event, filePath, encoding) => {
+  const contents = await fs.readFile(filePath, { encoding });
+  logger.info({ filePath, encoding }, 'Opened file');
+  return contents;
+});
 
-ipcMain.handle('save-file', (event, filePath, contents, encoding) =>
-  fs.writeFile(filePath, contents, { encoding }).then(() => {
-    logger.info({ filePath, encoding }, 'Saved file');
-  })
-);
+ipcMain.handle('save-file-prompt', async () => {
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    title: 'Save Student Code',
+    filters: FILE_FILTERS,
+    properties: ['showOverwriteConfirmation'],
+  });
+  if (canceled || !filePath) {
+    throw new Error('file not selected');
+  }
+  return filePath;
+});
+
+ipcMain.handle('save-file', async (event, filePath, contents, encoding) => {
+  await fs.writeFile(filePath, contents, { encoding });
+  logger.info({ filePath, encoding }, 'Saved file');
+});
 
 ipcMain.on('quit', (event) => {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -165,13 +161,13 @@ ipcMain.on('quit', (event) => {
 
 ipcMain.on('reload', (event) => {
   const window = BrowserWindow.getFocusedWindow();
-  window.reload();
+  window?.reload();
   logger.info('Reloaded window');
 });
 
 ipcMain.on('force-reload', (event) => {
   const window = BrowserWindow.getFocusedWindow();
-  window.webContents.reloadIgnoringCache();
+  window?.webContents.reloadIgnoringCache();
   logger.info('Force reloaded window');
 });
 

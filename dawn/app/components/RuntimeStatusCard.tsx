@@ -1,12 +1,13 @@
 import * as React from 'react';
-import { Colors, Callout, Intent, Spinner, Tag } from '@blueprintjs/core';
+import { Colors, Callout, IconName, Intent, Spinner, Tag } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAppDispatch, useAppSelector } from '../hooks';
 import { EditorTheme } from '../store/settings';
 import { Alliance, Mode, ConnectionStatus, updateRate } from '../store/runtime';
 
 function ModeTag(props: { mode: Mode }) {
-  let modeName, modeIcon;
+  let modeName;
+  let modeIcon: IconName;
   switch (props.mode) {
     case Mode.AUTO:
       modeName = 'Autonomous';
@@ -27,9 +28,10 @@ function ModeTag(props: { mode: Mode }) {
   );
 }
 
-function AllianceTag(props: { alliance: Alliance }) {
+function AllianceTag(props: { alliance: Alliance | null }) {
   const editorTheme = useAppSelector((state) => state.settings.editor.editorTheme);
-  let allianceName, allianceColor;
+  let allianceName;
+  let allianceColor: string | undefined;
   switch (props.alliance) {
     case Alliance.BLUE:
       allianceName = 'Blue';
@@ -41,7 +43,6 @@ function AllianceTag(props: { alliance: Alliance }) {
       break;
     default:
       allianceName = 'No Alliance';
-      allianceColor = null;
   }
   return (
     <Tag
@@ -99,7 +100,7 @@ export default function RuntimeStatusCard() {
         </div>
         <Spinner
           size={40}
-          value={connected ? runtime.relUpdateRate : null}
+          value={connected ? runtime.relUpdateRate : undefined}
           intent={intent}
         />
       </div>

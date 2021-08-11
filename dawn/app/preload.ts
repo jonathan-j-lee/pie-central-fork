@@ -1,8 +1,19 @@
-'use strict';
-
 import * as path from 'path';
 import { contextBridge, ipcRenderer } from 'electron';
 import * as shellEscape from 'shell-escape';
+import { SSHExecCommandOptions } from 'node-ssh';
+
+export interface SSHConfig {
+  host: string;
+  username: string;
+  password: string;
+  privateKey: string;
+}
+
+export interface SSHCommand {
+  command: string;
+  options?: SSHExecCommandOptions;
+}
 
 const MAIN_SYNC_CHANNELS = [
   'request',
@@ -24,23 +35,23 @@ const MAIN_ASYNC_CHANNELS = [
 const RENDERER_CHANNELS = ['update-devices', 'append-event', 'exit'];
 
 contextBridge.exposeInMainWorld('ipc', {
-  on(channel, handler) {
+  on(channel: string, handler: (...args: any) => void) {
     if (RENDERER_CHANNELS.includes(channel)) {
       ipcRenderer.on(channel, (event, ...args) => handler(...args));
     }
   },
-  removeListeners(channel) {
+  removeListeners(channel: string) {
     if (RENDERER_CHANNELS.includes(channel)) {
       ipcRenderer.removeAllListeners(channel);
     }
   },
-  invoke(channel, ...args) {
+  invoke(channel: string, ...args: any) {
     if (MAIN_SYNC_CHANNELS.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args);
     }
     return Promise.reject(new Error(`invalid channel: ${channel}`));
   },
-  send(channel, ...args) {
+  send(channel: string, ...args: any) {
     if (MAIN_ASYNC_CHANNELS.includes(channel)) {
       ipcRenderer.send(channel, ...args);
     }
@@ -48,15 +59,16 @@ contextBridge.exposeInMainWorld('ipc', {
 });
 
 contextBridge.exposeInMainWorld('ssh', {
-  upload: (config, remotePath, contents) =>
-    ipcRenderer.invoke(
-      'exec',
-      config,
+  upload: async (config: SSHConfig, remotePath: string, contents: string) => {
+    const commands = [
       { command: `mkdir -p ${shellEscape([path.dirname(remotePath)])}` },
-      { command: `cat > ${shellEscape([remotePath])}`, options: { stdin: contents } }
-    ),
-  download: (config, remotePath) =>
-    ipcRenderer
-      .invoke('exec', config, { command: `cat ${shellEscape([remotePath])}` })
-      .then(([response]) => response.stdout),
+      { command: `cat > ${shellEscape([remotePath])}`, options: { stdin: contents } },
+    ];
+    return await ipcRenderer.invoke('exec', config, ...commands);
+  },
+  download: async (config: SSHConfig, remotePath: string) => {
+    const command = { command: `cat ${shellEscape([remotePath])}` };
+    const [response] = await ipcRenderer.invoke('exec', config, command);
+    return response.stdout;
+  },
 });

@@ -1,6 +1,14 @@
 import * as React from 'react';
 import * as _ from 'lodash';
-import { Callout, EditableText, FormGroup, Intent, Tab, Tabs } from '@blueprintjs/core';
+import {
+  Callout,
+  EditableText,
+  FormGroup,
+  IconName,
+  Intent,
+  Tab,
+  Tabs,
+} from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import {
   EntityTable,
@@ -208,7 +216,6 @@ const PerformanceSettings = () => (
       <Select
         id="baud-rate"
         options={BAUD_RATES.map((baudRate) => ({ id: baudRate, display: baudRate }))}
-        validate={async (value) => Number(value)}
         path="runtime.perf.baudRate"
       />
     </FormGroup>
@@ -218,7 +225,7 @@ const PerformanceSettings = () => (
 const portInputOptions = {
   min: 1,
   max: 65535,
-  leftIcon: IconNames.FLOW_END,
+  leftIcon: IconNames.FLOW_END as IconName,
   majorStepSize: 10,
 };
 
@@ -335,7 +342,7 @@ const MonitoringSettings = () => (
 );
 
 // TODO: better validation
-export default function RuntimeSettings(props) {
+export default function RuntimeSettings() {
   const deviceNames = useAppSelector((state) => state.settings.runtime.deviceNames);
   return (
     <>

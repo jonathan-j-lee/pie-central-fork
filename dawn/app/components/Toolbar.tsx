@@ -7,16 +7,18 @@ import {
   Dialog,
   H3,
   HTMLSelect,
+  IconName,
   Intent,
   Popover,
   Menu,
   Navbar,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { Editor } from 'ace-builds/src-min/ace';
+import { Ace } from 'ace-builds/ace';
 import { useAppSelector } from '../hooks';
 import { COMMANDS } from './Settings/KeybindingSettings';
 import Tour, { TOUR_IDLE_STEP } from './Tour';
+import { platform } from './Util';
 import { Mode } from '../store/runtime';
 import { SettingsState } from '../store/settings';
 
@@ -33,20 +35,22 @@ declare const DAWN_PKG_INFO: DawnPackageInfo;
 
 type Keybindings = SettingsState['keybindings'];
 
-const selectCommand = (editor: Editor, keybindings: Keybindings, name: string) => {
+const selectCommand = (
+  editor: Ace.Editor | undefined,
+  keybindings: Keybindings,
+  name: string
+) => {
   const { label } = COMMANDS.find(({ command }) => command === name) ?? {};
   const keybinding = keybindings[name] ?? {};
   return {
     text: label,
-    label: (keybinding[editor?.commands.platform] ?? '')
-      .replaceAll('+', ' + ')
-      .replaceAll('-', ' - '),
+    label: keybinding[platform].replace(/\s*[+\-]\s*/g, (match, sign) => ` + `),
     onClick: () => editor?.execCommand(name),
   };
 };
 
 interface MenuProps {
-  editor?: Editor;
+  editor?: Ace.Editor;
   keybindings: Keybindings;
 }
 
@@ -113,7 +117,8 @@ const EditMenu = (props: MenuProps) => (
 
 const LogMenu = (props: MenuProps) => {
   const isOpen = useAppSelector((state) => state.log.open);
-  let icon, label;
+  let icon: IconName;
+  let label;
   if (isOpen) {
     icon = IconNames.MENU_CLOSED;
     label = 'Close';
@@ -189,7 +194,7 @@ function AboutDialog(props: AboutDialogProps) {
       title="About"
       transitionDuration={100}
       onClose={() => props.hide()}
-      portalContainer={document.getElementById('app')}
+      portalContainer={document.getElementById('app') ?? undefined}
     >
       <div className={Classes.DIALOG_BODY}>
         <H3>Dawn</H3>
@@ -212,11 +217,11 @@ function AboutDialog(props: AboutDialogProps) {
 }
 
 interface ToolbarProps {
-  editor?: Editor;
+  editor?: Ace.Editor;
   openSettings: () => void;
   closeSettings: () => void;
   mode: Mode;
-  setMode: (Mode) => void;
+  setMode: (mode: Mode) => void;
 }
 
 export default function Toolbar(props: ToolbarProps) {
@@ -268,7 +273,7 @@ export default function Toolbar(props: ToolbarProps) {
           <HTMLSelect
             id="mode-menu"
             value={props.mode}
-            onChange={(event) => props.setMode(event.currentTarget.value)}
+            onChange={(event) => props.setMode(event.currentTarget.value as Mode)}
           >
             <option value={Mode.AUTO}>Autonomous</option>
             <option value={Mode.TELEOP}>Teleop</option>

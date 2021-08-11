@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useHotkeys } from '@blueprintjs/core';
-import { Editor } from 'ace-builds/src-min/ace';
+import { Ace } from 'ace-builds/ace';
 import { useAppDispatch, useAppSelector } from '../hooks';
 import { create, open, save, lint } from '../store/editor';
 import logSlice, { copy } from '../store/log';
@@ -11,46 +11,51 @@ import { notify } from './Util';
 
 interface KeybindingMapperProps {
   mode: Mode;
-  editor?: Editor;
+  editor?: Ace.Editor;
   children: React.ReactNode;
+  platform: 'win' | 'mac';
+}
+
+interface CommandHandlers {
+  [command: string]: (editor: Ace.Editor) => any;
 }
 
 export default function KeybindingMapper(props: KeybindingMapperProps) {
   const dispatch = useAppDispatch();
   const keybindings = useAppSelector((state) => state.settings.keybindings);
   // TODO: don't write settings if the file path does not change.
-  const commandHandlers = React.useMemo(
+  const commandHandlers: CommandHandlers = React.useMemo(
     () => ({
-      async newFile(editor) {
+      async newFile(editor: Ace.Editor) {
         await dispatch(create({ editor })).unwrap();
         await dispatch(saveSettings()).unwrap();
       },
-      async openFile(editor) {
+      async openFile(editor: Ace.Editor) {
         await dispatch(open({ editor })).unwrap();
         await dispatch(saveSettings()).unwrap();
       },
-      async saveFile(editor) {
+      async saveFile(editor: Ace.Editor) {
         await dispatch(save({ editor })).unwrap();
         await dispatch(saveSettings()).unwrap();
       },
-      async saveFileAs(editor) {
+      async saveFileAs(editor: Ace.Editor) {
         await dispatch(save({ editor, forcePrompt: true })).unwrap();
         await dispatch(saveSettings()).unwrap();
       },
-      async downloadFile(editor) {
+      async downloadFile(editor: Ace.Editor) {
         await dispatch(download({ editor })).unwrap();
       },
-      async uploadFile(editor) {
+      async uploadFile(editor: Ace.Editor) {
         await dispatch(upload({ editor })).unwrap();
       },
-      async cutText(editor) {
+      async cutText(editor: Ace.Editor) {
         await navigator.clipboard.writeText(editor.getCopyText());
         editor.execCommand('cut');
       },
-      async copyText(editor) {
+      async copyText(editor: Ace.Editor) {
         await navigator.clipboard.writeText(editor.getCopyText());
       },
-      async pasteText(editor) {
+      async pasteText(editor: Ace.Editor) {
         editor.insert(await navigator.clipboard.readText());
       },
       async start() {
@@ -71,7 +76,7 @@ export default function KeybindingMapper(props: KeybindingMapperProps) {
       async clearConsole() {
         dispatch(logSlice.actions.clear());
       },
-      async lint(editor) {
+      async lint(editor: Ace.Editor) {
         await dispatch(upload({ editor })).unwrap();
         await dispatch(lint()).unwrap();
       },
@@ -85,10 +90,13 @@ export default function KeybindingMapper(props: KeybindingMapperProps) {
   React.useEffect(() => {
     const commandManager = props.editor?.commands;
     if (commandManager) {
-      const commands = COMMANDS.map(({ command, success, failure }) => ({
-        name: command,
-        bindKey: keybindings[command],
-        exec: (editor) => notify(commandHandlers[command](editor), success, failure),
+      const commands = COMMANDS.map(({ command: name, success, failure }) => ({
+        name,
+        bindKey: keybindings[name],
+        exec: (editor: Ace.Editor) => {
+          const command = commandHandlers[name];
+          notify(command ? command(editor) : Promise.reject(), success, failure);
+        },
       }));
       commands.forEach((command) => commandManager.addCommand(command));
       return () => {
@@ -98,10 +106,9 @@ export default function KeybindingMapper(props: KeybindingMapperProps) {
   }, [props.editor, commandHandlers, keybindings]);
 
   const hotkeys = React.useMemo(() => {
-    const platform = props.editor?.commands.platform;
     return COMMANDS.map((command) => ({
       ...command,
-      combo: (keybindings[command.command] ?? {})[platform],
+      combo: (keybindings[command.command] ?? {})[props.platform],
     }))
       .filter(({ combo }) => combo)
       .map(({ combo, command, group, label }) => ({

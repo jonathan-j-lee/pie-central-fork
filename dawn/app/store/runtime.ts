@@ -1,10 +1,10 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
-import { Editor } from 'ace-builds/src-min/ace';
+import { Ace } from 'ace-builds/ace';
 import { prompt } from './editor';
 import log, { append } from './log';
 import peripherals from './peripherals';
 import { LogOpenCondition } from './settings';
-import type { RootState } from '.';
+import type { RootState, AppDispatch } from '.';
 
 export enum Mode {
   AUTO = 'auto',
@@ -42,8 +42,8 @@ export interface RuntimeState {
 
 export const download = createAsyncThunk<
   { contents: string },
-  { editor?: Editor },
-  { state: RootState }
+  { editor?: Ace.Editor },
+  { state: RootState; dispatch: AppDispatch }
 >('runtime/download', async ({ editor }, thunkAPI) => {
   const state = thunkAPI.getState();
   if (state.editor.dirty) {
@@ -56,17 +56,18 @@ export const download = createAsyncThunk<
   return { contents };
 });
 
-export const upload = createAsyncThunk<void, { editor?: Editor }, { state: RootState }>(
-  'runtime/upload',
-  async ({ editor }, thunkAPI) => {
-    const settings = thunkAPI.getState().settings.runtime;
-    const config = { host: settings.host, ...settings.credentials };
-    if (editor) {
-      const contents = editor.getValue();
-      await window.ssh.upload(config, settings.admin.remotePath, contents);
-    }
+export const upload = createAsyncThunk<
+  void,
+  { editor?: Ace.Editor },
+  { state: RootState }
+>('runtime/upload', async ({ editor }, thunkAPI) => {
+  const settings = thunkAPI.getState().settings.runtime;
+  const config = { host: settings.host, ...settings.credentials };
+  if (editor) {
+    const contents = editor.getValue();
+    await window.ssh.upload(config, settings.admin.remotePath, contents);
   }
-);
+});
 
 export const changeMode = createAsyncThunk<{ mode?: Mode }, Mode, { state: RootState }>(
   'runtime/start',
@@ -148,7 +149,7 @@ const slice = createSlice({
       .addCase(append.fulfilled, (state, action) => {
         state.error = action.payload.error;
       })
-      .addCase(peripherals.actions.update, (state, action) => {
+      .addCase(peripherals.actions.update, (state: RuntimeState, action) => {
         if (!action.payload.disconnect && action.payload.type !== 'gamepad') {
           state.updates.push(action.payload.timestamp);
         }

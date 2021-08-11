@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { Ace } from 'ace-builds/ace';
 import { FocusStyleManager } from '@blueprintjs/core';
 
 import { useAppDispatch } from '../hooks';
@@ -12,11 +13,12 @@ import Log from './Log';
 import Editor from './Editor';
 import KeybindingMapper from './KeybindingMapper';
 import OverwriteDialog from './OverwriteDialog';
-import Peripherals from './Peripherals';
+import PeripheralList from './PeripheralList';
 import RuntimeStatusCard from './RuntimeStatusCard';
 import Settings from './Settings';
 import ThemeProvider from './ThemeProvider';
 import Toolbar from './Toolbar';
+import { platform } from './Util';
 
 const INITIALIZE_DELAY = 100;
 
@@ -24,8 +26,9 @@ FocusStyleManager.onlyShowFocusOnTabs();
 
 export default function App() {
   const dispatch = useAppDispatch();
-  const [editor, setEditor] = React.useState(null);
+  const [editor, setEditor] = React.useState<Ace.Editor | undefined>();
   // TODO: do not overwrite Electron hotkeys
+  // TODO: add gamepads
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const closeSettings = () => setSettingsOpen(false);
   const [mode, setMode] = React.useState(Mode.AUTO);
@@ -51,7 +54,7 @@ export default function App() {
   }, [editor]);
   return (
     <ThemeProvider>
-      <KeybindingMapper editor={editor} mode={mode}>
+      <KeybindingMapper editor={editor} mode={mode} platform={platform}>
         <div id="app">
           <Toolbar
             editor={editor}
@@ -67,14 +70,10 @@ export default function App() {
             </div>
             <div id="runtime-pane">
               <RuntimeStatusCard />
-              <Peripherals />
+              <PeripheralList />
             </div>
           </main>
-          <Settings
-            isOpen={settingsOpen}
-            close={closeSettings}
-            platform={editor?.commands.platform}
-          />
+          <Settings isOpen={settingsOpen} close={closeSettings} platform={platform} />
           <OverwriteDialog editor={editor} />
         </div>
       </KeybindingMapper>

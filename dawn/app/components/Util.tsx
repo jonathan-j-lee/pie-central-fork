@@ -4,7 +4,9 @@ import { IconNames } from '@blueprintjs/icons';
 
 const toaster = Toaster.create({ position: Position.TOP_RIGHT });
 
-export const notify = (promise, success, failure) =>
+export const platform = /mac/i.test(navigator.platform) ? 'mac' : 'win';
+
+export const notify = (promise: Promise<any>, success?: string, failure?: string) =>
   promise
     .then(() => {
       if (success) {
@@ -25,25 +27,18 @@ export const notify = (promise, success, failure) =>
       }
     });
 
-type ClickCallback = (event: React.MouseEvent<HTMLButtonElement>) => Promise<void>;
+type ClickCallback = (event: React.MouseEvent<HTMLElement>) => Promise<void>;
 
 export const OutcomeButton = (props: { onClick: ClickCallback }) => {
   const [loading, setLoading] = React.useState(false);
-  const extra = {
-    loading,
-    onClick: (event) => {
-      setLoading(true);
-      props.onClick(event).finally(() => setLoading(false));
-    },
-  };
-  return <Button {...props} {...extra} />;
+  return (
+    <Button
+      {...props}
+      loading={loading}
+      onClick={(event) => {
+        setLoading(true);
+        props.onClick(event).finally(() => setLoading(false));
+      }}
+    />
+  );
 };
-
-export const DeviceName = (props) => (
-  <EditableText
-    alwaysRenderInput
-    placeholder="Assign a name"
-    maxLength={32}
-    {...props}
-  />
-);

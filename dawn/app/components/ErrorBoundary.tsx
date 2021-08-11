@@ -4,12 +4,12 @@ import { Button, H1, H2, Intent, Pre } from '@blueprintjs/core';
 import store from '../store';
 
 export default class ErrorBoundary extends React.Component<{}, { err: null | Error }> {
-  constructor(props) {
+  constructor(props: {}) {
     super(props);
     this.state = { err: null };
   }
 
-  static getDerivedStateFromError(err) {
+  static getDerivedStateFromError(err: Error) {
     return { err };
   }
 

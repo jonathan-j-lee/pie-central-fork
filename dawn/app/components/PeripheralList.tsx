@@ -5,8 +5,10 @@ import {
   Card,
   Collapse,
   Colors,
+  EditableText,
   H4,
   Icon,
+  IconName,
   Intent,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -17,12 +19,21 @@ import { useAppDispatch, useAppSelector } from '../hooks';
 import { Peripheral, peripheralSelectors, updateDevices } from '../store/peripherals';
 import { ConnectionStatus } from '../store/runtime';
 import { EditorTheme } from '../store/settings';
-import { DeviceName } from './Util';
 
 defaults.font.family = 'monospace';
 
+interface PeripheralLabel {
+  name: string;
+  icon: IconName;
+}
+
+const DEFAULT_LABEL: PeripheralLabel = {
+  icon: IconNames.HELP,
+  name: 'Unknown device',
+};
+
 // TODO: pull catalog and parameters from Runtime
-const CATALOG = {
+const CATALOG: { [typeId: number]: PeripheralLabel } = {
   0: { name: 'Limit Switch', icon: IconNames.SWITCH },
   1: { name: 'Line Follower', icon: IconNames.FLASH },
   2: { name: 'Potentiometer', icon: IconNames.DOUGHNUT_CHART },
@@ -36,26 +47,12 @@ const CATALOG = {
   13: { name: 'KoalaBear (Motor)', icon: IconNames.COG },
 };
 
-const makeMask = (bits) => (BigInt(1) << BigInt(bits)) - BigInt(1);
+const makeMask = (bits: number) => (BigInt(1) << BigInt(bits)) - BigInt(1);
 const DEVICE_MASK = makeMask(16);
-const getDeviceId = (uid) => Number((BigInt(uid) >> BigInt(72)) & DEVICE_MASK);
-
-function* makePeripheralList(peripherals) {
-  for (const peripheral of peripheralSelectors.selectAll(peripherals)) {
-    if (peripheral.type === 'smart-device') {
-      yield {
-        icon: IconNames.HELP,
-        name: 'Unknown device',
-        uid: peripheral.uid,
-        params: peripheral.params,
-        ...CATALOG[getDeviceId(peripheral.uid)],
-      };
-    }
-  }
-}
+const getDeviceId = (uid: string) => Number((BigInt(uid) >> BigInt(72)) & DEVICE_MASK);
 
 interface StyledPlotProps {
-  innerRef: React.RefObject<HTMLElement>;
+  innerRef: React.RefObject<Chart>;
   param: string;
   color: string;
 }
@@ -88,7 +85,7 @@ const StyledPlot = ({ innerRef, param, color, ...props }: StyledPlotProps) => {
             max: 0,
             ticks: {
               stepSize: 1,
-              callback: (value) => `${value}s`,
+              callback: (value: number) => `${value}s`,
               ...tickColors,
             },
           },
@@ -111,7 +108,7 @@ interface ParameterPlotProps {
 
 function ParameterPlot({ param, data, editorTheme }: ParameterPlotProps) {
   const color = editorTheme === EditorTheme.DARK ? Colors.GRAY4 : Colors.GRAY2;
-  const ref = React.useRef();
+  const ref = React.useRef<Chart | null>(null);
   const chart: Chart | null = ref.current;
   if (chart) {
     const [dataset] = chart.data.datasets;
@@ -172,19 +169,19 @@ const Placeholder = () => (
   </Callout>
 );
 
-// TODO: rename to PeripheralList
-export default function Peripherals() {
+const isSmartDevice = (peripheral: Peripheral) => peripheral.type === 'smart-device';
+
+export default function PeripheralList() {
   const dispatch = useAppDispatch();
   const editorTheme = useAppSelector((state) => state.settings.editor.editorTheme);
-  const peripherals = useAppSelector((state) => state.peripherals);
+  const peripherals = peripheralSelectors.selectAll(
+    useAppSelector((state) => state.peripherals)
+  );
   const status = useAppSelector((state) => state.runtime.status);
-  const peripheralList = Array.from(makePeripheralList(peripherals));
-  const [showParams, setShowParams] = React.useState({});
+  const [showParams, setShowParams] = React.useState<{ [uid: string]: boolean }>({});
   // FIXME: https://redux.js.org/style-guide/style-guide#put-as-much-logic-as-possible-in-reducers
   React.useEffect(() => {
-    const deviceCount = peripheralSelectors
-      .selectAll(peripherals)
-      .filter((peripheral) => peripheral.type === 'smart-device').length;
+    const deviceCount = peripherals.filter(isSmartDevice).length;
     if (deviceCount > 0 && status === ConnectionStatus.DISCONNECTED) {
       dispatch(updateDevices({}, { disconnect: true }));
       setShowParams({});
@@ -192,34 +189,57 @@ export default function Peripherals() {
   }, [dispatch, setShowParams, peripherals, status]);
   return (
     <div className="peripheral-list">
-      {peripheralList.length === 0 && <Placeholder />}
-      {peripheralList.map((peripheral, index) => (
-        <Card key={index} className="sep">
-          <p className="dev-type">
-            <Icon icon={peripheral.icon} className="dev-icon" />
-            {peripheral.name}
-          </p>
-          <Button
-            className="dev-show-param"
-            small
-            outlined
-            text="Show Parameters"
-            onClick={() =>
-              setShowParams({
-                ...showParams,
-                [peripheral.uid]: !showParams[peripheral.uid],
-              })
-            }
-          />
-          <div className="dev-id">
-            <DeviceName className="dev-name" />
-            <code className="dev-uid">{peripheral.uid}</code>
-          </div>
-          <Collapse isOpen={showParams[peripheral.uid]} className="sep">
-            <ParameterList params={peripheral.params} editorTheme={editorTheme} />
-          </Collapse>
-        </Card>
-      ))}
+      {peripherals.length === 0 && <Placeholder />}
+      {peripherals
+        .map((peripheral): Peripheral & PeripheralLabel => {
+          switch (peripheral.type) {
+            case 'smart-device':
+              return {
+                ...DEFAULT_LABEL,
+                ...peripheral,
+                ...CATALOG[getDeviceId(peripheral.uid)],
+              };
+            default:
+              return {
+                ...DEFAULT_LABEL,
+                ...peripheral,
+              };
+          }
+        })
+        .map((peripheral, index) => (
+          <Card key={index} className="sep">
+            <p className="dev-type">
+              <Icon icon={peripheral.icon} className="dev-icon" />
+              {peripheral.name}
+            </p>
+            <Button
+              className="dev-show-param"
+              small
+              outlined
+              text="Show Parameters"
+              onClick={() =>
+                setShowParams({
+                  ...showParams,
+                  [peripheral.uid]: !showParams[peripheral.uid],
+                })
+              }
+            />
+            <div className="dev-id">
+              <EditableText
+                alwaysRenderInput
+                className="monospace"
+                maxLength={32}
+                defaultValue={''}
+                onConfirm={(value) => null}
+                placeholder="Assign a name"
+              />
+              <code className="dev-uid">{peripheral.uid}</code>
+            </div>
+            <Collapse isOpen={showParams[peripheral.uid]} className="sep">
+              <ParameterList params={peripheral.params} editorTheme={editorTheme} />
+            </Collapse>
+          </Card>
+        ))}
     </div>
   );
 }

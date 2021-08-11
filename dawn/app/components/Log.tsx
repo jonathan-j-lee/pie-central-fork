@@ -11,7 +11,7 @@ const NOT_CONTEXT_FIELDS = ['timestamp', 'exception', 'event', 'level'];
 
 const LogLevelTag = (props: { level: LogLevel }) => {
   let shortLevel = props.level.toLowerCase();
-  let intent = null;
+  let intent: Intent | undefined;
   let icon: IconName = IconNames.PULSE;
   switch (shortLevel) {
     case LogLevel.INFO:
@@ -98,11 +98,11 @@ export default function Log() {
   const editorTheme = useAppSelector((state) => state.settings.editor.editorTheme);
   const log = useAppSelector((state) => state.log);
   const settings = useAppSelector((state) => state.settings.log);
-  const bottom = React.useRef<HTMLDivElement>();
+  const bottom = React.useRef<HTMLDivElement>(null);
   const timestamps = logEventSelectors.selectIds(log);
   React.useEffect(() => {
-    for (const theme in EditorTheme) {
-      const stylesheetId = `highlight-${EditorTheme[theme]}`;
+    for (const theme of Object.values(EditorTheme)) {
+      const stylesheetId = `highlight-${theme}`;
       const stylesheet = document.getElementById(stylesheetId) as HTMLLinkElement;
       if (stylesheet) {
         stylesheet.disabled = true;

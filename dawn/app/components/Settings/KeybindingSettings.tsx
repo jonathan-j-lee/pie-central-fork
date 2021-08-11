@@ -94,12 +94,12 @@ export const COMMANDS = [
   },
 ];
 
-export default function KeybindingSettings(props) {
+export default function KeybindingSettings(props: { platform: 'win' | 'mac' }) {
   return (
     <>
       <p>
         Each shortcut should be a list of keys separated by the <kbd>+</kbd> character.
-        For example: <code>Ctrl+Shift+Alt+Backspace</code>.
+        For example: <code>ctrl+shift+alt+backspace</code>.
       </p>
       <p>
         You can view your keyboard shortcuts by pressing <kbd>?</kbd>.
@@ -120,11 +120,11 @@ export default function KeybindingSettings(props) {
               <td>
                 <EditableText
                   monospace
-                  path={`keybindings.${command}.${props.platform ?? 'win'}`}
+                  path={`keybindings.${command}.${props.platform}`}
                   placeholder="Example: ctrl+shift+p"
-                  validate={async (combo) => {
+                  validate={(combo: string) => {
                     const parts = combo.replace(/\s/g, '').toLowerCase().split('+');
-                    if (parts.some((part) => !part)) {
+                    if (parts.some((part: string) => !part)) {
                       throw new Error('Invalid keybinding.');
                     }
                     return combo;

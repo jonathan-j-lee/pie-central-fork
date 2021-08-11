@@ -43,7 +43,7 @@ const FILE_ENCODINGS = [
   { id: 'latin1', display: 'Latin-1' },
 ];
 
-export default function EditorSettings(props) {
+export default function EditorSettings() {
   return (
     <>
       <FormGroup label="Editor Theme" helperText="The style of the UI elements.">

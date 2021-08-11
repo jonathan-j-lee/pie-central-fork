@@ -1,6 +1,7 @@
 import * as React from 'react';
-import Joyride, { ACTIONS, EVENTS, STATUS } from 'react-joyride';
+import Joyride, { CallBackProps, ACTIONS, EVENTS, STATUS } from 'react-joyride';
 import { Colors } from '@blueprintjs/core';
+import { AppDispatch } from '../store';
 import logSlice from '../store/log';
 import { EditorTheme } from '../store/settings';
 import { useAppDispatch, useAppSelector } from '../hooks';
@@ -112,7 +113,16 @@ const TOUR_STEPS = [
   },
 ];
 
-function handleTransition(transition, { dispatch, openSettings, closeSettings }) {
+interface TransitionCallbacks {
+  dispatch: AppDispatch;
+  openSettings: () => void;
+  closeSettings: () => void;
+}
+
+function handleTransition(
+  transition: CallBackProps,
+  { dispatch, openSettings, closeSettings }: TransitionCallbacks,
+) {
   const nextStep = TOUR_STEPS[transition.index + 1] ?? { target: null };
   let delay = 0;
   if (nextStep.target === '#ip-addr') {
@@ -128,11 +138,11 @@ function handleTransition(transition, { dispatch, openSettings, closeSettings })
     dispatch(logSlice.actions.close());
   }
   if ([transition.step?.target, nextStep.target].includes('#file-menu')) {
-    document.getElementById('file-btn').click();
+    document.getElementById('file-btn')?.click();
     delay = 200;
   }
   if ([transition.step?.target, nextStep.target].includes('#log-menu')) {
-    document.getElementById('log-btn').click();
+    document.getElementById('log-btn')?.click();
     delay = 200;
   }
   return delay;
@@ -140,7 +150,7 @@ function handleTransition(transition, { dispatch, openSettings, closeSettings })
 
 interface TourProps {
   stepIndex: number;
-  setStepIndex: (number) => void;
+  setStepIndex: (number: number) => void;
   openSettings: () => void;
   closeSettings: () => void;
 }

@@ -1,20 +1,40 @@
-import { createEntityAdapter, createSlice } from '@reduxjs/toolkit';
+import { createEntityAdapter, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import * as _ from 'lodash';
 
 const MAX_VALUES = 50;
 
+type PeripheralType = 'gamepad' | 'smart-device';
+
 export interface Peripheral {
-  uid: number;
-  type: 'gamepad' | 'smart-device';
+  uid: string;
+  type: PeripheralType;
   params: { [name: string]: Array<[number, any]> };
 }
 
-const selectId = ({ type, uid }) => `${type}-${uid}`;
+interface PeripheralUpdate {
+  type: PeripheralType;
+  timestamp: number;
+  params: {
+    [uid: string]: {
+      [param: string]: any;
+    };
+  };
+  disconnect?: boolean;
+}
+
+const selectId = ({ type, uid }: { type: PeripheralType; uid: string }) =>
+  `${type}-${uid}`;
+
+const compareUid = (a: string, b: string) => {
+  const uidA = BigInt(a);
+  const uidB = BigInt(b);
+  return uidA < uidB ? -1 : uidA > uidB ? 1 : 0;
+};
 
 const peripheralAdapter = createEntityAdapter<Peripheral>({
   selectId,
   sortComparer: (a, b) =>
-    a.type === b.type ? a.uid - b.uid : a.type.localeCompare(b.type),
+    a.type === b.type ? compareUid(a.uid, b.uid) : a.type.localeCompare(b.type),
 });
 
 export const peripheralSelectors = peripheralAdapter.getSelectors();
@@ -23,15 +43,15 @@ const slice = createSlice({
   name: 'peripherals',
   initialState: peripheralAdapter.getInitialState(),
   reducers: {
-    update(state, action) {
-      const { type, timestamp, update } = action.payload;
+    update(state, action: PayloadAction<PeripheralUpdate>) {
+      const { type, timestamp, params } = action.payload;
       const expiredUids = new Set(
         peripheralSelectors
           .selectAll(state)
           .filter((peripheral) => peripheral.type === type)
           .map((peripheral) => selectId(peripheral))
       );
-      for (const [uid, values] of _.toPairs(update)) {
+      for (const [uid, values] of _.toPairs(params)) {
         const id = selectId({ type, uid });
         const params = { ...peripheralSelectors.selectById(state, id)?.params };
         for (const [param, value] of _.toPairs(values)) {
@@ -48,12 +68,12 @@ const slice = createSlice({
 });
 
 export default slice;
-export const updateDevices = (update, other = {}) =>
+export const updateDevices = (params: PeripheralUpdate['params'], other = {}) =>
   slice.actions.update({
     type: 'smart-device',
     timestamp: Date.now(),
-    update,
+    params,
     ...other,
   });
-export const updateGamepads = (update, other = {}) =>
-  slice.actions.update({ type: 'gamepad', timestamp: Date.now(), update, ...other });
+export const updateGamepads = (params: PeripheralUpdate['params'], other = {}) =>
+  slice.actions.update({ type: 'gamepad', timestamp: Date.now(), params, ...other });

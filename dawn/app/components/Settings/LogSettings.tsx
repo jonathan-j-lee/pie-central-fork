@@ -11,7 +11,7 @@ const LOG_OPEN_CONDITIONS = [
 ];
 
 // TODO: add log level filtering
-export default function LogSettings(props) {
+export default function LogSettings() {
   return (
     <>
       <FormGroup

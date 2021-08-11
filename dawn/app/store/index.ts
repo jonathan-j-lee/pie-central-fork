@@ -1,6 +1,6 @@
 import { createAsyncThunk, configureStore } from '@reduxjs/toolkit';
 import { Store } from 'redux';
-import { Editor } from 'ace-builds/src-min/ace';
+import { Ace } from 'ace-builds/ace';
 
 import editor, { open } from './editor';
 import log from './log';
@@ -36,7 +36,7 @@ export type AppDispatch = typeof store.dispatch;
 
 export const initializeSettings = createAsyncThunk<
   void,
-  { editor?: Editor },
+  { editor?: Ace.Editor },
   { state: RootState }
 >('settings/init', async ({ editor }, thunkAPI) => {
   await thunkAPI.dispatch(load()).unwrap();

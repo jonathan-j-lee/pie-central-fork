@@ -4,7 +4,7 @@ import { Classes, Tooltip } from '@blueprintjs/core';
 import { useAppSelector, useAppDispatch } from '../hooks';
 import editorSlice from '../store/editor';
 
-import { Editor as EditorBackend } from 'ace-builds/src-min/ace';
+import { Ace } from 'ace-builds/ace';
 import ace from 'ace-builds/src-noconflict/ace';
 import 'ace-builds/src-noconflict/mode-python';
 import 'ace-builds/src-noconflict/ext-language_tools'; // For autocompletion
@@ -84,8 +84,8 @@ const EditorStatus = (props: EditorStatusProps) => (
 
 interface EditorProps {
   name?: string;
-  editor?: EditorBackend;
-  setEditor: (EditorBackend) => void;
+  editor?: Ace.Editor;
+  setEditor: (editor: Ace.Editor | undefined) => void;
 }
 
 // TODO: pull API from robot and add symbols to autocomplete. Create help page.
@@ -103,14 +103,14 @@ export default function Editor(props: EditorProps) {
         ref={(node) => {
           const editor = node?.editor;
           if (editor) {
-            ace.config.loadModule('ace/ext/keybinding_menu', (module) => {
+            ace.config.loadModule('ace/ext/keybinding_menu', (module: any) => {
               module.init(editor);
             });
           }
           props.setEditor(editor);
         }}
         name={props.name ?? 'editor'}
-        mode={settings.syntaxHighlighting ? 'python' : null}
+        mode={settings.syntaxHighlighting ? 'python' : undefined}
         theme={settings.syntaxTheme}
         width="100%"
         height="100%"

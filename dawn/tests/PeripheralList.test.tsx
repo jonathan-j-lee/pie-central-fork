@@ -1,9 +1,9 @@
 import * as React from 'react';
 import { fireEvent, render, screen, dispatchDevUpdate } from './test-utils';
-import Peripherals from '../app/components/Peripherals';
+import PeripheralList from '../app/components/PeripheralList';
 
 beforeEach(() => {
-  render(<Peripherals />);
+  render(<PeripheralList />);
 });
 
 it('shows a placeholder when there are no devices', async () => {

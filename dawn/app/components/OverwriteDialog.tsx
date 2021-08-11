@@ -1,12 +1,12 @@
 import * as React from 'react';
 import { Button, Classes, Dialog, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { Editor } from 'ace-builds/src-min/ace';
+import { Ace } from 'ace-builds/ace';
 import { useAppDispatch, useAppSelector } from '../hooks';
 import editorSlice, { save } from '../store/editor';
 
 // TODO: select only necessary state
-export default function OverwriteDialog(props: { editor?: Editor }) {
+export default function OverwriteDialog(props: { editor?: Ace.Editor }) {
   const dispatch = useAppDispatch();
   const prompt = useAppSelector((state) => state.editor.prompt);
   return (
@@ -35,11 +35,10 @@ export default function OverwriteDialog(props: { editor?: Editor }) {
             intent={Intent.PRIMARY}
             icon={IconNames.IMPORT}
             text="Save"
-            onClick={() =>
-              dispatch(save({ editor: props.editor }))
-                .unwrap()
-                .then(() => dispatch(editorSlice.actions.confirm()))
-            }
+            onClick={async () => {
+              await dispatch(save({ editor: props.editor })).unwrap();
+              dispatch(editorSlice.actions.confirm());
+            }}
           />
         </div>
       </div>

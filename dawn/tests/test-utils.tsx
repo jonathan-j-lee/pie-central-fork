@@ -26,7 +26,15 @@ declare global {
   author: 'Pioneers in Engineering',
 };
 
-function render(ui, { storeOptions = {}, renderOptions = {} } = {}) {
+export type TextMatch =
+  | RegExp
+  | string
+  | ((content: string, element: Element | null) => boolean);
+
+function render(
+  ui: React.ReactElement<any>,
+  { storeOptions = {}, renderOptions = {} } = {}
+) {
   window.ipc = {
     on: jest.fn(),
     removeListeners: jest.fn(),
@@ -58,19 +66,19 @@ function render(ui, { storeOptions = {}, renderOptions = {} } = {}) {
     writable: true,
   });
   window.HTMLElement.prototype.scrollIntoView = jest.fn();
-  function Wrapper({ children }) {
+  function Wrapper({ children }: { children?: React.ReactNode }) {
     return <Provider store={window.store}>{children}</Provider>;
   }
   return rtlRender(ui, { wrapper: Wrapper, ...renderOptions });
 }
 
-const updateSetting = (path, value) =>
+const updateSetting = (path: string, value: any) =>
   window.store.dispatch(settingsSlice.actions.update({ path, value }));
 
 const log = _.chain(LogLevel)
   .map((level) => [
     level,
-    (event, context) =>
+    (event: string, context: { timestamp: string; [key: string]: any }) =>
       window.store.dispatch(
         append({
           level,
@@ -89,5 +97,5 @@ const dispatchDevUpdate = (update = {}, other = {}, timestamp = 0) => {
 
 export * from '@testing-library/react';
 export { render, log, dispatchDevUpdate, updateSetting };
-export const delay = (timeout) =>
+export const delay = (timeout: number) =>
   new Promise((resolve) => setTimeout(resolve, timeout));

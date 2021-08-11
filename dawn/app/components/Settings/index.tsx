@@ -12,8 +12,14 @@ import LogSettings from './LogSettings';
 import RuntimeSettings from './RuntimeSettings';
 import { notify } from '../Util';
 
+interface SettingsProps {
+  isOpen: boolean;
+  close: () => void;
+  platform: 'win' | 'mac';
+}
+
 // TODO: text/UI size
-export default function Settings(props) {
+export default function Settings(props: SettingsProps) {
   const store = useStore();
   const dispatch = useAppDispatch();
   const [prevSettings, setPrevSettings] = React.useState({});

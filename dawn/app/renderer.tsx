@@ -1,5 +1,3 @@
-'use strict';
-
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import { Provider } from 'react-redux';
@@ -8,27 +6,24 @@ import App from './components/App';
 import ErrorBoundary from './components/ErrorBoundary';
 import store from './store';
 import './assets/custom.scss';
-import { SSHExecCommandOptions, SSHExecCommandResponse } from 'node-ssh';
-
-interface SSHConfig {
-  host: string;
-  username: string;
-  password: string;
-  privateKey: string;
-}
-
-interface Command {
-  command: string;
-  options?: SSHExecCommandOptions;
-}
+import { SSHConfig, SSHCommand } from './preload';
 
 declare global {
   interface Window {
     ipc: {
-      on(channel: string, handler: (...args: any[]) => any);
-      removeListeners(channel: string);
+      on(channel: string, handler: (...args: any[]) => any): void;
+      removeListeners(channel: string): void;
+      invoke(channel: 'open-file-prompt' | 'save-file-prompt'): Promise<string>;
+      invoke(
+        channel: 'request',
+        address: string,
+        method: string,
+        ...args: any
+      ): Promise<any>;
+      // FIXME
+      // invoke(channel: 'exec', config: SSHConfig, ...commands: SSHCommand):
       invoke(channel: string, ...args: any[]): Promise<any>;
-      send(channel: string, ...args: any[]);
+      send(channel: string, ...args: any[]): void;
     };
     ssh: {
       upload(config: SSHConfig, path: string, contents: string): Promise<void>;

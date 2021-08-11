@@ -22,8 +22,23 @@ export enum LogOpenCondition {
 }
 
 export const BAUD_RATES = [
-  50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600, 19200, 38400,
-  57600, 115200,
+  '50',
+  '75',
+  '110',
+  '134',
+  '150',
+  '200',
+  '300',
+  '600',
+  '1200',
+  '1800',
+  '2400',
+  '4800',
+  '9600',
+  '19200',
+  '38400',
+  '57600',
+  '115200',
 ];
 
 interface EditorSettingsState {
@@ -76,7 +91,7 @@ interface RuntimeSettingsState {
     controlInterval: number;
     setupTimeout: number;
     mainInterval: number;
-    baudRate: 115200;
+    baudRate: typeof BAUD_RATES[number];
   };
   addressing: {
     multicastGroup: '224.1.1.1';
@@ -155,7 +170,7 @@ const slice = createSlice({
         controlInterval: 0.05,
         setupTimeout: 1,
         mainInterval: 0.05,
-        baudRate: 115200,
+        baudRate: '115200',
       },
       addressing: {
         multicastGroup: '224.1.1.1',

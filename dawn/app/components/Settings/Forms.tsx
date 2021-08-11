@@ -6,6 +6,7 @@ import {
   Classes,
   EditableText as BlueprintEditableText,
   FormGroup,
+  IconName,
   Intent,
   HTMLSelect as BlueprintSelect,
   HTMLTable as BlueprintTable,
@@ -22,20 +23,32 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAppDispatch, useAppSelector } from '../../hooks';
 import settingsSlice from '../../store/settings';
 
-function makeSettingInput(Input) {
-  return (props) => {
+interface InputOuterProps<S> {
+  path: string;
+  validate?: (newValue: S) => S;
+}
+
+interface InputInnerProps<S> {
+  value: S;
+  update: (newValue: S) => void;
+}
+
+function makeSettingInput<S, P extends InputOuterProps<S>>(
+  Input: React.FC<P & InputInnerProps<S>>
+): React.FC<P> {
+  return (props: P) => {
+    const [error, setError] = React.useState<Error | null>(null);
     const dispatch = useAppDispatch();
-    const setting = useAppSelector((state) => _.get(state.settings, props.path));
-    const [error, setError] = React.useState(null);
-    const validate = props.validate ?? ((value) => Promise.resolve(value));
+    const setting: S = useAppSelector((state) => _.get(state.settings, props.path));
+    const validate = props.validate ?? ((newValue: S) => newValue);
     return (
       <>
         <Input
           {...props}
           value={setting}
-          update={async (rawValue) => {
+          update={(newValue) => {
             try {
-              const value = await validate(rawValue);
+              const value = validate(newValue);
               dispatch(settingsSlice.actions.update({ path: props.path, value }));
               setError(null);
             } catch (err) {
@@ -45,7 +58,7 @@ function makeSettingInput(Input) {
         />
         {error && (
           <Callout intent={Intent.WARNING} className="sep-small">
-            {error.message}
+            {error?.message ?? 'Invalid input.'}
           </Callout>
         )}
       </>
@@ -53,60 +66,87 @@ function makeSettingInput(Input) {
   };
 }
 
-export const validateNonempty = async (value) => {
+export const validateNonempty = (value: string) => {
   if (!value) {
     throw new Error('Field cannot be empty.');
   }
   return value;
 };
 
-const clamp = (value, min, max) =>
+const clamp = (value: number, min: number | undefined, max: number | undefined) =>
   Math.min(max ?? Infinity, Math.max(min ?? -Infinity, value));
 
-export const EditableText = makeSettingInput((props) => (
-  <BlueprintEditableText
-    alwaysRenderInput
-    className={`${props.className} ${props.monospace ? 'monospace' : ''}`}
-    defaultValue={props.value}
-    onConfirm={(value) => props.update(value)}
-    placeholder={props.placeholder}
-    maxLength={props.maxLength ?? 32}
-  />
+interface BaseTextProps extends InputOuterProps<string> {
+  className?: string;
+  placeholder?: string;
+  monospace?: boolean;
+  spellCheck?: boolean;
+  maxLength?: number;
+}
+
+const addTextProps = (props: BaseTextProps) => ({
+  className: `${props.className ?? ''} ${props.monospace ? 'monospace' : ''}`,
+  placeholder: props.placeholder,
+  maxLength: props.maxLength ?? 32,
+  spellCheck: props.spellCheck ?? false,
+});
+
+interface EditableTextProps extends BaseTextProps {}
+
+export const EditableText = makeSettingInput<string, EditableTextProps>((props) => (
+  <>
+    <BlueprintEditableText
+      alwaysRenderInput
+      defaultValue={props.value}
+      onConfirm={(value) => props.update(value)}
+      {...addTextProps(props)}
+    />
+  </>
 ));
 
-export const TextInput = makeSettingInput((props) => (
+interface TextInputProps extends BaseTextProps {
+  id?: string;
+  type?: string;
+  leftIcon?: IconName;
+  rightElement?: JSX.Element;
+}
+
+export const TextInput = makeSettingInput<string, TextInputProps>((props) => (
   <BlueprintInputGroup
     id={props.id}
-    className={`${props.className} ${props.monospace ? 'monospace' : ''}`}
     type={props.type}
-    defaultValue={props.value}
-    onBlur={(event) => props.update(event.currentTarget.value)}
-    placeholder={props.placeholder}
     leftIcon={props.leftIcon}
     rightElement={props.rightElement}
-    spellCheck={props.spellCheck ?? false}
-    maxLength={props.maxLength ?? 32}
-  />
-));
-
-export const TextArea = makeSettingInput((props) => (
-  <BlueprintTextArea
-    id={props.id}
-    className={`${props.className} ${props.monospace ? 'monospace' : ''}`}
     defaultValue={props.value}
     onBlur={(event) => props.update(event.currentTarget.value)}
-    fill={props.fill ?? true}
-    growVertically={props.growVertically ?? true}
-    small={props.small}
-    placeholder={props.placeholder}
-    spellCheck={props.spellCheck ?? false}
+    {...addTextProps(props)}
   />
 ));
 
-export const PasswordInput = (props) => {
+interface TextAreaProps extends BaseTextProps {
+  id?: string;
+  fill?: boolean;
+  growVertically?: boolean;
+  small?: boolean;
+}
+
+export const TextArea = makeSettingInput<string, TextAreaProps>((props) => (
+  <BlueprintTextArea
+    id={props.id}
+    fill={props.fill ?? true}
+    growVertically={props.growVertically ?? true}
+    small={props.small ?? true}
+    defaultValue={props.value}
+    onBlur={(event) => props.update(event.currentTarget.value)}
+    {...addTextProps(props)}
+  />
+));
+
+export const PasswordInput = (props: TextInputProps) => {
   const [showPassword, setShowPassword] = React.useState(false);
   return (
     <TextInput
+      {...props}
       type={showPassword ? 'text' : 'password'}
       rightElement={
         <Tooltip content={<span>{showPassword ? 'Hide' : 'Show'} password</span>}>
@@ -119,20 +159,30 @@ export const PasswordInput = (props) => {
         </Tooltip>
       }
       leftIcon={IconNames.KEY}
-      {...props}
     />
   );
 };
 
-export const NumericInput = makeSettingInput((props) => (
+interface BaseNumberProps extends InputOuterProps<number> {
+  className?: string;
+  min?: number;
+  max?: number;
+  stepSize?: number;
+}
+
+interface NumericInputProps extends BaseNumberProps {
+  id?: string;
+  placeholder?: string;
+  leftIcon?: IconName;
+  minorStepSize?: number | null;
+  majorStepSize?: number | null;
+  clampValueOnBlur?: boolean;
+}
+
+export const NumericInput = makeSettingInput<number, NumericInputProps>((props) => (
   <BlueprintNumericInput
     id={props.id}
     className={props.className}
-    defaultValue={props.value}
-    onButtonClick={(value) => props.update(value)}
-    onBlur={(event) =>
-      props.update(clamp(Number(event.currentTarget.value), props.min, props.max))
-    }
     placeholder={props.placeholder}
     leftIcon={props.leftIcon}
     min={props.min}
@@ -141,40 +191,19 @@ export const NumericInput = makeSettingInput((props) => (
     stepSize={props.stepSize}
     majorStepSize={props.majorStepSize ?? null}
     clampValueOnBlur={props.clampValueOnBlur ?? true}
+    defaultValue={props.value}
+    onBlur={(event) =>
+      props.update(clamp(Number(event.currentTarget.value), props.min, props.max))
+    }
+    onButtonClick={(value) => props.update(value)}
   />
 ));
 
-export const Radio = makeSettingInput((props) => (
-  <BlueprintRadioGroup
-    className={props.className}
-    inline={props.inline ?? true}
-    selectedValue={props.value}
-    onChange={(event) => props.update(event.currentTarget.value)}
-  >
-    {props.options.map(({ id, display }, index) => (
-      <BlueprintRadio key={index} value={id}>
-        {display}
-      </BlueprintRadio>
-    ))}
-  </BlueprintRadioGroup>
-));
+interface SliderProps extends BaseNumberProps {
+  labelStepSize?: number;
+}
 
-export const Select = makeSettingInput((props) => (
-  <BlueprintSelect
-    id={props.id}
-    className={props.className}
-    value={props.value}
-    onChange={(event) => props.update(event.currentTarget.value)}
-  >
-    {props.options.map(({ id, display }, index) => (
-      <option value={id} key={index}>
-        {display}
-      </option>
-    ))}
-  </BlueprintSelect>
-));
-
-export const Slider = makeSettingInput((props) => {
+export const Slider = makeSettingInput<number, SliderProps>((props) => {
   const [value, setValue] = React.useState(props.value);
   return (
     <BlueprintSlider
@@ -190,7 +219,60 @@ export const Slider = makeSettingInput((props) => {
   );
 });
 
-export const Switch = makeSettingInput((props) => (
+interface BaseSelectProps extends InputOuterProps<string> {
+  className?: string;
+  options: Array<{
+    id: string;
+    display: React.ReactNode;
+  }>;
+}
+
+interface RadioProps extends BaseSelectProps {
+  inline?: boolean;
+}
+
+export const Radio = makeSettingInput<string, RadioProps>((props) => (
+  <BlueprintRadioGroup
+    className={props.className}
+    inline={props.inline ?? true}
+    selectedValue={props.value}
+    onChange={(event) => props.update(event.currentTarget.value)}
+  >
+    {props.options.map(({ id, display }, index) => (
+      <BlueprintRadio key={index} value={id}>
+        {display}
+      </BlueprintRadio>
+    ))}
+  </BlueprintRadioGroup>
+));
+
+interface SelectProps extends BaseSelectProps {
+  id?: string;
+}
+
+export const Select = makeSettingInput<string, SelectProps>((props) => (
+  <BlueprintSelect
+    id={props.id}
+    className={props.className}
+    value={props.value}
+    onChange={(event) => props.update(event.currentTarget.value)}
+  >
+    {props.options.map(({ id, display }, index) => (
+      <option value={id} key={index}>
+        {display}
+      </option>
+    ))}
+  </BlueprintSelect>
+));
+
+interface SwitchProps extends InputOuterProps<boolean> {
+  id?: string;
+  className?: string;
+  label?: string;
+  tooltip?: React.ReactNode;
+}
+
+export const Switch = makeSettingInput<boolean, SwitchProps>((props) => (
   <BlueprintSwitch
     id={props.id}
     className={props.className}
@@ -212,9 +294,23 @@ export const Switch = makeSettingInput((props) => (
   />
 ));
 
-export const EntityTable = makeSettingInput((props) => {
+type Entity = { [id: string]: any };
+type EntityUpdater = (kv: [string, any]) => void;
+interface EntityTableProps extends InputOuterProps<Entity> {
+  id?: string;
+  className?: string;
+  striped?: boolean;
+  headings: Array<string>;
+  default?: [string, any];
+  widths?: Array<number>;
+  render: (kv: [string, any], update: EntityUpdater) => Array<React.ReactNode>;
+  emptyMessage?: string;
+  addLabel?: string;
+}
+
+export const EntityTable = makeSettingInput<Entity, EntityTableProps>((props) => {
   const [rows, setRows] = React.useState(_.toPairs(props.value));
-  const update = (newRows) => {
+  const update = (newRows: Array<[string, any]>) => {
     setRows(newRows);
     props.update(_.fromPairs(newRows));
   };
@@ -243,7 +339,7 @@ export const EntityTable = makeSettingInput((props) => {
         </thead>
         <tbody>
           {rows.length > 0 ? (
-            rows.map((row, rowIndex) => (
+            rows.map((row, rowIndex: number) => (
               <tr key={rowIndex}>
                 <td>
                   <Button
@@ -257,7 +353,7 @@ export const EntityTable = makeSettingInput((props) => {
                 </td>
                 {props
                   .render(row, (newRow) => update(_.set(rows, rowIndex, newRow)))
-                  .map((cell, cellIndex) => (
+                  .map((cell, cellIndex: number) => (
                     <td key={cellIndex}>{cell}</td>
                   ))}
               </tr>
@@ -276,7 +372,7 @@ export const EntityTable = makeSettingInput((props) => {
         intent={Intent.SUCCESS}
         icon={IconNames.ADD}
         text={props.addLabel ?? 'Add item'}
-        onClick={() => setRows([...rows, props.default ?? [null, null]])}
+        onClick={() => setRows([...rows, props.default ?? ['', null]])}
       />
     </>
   );

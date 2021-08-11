@@ -1,12 +1,20 @@
 import * as React from 'react';
-import { act, delay, fireEvent, render, screen, waitForElementToBeRemoved } from './test-utils';
+import {
+  act,
+  delay,
+  fireEvent,
+  render,
+  screen,
+  waitForElementToBeRemoved,
+  TextMatch,
+} from './test-utils';
 import { mocked } from 'ts-jest/utils';
 import Settings from '../app/components/Settings';
 import userEvent from '@testing-library/user-event';
 
 const close = jest.fn();
 
-const fill = (label, content) =>
+const fill = (label: TextMatch, content: string) =>
   userEvent.type(screen.getByLabelText(label), content, { delay: 1 });
 
 beforeEach(() => {
