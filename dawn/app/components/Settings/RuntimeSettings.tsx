@@ -341,6 +341,38 @@ const MonitoringSettings = () => (
   </>
 );
 
+const OtherSettings = () => (
+  <FormGroup
+    label="Other Options"
+    helperText="Other raw Runtime options passed through environment variables."
+  >
+    <EntityTable
+      path="runtime.options"
+      headings={['Option', 'Value']}
+      default={['', '']}
+      addLabel="Add option"
+      emptyMessage="No options"
+      render={([option, value], update) => [
+        <EditableText
+          alwaysRenderInput
+          className="monospace"
+          maxLength={32}
+          defaultValue={option}
+          onConfirm={(text) => update([text, value])}
+          placeholder="Example: log-level"
+        />,
+        <EditableText
+          alwaysRenderInput
+          className="monospace"
+          maxLength={64}
+          defaultValue={value}
+          onConfirm={(text) => update([option, text])}
+        />,
+      ]}
+    />
+  </FormGroup>
+);
+
 // TODO: better validation
 export default function RuntimeSettings() {
   const deviceNames = useAppSelector((state) => state.settings.runtime.deviceNames);
@@ -349,10 +381,11 @@ export default function RuntimeSettings() {
       <FormGroup
         label="Host"
         labelInfo="(required)"
+        labelFor="host"
         helperText="Either an IP address or a domain name for Dawn to connect to."
       >
         <TextInput
-          id="ip-addr"
+          id="host"
           monospace
           path="runtime.host"
           leftIcon={IconNames.IP_ADDRESS}
@@ -372,6 +405,8 @@ export default function RuntimeSettings() {
           path="runtime.deviceNames"
           headings={['Name', 'UID']}
           default={['', '']}
+          addLabel="Add device name"
+          emptyMessage="No device names"
           render={([name, uid], update) => [
             <EditableText
               alwaysRenderInput
@@ -405,34 +440,8 @@ export default function RuntimeSettings() {
         <Tab id="perf" title="Performance" panel={<PerformanceSettings />} />
         <Tab id="address" title="Addresses" panel={<AddressSettings />} />
         <Tab id="monitoring" title="Monitoring" panel={<MonitoringSettings />} />
+        <Tab id="other" title="Other" panel={<OtherSettings />} />
       </Tabs>
-      <FormGroup
-        label="Other Options"
-        helperText="Other raw Runtime options passed through environment variables."
-      >
-        <EntityTable
-          path="runtime.options"
-          headings={['Option', 'Value']}
-          default={['', '']}
-          render={([option, value], update) => [
-            <EditableText
-              alwaysRenderInput
-              className="monospace"
-              maxLength={32}
-              defaultValue={option}
-              onConfirm={(text) => update([text, value])}
-              placeholder="Example: log_level"
-            />,
-            <EditableText
-              alwaysRenderInput
-              className="monospace"
-              maxLength={64}
-              defaultValue={value}
-              onConfirm={(text) => update([option, text])}
-            />,
-          ]}
-        />
-      </FormGroup>
     </>
   );
 }

@@ -93,7 +93,7 @@ const LogEvent = ({ settings, event }: LogEventProps) => (
   </>
 );
 
-export default function Log() {
+export default function Log(props: { transitionDuration?: number }) {
   const dispatch = useAppDispatch();
   const editorTheme = useAppSelector((state) => state.settings.editor.editorTheme);
   const log = useAppSelector((state) => state.log);
@@ -120,7 +120,11 @@ export default function Log() {
     }
   }, [timestamps[timestamps.length - 1]]);
   return (
-    <Collapse isOpen={log.open} className="console-container">
+    <Collapse
+      isOpen={log.open}
+      transitionDuration={props.transitionDuration}
+      className="console-container"
+    >
       <Pre className="console">
         {logEventSelectors
           .selectAll(log)

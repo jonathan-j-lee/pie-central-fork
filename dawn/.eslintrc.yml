@@ -6,6 +6,7 @@ extends:
   - semistandard
   - 'plugin:react/recommended'
   - 'plugin:promise/recommended'
+  - 'plugin:jest/recommended'
   - prettier
 parser: '@typescript-eslint/parser'
 parserOptions:
@@ -16,6 +17,7 @@ parserOptions:
 plugins:
   - react
   - promise
+  - jest
   - '@typescript-eslint'
 rules:
   comma-dangle: ['error', 'only-multiline']

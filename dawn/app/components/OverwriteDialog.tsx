@@ -5,8 +5,13 @@ import { Ace } from 'ace-builds/ace';
 import { useAppDispatch, useAppSelector } from '../hooks';
 import editorSlice, { save } from '../store/editor';
 
+interface OverwriteDialogProps {
+  editor?: Ace.Editor;
+  transitionDuration?: number;
+}
+
 // TODO: select only necessary state
-export default function OverwriteDialog(props: { editor?: Ace.Editor }) {
+export default function OverwriteDialog(props: OverwriteDialogProps) {
   const dispatch = useAppDispatch();
   const prompt = useAppSelector((state) => state.editor.prompt);
   return (
@@ -14,7 +19,7 @@ export default function OverwriteDialog(props: { editor?: Ace.Editor }) {
       isOpen={prompt}
       icon={IconNames.WARNING_SIGN}
       title="Unsaved Changes"
-      transitionDuration={100}
+      transitionDuration={props.transitionDuration}
       onClose={() => dispatch(editorSlice.actions.cancel())}
     >
       <div className={Classes.DIALOG_BODY}>

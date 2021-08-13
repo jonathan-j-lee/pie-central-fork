@@ -44,7 +44,7 @@ const selectCommand = (
   const keybinding = keybindings[name] ?? {};
   return {
     text: label,
-    label: keybinding[platform].replace(/\s*[+\-]\s*/g, (match, sign) => ` + `),
+    label: keybinding[platform].replace(/\s*[+-]\s*/g, () => ` + `),
     onClick: () => editor?.execCommand(name),
   };
 };
@@ -184,6 +184,7 @@ const HelpMenu = (props: HelpMenuProps) => (
 interface AboutDialogProps {
   isOpen: boolean;
   hide: () => void;
+  transitionDuration?: number;
 }
 
 function AboutDialog(props: AboutDialogProps) {
@@ -192,7 +193,7 @@ function AboutDialog(props: AboutDialogProps) {
       isOpen={props.isOpen}
       icon={IconNames.INFO_SIGN}
       title="About"
-      transitionDuration={100}
+      transitionDuration={props.transitionDuration}
       onClose={() => props.hide()}
       portalContainer={document.getElementById('app') ?? undefined}
     >
@@ -222,6 +223,7 @@ interface ToolbarProps {
   closeSettings: () => void;
   mode: Mode;
   setMode: (mode: Mode) => void;
+  transitionDuration?: number;
 }
 
 export default function Toolbar(props: ToolbarProps) {
@@ -241,6 +243,7 @@ export default function Toolbar(props: ToolbarProps) {
         <ButtonGroup>
           <Popover
             content={<FileMenu editor={props.editor} keybindings={keybindings} />}
+            transitionDuration={props.transitionDuration}
           >
             <Button
               id="file-btn"
@@ -251,6 +254,7 @@ export default function Toolbar(props: ToolbarProps) {
           </Popover>
           <Popover
             content={<EditMenu editor={props.editor} keybindings={keybindings} />}
+            transitionDuration={props.transitionDuration}
           >
             <Button
               icon={IconNames.EDIT}
@@ -299,6 +303,7 @@ export default function Toolbar(props: ToolbarProps) {
         <ButtonGroup>
           <Popover
             content={<LogMenu editor={props.editor} keybindings={keybindings} />}
+            transitionDuration={props.transitionDuration}
           >
             <Button
               id="log-btn"
@@ -309,6 +314,7 @@ export default function Toolbar(props: ToolbarProps) {
           </Popover>
           <Popover
             content={<DebugMenu editor={props.editor} keybindings={keybindings} />}
+            transitionDuration={props.transitionDuration}
           >
             <Button
               icon={IconNames.DASHBOARD}
@@ -329,6 +335,7 @@ export default function Toolbar(props: ToolbarProps) {
                 startTour={() => setStepIndex(0)}
               />
             }
+            transitionDuration={props.transitionDuration}
           >
             <Button icon={IconNames.HELP} text="Help" />
           </Popover>

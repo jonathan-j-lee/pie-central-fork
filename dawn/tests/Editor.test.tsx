@@ -1,55 +1,20 @@
 import * as React from 'react';
-import { Ace } from 'ace-builds/ace';
 // @ts-ignore
 import ace from 'ace-builds/src-min-noconflict/ace';
 import {
   act,
-  fireEvent,
-  log,
+  delay,
   render,
   screen,
   updateSetting,
-  waitForElementToBeRemoved,
+  makeCommandTriggers,
+  TestEditor,
 } from './test-utils';
 import { mocked } from 'ts-jest/utils';
 import userEvent from '@testing-library/user-event';
-
-import Editor from '../app/components/Editor';
-import KeybindingMapper from '../app/components/KeybindingMapper';
-import Log from '../app/components/Log';
-import OverwriteDialog from '../app/components/OverwriteDialog';
-import Toolbar from '../app/components/Toolbar';
-import { Mode } from '../app/store/runtime';
-
-const openSettings = jest.fn();
-const closeSettings = jest.fn();
+import { exit } from '../app/store/editor';
 
 beforeEach(() => {
-  const TestEditor = () => {
-    const [editor, setEditor] = React.useState<Ace.Editor | undefined>();
-    return (
-      <>
-        <KeybindingMapper editor={editor} mode={Mode.TELEOP} platform="win">
-          <div id="app">
-            <Toolbar
-              editor={editor}
-              openSettings={openSettings}
-              closeSettings={closeSettings}
-              mode={Mode.TELEOP}
-              setMode={(mode) => null}
-            />
-            <main>
-              <div id="editor-pane">
-                <Editor name="test-editor" editor={editor} setEditor={setEditor} />
-                <Log />
-              </div>
-            </main>
-            <OverwriteDialog editor={editor} />
-          </div>
-        </KeybindingMapper>
-      </>
-    );
-  };
   render(<TestEditor />);
   updateSetting('runtime.host', '192.168.1.1');
   updateSetting('runtime.credentials', {
@@ -60,6 +25,7 @@ beforeEach(() => {
   updateSetting('runtime.admin.remotePath', 'teststudentcode.py');
   updateSetting('runtime.admin.restartCommand', 'systemctl restart runtime.service');
   mocked(window.ipc.invoke).mockImplementation(async (channel, ...args) => {
+    let method;
     switch (channel) {
       case 'load-settings':
         throw new Error('abort load');
@@ -72,15 +38,32 @@ beforeEach(() => {
       case 'save-file':
         return;
       case 'request':
-        const [, method] = args;
+        [, method] = args;
         if (method === 'lint') {
           return [
             {
               line: 1,
-              column: 1,
+              column: 0,
               type: 'error',
               message: 'Lint error',
-              symbol: 'E999',
+              'message-id': 'E999',
+              symbol: 'lint-error',
+            },
+            {
+              line: 1,
+              column: 0,
+              type: 'warning',
+              message: 'Lint warning',
+              'message-id': 'W999',
+              symbol: 'lint-warning',
+            },
+            {
+              line: 1,
+              column: 0,
+              type: 'convention',
+              message: 'Lint message',
+              'message-id': 'C999',
+              symbol: 'lint-message',
             },
           ];
         }
@@ -98,7 +81,7 @@ describe('editor status', () => {
       editor.insert('a');
       editor.remove('left');
     });
-    expect(fileStatus).toHaveTextContent('(Unsaved File)*');
+    expect(fileStatus).toHaveTextContent(/^\(unsaved file\)\*$/i);
   });
 
   it('updates the cursor position', async () => {
@@ -123,46 +106,36 @@ describe('editor status', () => {
     });
     const highlighted = await screen.findByText('(1, 2)');
     expect(highlighted).toBeInTheDocument();
-    await act(async () => editor.find('cd\nef'));
+    await act(async () => {
+      editor.find('cd\nef');
+    });
     expect(highlighted).toHaveTextContent('(2, 5)');
   });
 });
 
-describe.each([
-  [
-    'toolbar',
-    {
-      newFile: () => userEvent.click(screen.getByText(/^new file$/i)),
-      openFile: () => userEvent.click(screen.getByText(/^open file$/i)),
-      saveFile: () => userEvent.click(screen.getByText(/^save file$/i)),
-      saveFileAs: () => userEvent.click(screen.getByText(/^save file as \.\.\.$/i)),
+describe.each(
+  makeCommandTriggers({
+    newFile: { menu: /^File$/, item: /^new file$/i, keybinding: '{ctrl}N' },
+    openFile: { menu: /^File$/, item: /^open file$/i, keybinding: '{ctrl}O' },
+    saveFile: { menu: /^File$/, item: /^save file$/i, keybinding: '{ctrl}S' },
+    saveFileAs: {
+      menu: /^File$/,
+      item: /^save file as \.\.\.$/i,
+      keybinding: '{ctrl}{shift}S',
     },
-  ],
-  [
-    'keybinding',
-    {
-      newFile: () => userEvent.type(screen.getByText(/^\d+\:\d+$/), '{ctrl}N'),
-      openFile: () => userEvent.type(screen.getByText(/^\d+\:\d+$/), '{ctrl}O'),
-      saveFile: () => userEvent.type(screen.getByText(/^\d+\:\d+$/), '{ctrl}S'),
-      saveFileAs: () =>
-        userEvent.type(screen.getByText(/^\d+\:\d+$/), '{ctrl}{shift}S'),
-    },
-  ],
-])('file menu (%s)', (inputMethod, commands) => {
-  beforeEach(async () => {
-    userEvent.click(await screen.findByRole('button', { name: /file/i }));
-  });
-
+  })
+)('file menu (%s)', (inputMethod, commands) => {
   it('creates a new file', async () => {
     const editor = ace.edit('test-editor');
     await act(async () => {
+      updateSetting('editor.filePath', 'tmp.py');
       editor.insert('abc');
-      commands.newFile();
+      await commands.newFile();
       userEvent.click(await screen.findByText(/^discard$/i));
     });
-    expect(editor.getValue()).toEqual('');
     expect(await screen.findByText(/^\(unsaved file\)$/i)).toBeInTheDocument();
-    expect(await screen.findByText(/created a new file/i)).toBeInTheDocument();
+    expect(editor.getValue()).toEqual('');
+    expect(screen.queryAllByText(/created a new file/i).length).toBeGreaterThan(0);
     expect(mocked(window.ipc.invoke).mock.calls).toMatchObject([
       ['save-settings', { editor: { filePath: null } }],
     ]);
@@ -171,11 +144,12 @@ describe.each([
   it('opens a file', async () => {
     const editor = ace.edit('test-editor');
     await act(async () => {
-      commands.openFile();
+      await commands.openFile();
     });
+    expect(await screen.findByText(/^test-open\.py$/i)).toBeInTheDocument();
     expect(editor.getValue()).toEqual('opened');
-    expect(await screen.findByText(/^test\-open\.py$/i)).toBeInTheDocument();
-    expect(await screen.findByText(/opened the selected file/i)).toBeInTheDocument();
+    const notifications = screen.queryAllByText(/opened the selected file/i);
+    expect(notifications.length).toBeGreaterThan(0);
     expect(mocked(window.ipc.invoke).mock.calls).toMatchObject([
       ['open-file-prompt'],
       ['open-file', 'test-open.py', 'utf8'],
@@ -185,12 +159,14 @@ describe.each([
 
   it('saves a file in-place', async () => {
     const editor = ace.edit('test-editor');
-    await act(async () => await commands.saveFile());
-    expect(await screen.findByText(/^test\-save\.py$/i)).toBeInTheDocument();
-    expect(await screen.findByText(/saved the current file/i)).toBeInTheDocument();
+    await act(async () => {
+      await commands.saveFile();
+    });
+    expect(await screen.findByText(/^test-save\.py$/i)).toBeInTheDocument();
+    expect(screen.queryAllByText(/saved the current file/i).length).toBeGreaterThan(0);
     await act(async () => {
       editor.insert('xyz\n');
-      commands.saveFile();
+      await commands.saveFile();
     });
     expect(mocked(window.ipc.invoke).mock.calls).toMatchObject([
       ['save-file-prompt'],
@@ -203,22 +179,19 @@ describe.each([
 
   it('saves a file to a new path', async () => {
     const editor = ace.edit('test-editor');
-    await act(async () => await commands.saveFileAs());
-    expect(await screen.findByText(/^test\-save\.py$/i)).toBeInTheDocument();
-    expect(
-      await screen.findByText(/saved the file to the selected path/i)
-    ).toBeInTheDocument();
-    updateSetting('editor.filePath', 'tmp.py');
-    expect(await screen.findByText(/^tmp.py$/i)).toBeInTheDocument();
+    await act(async () => {
+      updateSetting('editor.filePath', 'tmp.py');
+    });
+    const filename = await screen.findByText(/^tmp\.py$/i);
+    expect(filename).toBeInTheDocument();
     await act(async () => {
       editor.insert('xyz\n');
-      commands.saveFileAs();
+      await commands.saveFileAs();
     });
-    expect(await screen.findByText(/^test\-save\.py$/i)).toBeInTheDocument();
+    const notifications = screen.queryAllByText(/saved the file to the selected path/i);
+    expect(notifications.length).toBeGreaterThan(0);
+    expect(filename).toHaveTextContent(/^test-save\.py$/i);
     expect(mocked(window.ipc.invoke).mock.calls).toMatchObject([
-      ['save-file-prompt'],
-      ['save-file', 'test-save.py', '', 'utf8'],
-      ['save-settings', { editor: { filePath: 'test-save.py' } }],
       ['save-file-prompt'],
       ['save-file', 'test-save.py', 'xyz\n', 'utf8'],
       ['save-settings', { editor: { filePath: 'test-save.py' } }],
@@ -226,7 +199,13 @@ describe.each([
   });
 });
 
-describe('edit menu (toolbar)', () => {
+describe.each(
+  makeCommandTriggers({
+    cutText: { menu: /^Edit$/, item: /^Cut$/, keybinding: '{ctrl}X' },
+    copyText: { menu: /^Edit$/, item: /^copy$/i, keybinding: '{ctrl}C' },
+    pasteText: { menu: /^Edit$/, item: /^paste$/i, keybinding: '{ctrl}V' },
+  })
+)('edit menu (%s)', (inputMethod, commands) => {
   beforeEach(async () => {
     const editor = ace.edit('test-editor');
     await act(async () => {
@@ -240,65 +219,41 @@ describe('edit menu (toolbar)', () => {
 
   it('cuts and pastes text', async () => {
     const editor = ace.edit('test-editor');
-    const editButton = await screen.findByRole('button', { name: /edit/i });
     await act(async () => {
-      userEvent.click(editButton);
-      userEvent.click(await screen.findByText(/^Cut$/));
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await commands.cutText();
       editor.getSelection().moveCursorFileEnd();
       editor.clearSelection();
-      userEvent.click(editButton);
-      userEvent.click(await screen.findByText(/^paste$/i));
-      userEvent.click(editButton);
-      userEvent.click(await screen.findByText(/^paste$/i));
+      await commands.pasteText();
     });
-    expect(editor.getValue()).toEqual('abefc\ndc\nd');
-  }, 6000);
+    expect(editor.getValue()).toEqual('abefc\nd');
+  });
 
   it('copies and pastes text', async () => {
     const editor = ace.edit('test-editor');
-    const editButton = await screen.findByRole('button', { name: /edit/i });
     await act(async () => {
-      userEvent.click(editButton);
-      userEvent.click(await screen.findByText(/^copy$/i));
-      editor.selectAll();
-      userEvent.click(editButton);
-      userEvent.click(await screen.findByText(/^paste$/i));
-      userEvent.click(editButton);
-      userEvent.click(await screen.findByText(/^paste$/i));
+      await commands.copyText();
+      editor.getSelection().moveCursorFileEnd();
+      editor.clearSelection();
+      await commands.pasteText();
     });
-    expect(editor.getValue()).toEqual('c\ndc\nd');
-  }, 6000);
+    expect(editor.getValue()).toEqual('abc\ndefc\nd');
+  });
 });
 
-describe.each([
-  [
-    'toolbar',
-    {
-      uploadFile: () => userEvent.click(screen.getByText(/^Upload$/)),
-      downloadFile: () => userEvent.click(screen.getByText(/^Download$/)),
-      start: () => userEvent.click(screen.getByText(/^start$/i)),
-      stop: () => userEvent.click(screen.getByText(/^Stop$/)),
-      estop: () => userEvent.click(screen.getByText(/^e-stop$/i)),
-    },
-  ],
-  [
-    'keybinding',
-    {
-      uploadFile: () => userEvent.type(screen.getByText(/^\d+\:\d+$/), '{ctrl}{enter}'),
-      downloadFile: () =>
-        userEvent.type(screen.getByText(/^\d+\:\d+$/), '{ctrl}{shift}{enter}'),
-      start: () => userEvent.type(screen.getByText(/^\d+\:\d+$/), '{alt}1'),
-      stop: () => userEvent.type(screen.getByText(/^\d+\:\d+$/), '{alt}2'),
-      estop: () => userEvent.type(screen.getByText(/^\d+\:\d+$/), '{alt}3'),
-    },
-  ],
-])('runtime interactions (%s)', (inputMethod, commands) => {
+describe.each(
+  makeCommandTriggers({
+    uploadFile: { item: /^Upload$/, keybinding: '{ctrl}{enter}' },
+    downloadFile: { item: /^Download$/, keybinding: '{ctrl}{shift}{enter}' },
+    start: { item: /^start$/i, keybinding: '{alt}1' },
+    stop: { item: /^Stop$/, keybinding: '{alt}2' },
+    estop: { item: /^e-stop$/i, keybinding: '{alt}3' },
+  })
+)('runtime interactions (%s)', (inputMethod, commands) => {
   it('uploads a file', async () => {
     const editor = ace.edit('test-editor');
     await act(async () => {
       editor.insert('abc\t\n ');
-      commands.uploadFile();
+      await commands.uploadFile();
     });
     expect(editor.getValue()).toEqual('abc\t\n ');
     const notifications = screen.queryAllByText(/uploaded code to the robot/i);
@@ -317,7 +272,9 @@ describe.each([
 
   it('downloads a file', async () => {
     const editor = ace.edit('test-editor');
-    await act(async () => commands.downloadFile());
+    await act(async () => {
+      await commands.downloadFile();
+    });
     expect(editor.getValue()).toEqual('downloaded');
     expect(await screen.findByText(/^\(unsaved file\)\*/i)).toBeInTheDocument();
     const notifications = screen.queryAllByText(/downloaded code from the robot/i);
@@ -334,8 +291,10 @@ describe.each([
   });
 
   it('starts Runtime', async () => {
-    commands.start();
-    expect(await screen.findByText(/started robot/i)).toBeInTheDocument();
+    await act(async () => {
+      await commands.start();
+    });
+    expect(screen.queryAllByText(/started robot/i).length).toBeGreaterThan(0);
     expect(mocked(window.ipc.invoke)).toHaveBeenCalledWith(
       'request',
       'executor-service',
@@ -344,8 +303,10 @@ describe.each([
   });
 
   it('stops Runtime', async () => {
-    commands.stop();
-    expect(await screen.findByText(/^stopped robot/i)).toBeInTheDocument();
+    await act(async () => {
+      await commands.stop();
+    });
+    expect(screen.queryAllByText(/^stopped robot/i).length).toBeGreaterThan(0);
     expect(mocked(window.ipc.invoke)).toHaveBeenCalledWith(
       'request',
       'executor-service',
@@ -354,8 +315,10 @@ describe.each([
   });
 
   it('e-stops Runtime', async () => {
-    commands.estop();
-    expect(await screen.findByText(/emergency\-stopped robot/i)).toBeInTheDocument();
+    await act(async () => {
+      await commands.estop();
+    });
+    expect(screen.queryAllByText(/emergency-stopped robot/i).length).toBeGreaterThan(0);
     expect(mocked(window.ipc.send)).toHaveBeenCalledWith(
       'notify',
       'executor-service',
@@ -364,94 +327,30 @@ describe.each([
   });
 });
 
-describe.each([
-  [
-    'toolbar',
-    {
-      toggleConsole: () => userEvent.click(screen.getByText(/^(open|close)$/i)),
-      copyConsole: () => userEvent.click(screen.getByText(/^copy$/i)),
-      clearConsole: () => userEvent.click(screen.getByText(/^clear$/i)),
-    },
-  ],
-  [
-    'keybinding',
-    {
-      toggleConsole: () =>
-        userEvent.type(screen.getByText(/^\d+\:\d+$/), '{ctrl}{shift}O'),
-      copyConsole: () =>
-        userEvent.type(screen.getByText(/^\d+\:\d+$/), '{ctrl}{shift}C'),
-      clearConsole: () =>
-        userEvent.type(screen.getByText(/^\d+\:\d+$/), '{ctrl}{shift}X'),
-    },
-  ],
-])('console menu (%s)', (inputMethod, commands) => {
-  beforeEach(async () => {
-    log.info('New event', { timestamp: '2021-08-03T16:18:22.392159Z', count: 1 });
-    userEvent.click(await screen.findByRole('button', { name: /console/i }));
-  });
-
-  it('toggles the console', async () => {
-    await act(async () => commands.toggleConsole());
-    expect(await screen.findByText(/new event/i)).toBeInTheDocument();
-    await act(async () => commands.toggleConsole());
-    await waitForElementToBeRemoved(() => screen.queryByText(/new event/i));
-  });
-
-  it('copies the console', async () => {
-    commands.copyConsole();
-    expect(await screen.findByText(/copied console output/i)).toBeInTheDocument();
-    expect(JSON.parse(await navigator.clipboard.readText())).toMatchObject({
-      event: 'New event',
-      timestamp: '2021-08-03T16:18:22.392159Z',
-      level: 'info',
-      count: 1,
-    });
-  });
-
-  it('clears the console', async () => {
-    await act(async () => {
-      commands.toggleConsole();
-      commands.clearConsole();
-      log.info('Test event', { timestamp: '2021-08-03T16:18:23.392159Z' });
-    });
-    expect(await screen.findByText(/test event/i)).toBeInTheDocument();
-    expect(screen.queryByText(/new event/)).not.toBeInTheDocument();
-  });
-});
-
-describe.each([
-  [
-    'toolbar',
-    {
-      lint: () => userEvent.click(screen.getByText(/lint/i)),
-      restart: () => userEvent.click(screen.getByText(/restart/i)),
-    },
-  ],
-  [
-    'keybinding',
-    {
-      lint: () => userEvent.type(screen.getByText(/^\d+\:\d+$/), '{alt}L'),
-      restart: () => userEvent.type(screen.getByText(/^\d+\:\d+$/), '{alt}R'),
-    },
-  ],
-])('debug menu (%s)', (inputMethod, commands) => {
-  beforeEach(async () => {
-    userEvent.click(await screen.findByRole('button', { name: /debug/i }));
-  });
-
+describe.each(
+  makeCommandTriggers({
+    lint: { menu: /debug/i, item: /lint/i, keybinding: '{alt}L' },
+    restart: { menu: /debug/i, item: /restart/i, keybinding: '{alt}R' },
+  })
+)('debug menu (%s)', (inputMethod, commands) => {
   it('lints student code', async () => {
-    await act(async () => commands.lint());
+    await act(async () => {
+      await commands.lint();
+    });
     expect(screen.queryAllByText(/linted current file/i).length).toBeGreaterThan(0);
-    expect(mocked(window.ipc.invoke)).toHaveBeenCalledWith(
-      'request',
-      'broker-service',
-      'lint'
-    );
+    /* We don't assert on the DOM because Ace has an opaque internal structure. */
+    expect(window.store.getState().editor.annotations).toMatchObject([
+      { type: 'error', text: 'Lint error (lint-error, E999)' },
+      { type: 'warning', text: 'Lint warning (lint-warning, W999)' },
+      { type: 'info', text: 'Lint message (lint-message, C999)' },
+    ]);
   });
 
   it('restarts Runtime', async () => {
-    await act(async () => commands.restart());
-    expect(await screen.findByText(/restarted runtime/i)).toBeInTheDocument();
+    await act(async () => {
+      await commands.restart();
+    });
+    expect(screen.queryAllByText(/restarted runtime/i).length).toBeGreaterThan(0);
     expect(mocked(window.ipc.invoke)).toHaveBeenCalledWith(
       'exec',
       {
@@ -465,32 +364,43 @@ describe.each([
   });
 });
 
-// TODO: check overwrite on quit
 // TODO: test prompt cancel
 describe.each([
-  ['create', () => userEvent.type(screen.getByText(/^\d+\:\d+$/), '{ctrl}N'), ''],
-  ['open', () => userEvent.type(screen.getByText(/^\d+\:\d+$/), '{ctrl}O'), 'opened'],
+  [
+    'create',
+    () => userEvent.type(screen.getByText(/^\d+:\d+$/), '{ctrl}N'),
+    (contents: string) => expect(contents).toEqual(''),
+  ],
+  [
+    'open',
+    () => userEvent.type(screen.getByText(/^\d+:\d+$/), '{ctrl}O'),
+    (contents: string) => expect(contents).toEqual('opened'),
+  ],
   [
     'download',
-    () => userEvent.type(screen.getByText(/^\d+\:\d+$/), '{ctrl}{shift}{enter}'),
-    'downloaded',
+    () => userEvent.type(screen.getByText(/^\d+:\d+$/), '{ctrl}{shift}{enter}'),
+    (contents: string) => expect(contents).toEqual('downloaded'),
   ],
-])('overwrite prompt (%s)', (action, callback, contents) => {
+  [
+    'exit',
+    () => window.store.dispatch(exit('quit')),
+    () => expect(mocked(window.ipc.send)).toHaveBeenCalledWith('quit'),
+  ],
+])('overwrite prompt (%s)', (action, callback, check: (contents: string) => void) => {
   beforeEach(async () => {
     const editor = ace.edit('test-editor');
     await act(async () => {
       editor.insert('abc\n');
       callback();
     });
-    expect(
-      await screen.findByRole('heading', { name: /^unsaved changes$/i })
-    ).toBeInTheDocument();
   });
 
   it('closes the prompt', async () => {
     const editor = ace.edit('test-editor');
+    expect(await screen.findByText(/^unsaved changes$/i)).toBeInTheDocument();
     await act(async () => {
-      userEvent.click(screen.getByRole('button', { name: /close/i }));
+      userEvent.click(screen.getByLabelText(/^close$/i));
+      await delay(10);
     });
     expect(editor.getValue()).toEqual('abc\n');
     expect(mocked(window.ipc.invoke)).not.toHaveBeenCalledWith(
@@ -499,80 +409,69 @@ describe.each([
       expect.anything(),
       expect.anything()
     );
+    expect(screen.queryByText(/^unsaved changes$/i)).not.toBeInTheDocument();
   });
 
   it('discards a dirty buffer', async () => {
     const editor = ace.edit('test-editor');
+    expect(await screen.findByText(/^unsaved changes$/i)).toBeInTheDocument();
     await act(async () => {
-      userEvent.click(screen.getByRole('button', { name: /discard/i }));
+      userEvent.click(screen.getByText(/^discard$/i));
+      await delay(10);
     });
-    expect(editor.getValue()).toEqual(contents);
+    check(editor.getValue());
     expect(mocked(window.ipc.invoke)).not.toHaveBeenCalledWith(
       'save-file',
       expect.anything(),
       expect.anything(),
       expect.anything()
     );
+    expect(screen.queryByText(/^unsaved changes$/i)).not.toBeInTheDocument();
   });
 
   it('saves a dirty buffer', async () => {
     const editor = ace.edit('test-editor');
+    expect(await screen.findByText(/^unsaved changes$/i)).toBeInTheDocument();
     await act(async () => {
-      userEvent.click(screen.getByRole('button', { name: /save/i }));
+      userEvent.click(screen.getByText(/^save$/i));
+      await delay(10);
     });
-    expect(editor.getValue()).toEqual(contents);
+    check(editor.getValue());
     expect(mocked(window.ipc.invoke)).toHaveBeenCalledWith(
       'save-file',
       'test-save.py',
       'abc\n',
       'utf8'
     );
-  });
-
-  afterEach(async () => {
-    await waitForElementToBeRemoved(() =>
-      screen.queryByRole('heading', { name: /^unsaved changes$/i })
-    );
+    expect(screen.queryByText(/^unsaved changes$/i)).not.toBeInTheDocument();
   });
 });
 
 // TODO: check settings open
-
-/*
-describe('file export operation', () => {
+it('can normalize a file before saving', async () => {
+  const editor = ace.edit('test-editor');
   updateSetting('editor.encoding', 'ascii');
-
-  it('can append a newline character', async () => {
-    const editor = ace.edit('test-editor');
-    updateSetting('editor.appendNewline', true);
-    await act(async () => {
-      editor.insert('abc');
-      editor.execCommand('saveFile');
-    });
-    expect(editor.getValue()).toEqual('abc\n');
-    expect(mocked(window.ipc.invoke)).toHaveBeenCalledWith(
-      'save-file',
-      'test-save.py',
-      'abc\n',
-      'utf8'
-    );
+  updateSetting('editor.appendNewline', true);
+  updateSetting('editor.trimWhitespace', true);
+  const save = () => userEvent.type(screen.getByText(/^\d+:\d+$/), '{ctrl}S');
+  await act(async () => {
+    save();
+    await delay(10);
+    editor.insert('def main():  \n    pass\t');
+    await delay(10);
+    save();
   });
-
-  it('can remove trailing whitespace', async () => {
-    const editor = ace.edit('test-editor');
-    updateSetting('editor.appendNewline', true);
-    updateSetting('editor.trimWhitespace', true);
-    await act(async () => {
-      editor.insert('abc\t\n ');
-      editor.execCommand('saveFile');
-    });
-    expect(editor.getValue()).toEqual('abc\n');
-    expect(mocked(window.ipc.invoke)).toHaveBeenCalledWith(
-      'save-file',
-      'test-save.py',
-      'abc\n',
-      'utf8'
-    );
-  });
+  expect(editor.getValue()).toEqual('def main():\n    pass\n');
+  expect(mocked(window.ipc.invoke)).toHaveBeenCalledWith(
+    'save-file',
+    'test-save.py',
+    '',
+    'ascii',
+  );
+  expect(mocked(window.ipc.invoke)).toHaveBeenCalledWith(
+    'save-file',
+    'test-save.py',
+    'def main():\n    pass\n',
+    'ascii',
+  );
 });
-*/

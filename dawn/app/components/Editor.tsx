@@ -89,7 +89,6 @@ interface EditorProps {
 }
 
 // TODO: pull API from robot and add symbols to autocomplete. Create help page.
-// TODO: convert to async/await syntax
 export default function Editor(props: EditorProps) {
   const dispatch = useAppDispatch();
   const filePath = useAppSelector((state) => state.settings.editor.filePath);

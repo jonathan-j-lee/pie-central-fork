@@ -229,6 +229,7 @@ function createWindow() {
         },
         { host: settings.runtime.host }
       );
+      // TODO: send config
       await fs.mkdir(path.dirname(SETTINGS_PATH), { recursive: true });
       await fs.writeFile(SETTINGS_PATH, JSON.stringify(settings));
       logger.info({ path: SETTINGS_PATH }, 'Saved settings');

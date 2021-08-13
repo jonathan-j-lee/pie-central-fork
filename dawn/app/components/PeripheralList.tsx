@@ -230,7 +230,7 @@ export default function PeripheralList() {
                 className="monospace"
                 maxLength={32}
                 defaultValue={''}
-                onConfirm={(value) => null}
+                onConfirm={() => null}
                 placeholder="Assign a name"
               />
               <code className="dev-uid">{peripheral.uid}</code>

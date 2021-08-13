@@ -95,7 +95,11 @@ export default function KeybindingMapper(props: KeybindingMapperProps) {
         bindKey: keybindings[name],
         exec: (editor: Ace.Editor) => {
           const command = commandHandlers[name];
-          notify(command ? command(editor) : Promise.reject(), success, failure);
+          notify(
+            command ? command(editor) : Promise.reject(new Error()),
+            success,
+            failure
+          );
         },
       }));
       commands.forEach((command) => commandManager.addCommand(command));

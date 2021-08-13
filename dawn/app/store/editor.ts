@@ -35,7 +35,7 @@ export const prompt = createAsyncThunk<
     const unsubscribe = thunkAPI.extra.store.subscribe(() => {
       const { prompt, confirmed } = thunkAPI.getState().editor;
       if (!prompt) {
-        clearTimeout(timeout);
+        clearTimeout(timeout); // eslint-disable-line @typescript-eslint/no-use-before-define
         unsubscribe();
         if (confirmed) {
           resolve();

@@ -2,14 +2,13 @@ import * as React from 'react';
 import { log, render, screen, dispatchDevUpdate } from './test-utils';
 import RuntimeStatusCard from '../app/components/RuntimeStatusCard';
 import { changeMode, Mode } from '../app/store/runtime';
-import { LogLevel } from '../app/store/settings';
 
 beforeEach(() => {
   render(<RuntimeStatusCard />);
 });
 
 it('shows when Dawn is disconnected', async () => {
-  expect(await screen.findByText(/disconnected/i));
+  expect(await screen.findByText(/disconnected/i)).toBeInTheDocument();
   const help = await screen.findByText(/dawn is not receiving updates from runtime/i);
   expect(help).toBeInTheDocument();
 });
@@ -43,6 +42,9 @@ it.each([
 ])('displays the mode %s', async (mode, match) => {
   dispatchDevUpdate({}, { timestamp: 5000 }, 5050);
   dispatchDevUpdate({}, { timestamp: 5100 }, 5150);
+  dispatchDevUpdate({}, { timestamp: 5200 }, 5250);
   window.store.dispatch(changeMode(mode));
   expect(await screen.findByText(match)).toBeInTheDocument();
 });
+
+// TODO: test disconnect

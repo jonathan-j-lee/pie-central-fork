@@ -16,6 +16,7 @@ interface SettingsProps {
   isOpen: boolean;
   close: () => void;
   platform: 'win' | 'mac';
+  transitionDuration?: number;
 }
 
 // TODO: text/UI size
@@ -36,6 +37,7 @@ export default function Settings(props: SettingsProps) {
       onClosed={() => setPrevSettings({})}
       title="Settings"
       className="settings"
+      transitionDuration={props.transitionDuration}
     >
       <div className={Classes.DIALOG_BODY}>
         <Tabs defaultSelectedTabId="runtime" large>

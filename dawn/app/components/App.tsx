@@ -24,7 +24,7 @@ const INITIALIZE_DELAY = 100;
 
 FocusStyleManager.onlyShowFocusOnTabs();
 
-export default function App() {
+export default function App(props: { transitionDuration?: number }) {
   const dispatch = useAppDispatch();
   const [editor, setEditor] = React.useState<Ace.Editor | undefined>();
   // TODO: do not overwrite Electron hotkeys
@@ -62,6 +62,7 @@ export default function App() {
             closeSettings={closeSettings}
             mode={mode}
             setMode={setMode}
+            transitionDuration={props.transitionDuration}
           />
           <main>
             <div id="editor-pane">
@@ -73,8 +74,16 @@ export default function App() {
               <PeripheralList />
             </div>
           </main>
-          <Settings isOpen={settingsOpen} close={closeSettings} platform={platform} />
-          <OverwriteDialog editor={editor} />
+          <Settings
+            isOpen={settingsOpen}
+            close={closeSettings}
+            platform={platform}
+            transitionDuration={props.transitionDuration}
+          />
+          <OverwriteDialog
+            editor={editor}
+            transitionDuration={props.transitionDuration}
+          />
         </div>
       </KeybindingMapper>
     </ThemeProvider>

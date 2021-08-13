@@ -19,7 +19,7 @@ const TOUR_STEPS = [
   {
     title: 'Text Editor',
     content: <p>Write your code in this text editor.</p>,
-    target: '#ace-editor',
+    target: '#editor',
   },
   {
     title: 'File Menu',
@@ -86,7 +86,7 @@ const TOUR_STEPS = [
         <code>192.168.1.1</code>
       </p>
     ),
-    target: '#ip-addr',
+    target: '#host',
   },
   // TODO: show how to update the robot
   {
@@ -121,18 +121,18 @@ interface TransitionCallbacks {
 
 function handleTransition(
   transition: CallBackProps,
-  { dispatch, openSettings, closeSettings }: TransitionCallbacks,
+  { dispatch, openSettings, closeSettings }: TransitionCallbacks
 ) {
   const nextStep = TOUR_STEPS[transition.index + 1] ?? { target: null };
   let delay = 0;
-  if (nextStep.target === '#ip-addr') {
+  if (nextStep.target === '#host') {
     openSettings();
     delay = 200;
   } else if (nextStep.target === '.console') {
     dispatch(logSlice.actions.open());
     delay = 200;
   }
-  if (transition.step?.target === '#ip-addr') {
+  if (transition.step?.target === '#host') {
     closeSettings();
   } else if (transition.step?.target === '.console') {
     dispatch(logSlice.actions.close());

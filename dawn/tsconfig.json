@@ -3,5 +3,7 @@
     "alwaysStrict": true,
     "jsx": "react",
     "strict": true
-  }
+  },
+  "include": ["app/**/*.ts*"],
+  "exclude": ["node_modules", "tests/*.test.tsx"]
 }

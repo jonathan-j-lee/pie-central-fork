@@ -1,13 +1,5 @@
 import * as React from 'react';
-import {
-  act,
-  delay,
-  fireEvent,
-  render,
-  screen,
-  waitForElementToBeRemoved,
-  TextMatch,
-} from './test-utils';
+import { act, delay, render, screen, TextMatch } from './test-utils';
 import { mocked } from 'ts-jest/utils';
 import Settings from '../app/components/Settings';
 import userEvent from '@testing-library/user-event';
@@ -18,7 +10,9 @@ const fill = (label: TextMatch, content: string) =>
   userEvent.type(screen.getByLabelText(label), content, { delay: 1 });
 
 beforeEach(() => {
-  render(<Settings isOpen={true} close={close} platform="win" />);
+  render(
+    <Settings isOpen={true} close={close} platform="win" transitionDuration={0} />
+  );
   jest.clearAllMocks();
 });
 
@@ -27,12 +21,37 @@ describe('runtime settings', () => {
     userEvent.click(await screen.findByRole('tab', { name: /runtime/i, hidden: true }));
   });
 
-  // it('modifies', async () => {
-  // });
+  it('modifies the IP address and device names', async () => {
+    await act(async () => {
+      expect(await screen.findByText(/^no device names$/i)).toBeInTheDocument();
+      await fill(/host/i, '{selectall}192.168.200.200');
+      const addButton = screen.getByText(/^add device name$/i);
+      userEvent.click(addButton);
+      userEvent.click(addButton);
+      const [, name] = screen.queryAllByPlaceholderText(/^example: left-motor$/i);
+      const [, uid] = screen.queryAllByPlaceholderText(/^example: \d+$/i);
+      await userEvent.type(name, 'motor', { delay: 1 });
+      await userEvent.type(uid, '123', { delay: 1 });
+      userEvent.click(screen.getByText(/^Confirm$/));
+    });
+    const [[channel, settings]] = mocked(window.ipc.invoke).mock.calls;
+    expect(channel).toEqual('save-settings');
+    expect(settings).toMatchObject({
+      runtime: {
+        host: '192.168.200.200',
+        deviceNames: {
+          '': '',
+          motor: '123',
+        },
+      },
+    });
+    expect(screen.queryAllByText(/saved settings/i).length).toBeGreaterThan(0);
+    expect(close).toHaveBeenCalled();
+  });
 
   it('modifies admin settings', async () => {
     await act(async () => {
-      const tab = screen.getByRole('tab', { name: /administration/i, hidden: true });
+      const tab = screen.getByText(/^administration$/i);
       userEvent.click(tab);
       await fill(/student code path/i, '{selectall}test.py');
       await fill(/restart command/i, '{selectall}echo "restart"');
@@ -42,7 +61,7 @@ describe('runtime settings', () => {
       await fill(/private key/i, '{selectall}---begin key---{enter}---end key---');
       userEvent.click(tab);
       await delay(20);
-      userEvent.click(screen.getByRole('button', { name: /confirm/i, hidden: true }));
+      userEvent.click(screen.getByText(/^Confirm$/));
     });
     const [[channel, settings]] = mocked(window.ipc.invoke).mock.calls;
     expect(channel).toEqual('save-settings');
@@ -60,27 +79,31 @@ describe('runtime settings', () => {
         },
       },
     });
-  });
+    expect(screen.queryAllByText(/saved settings/i).length).toBeGreaterThan(0);
+    expect(close).toHaveBeenCalled();
+  }, 8000);
 
   it('modifies performance settings', async () => {
     await act(async () => {
-      const tab = screen.getByRole('tab', { name: /performance/i, hidden: true });
+      const tab = screen.getByText(/performance/i);
       userEvent.click(tab);
       /* Note: Blueprint sliders do not wrap an `input[type="range"]`, so we cannot
          simulate a value change. */
       userEvent.selectOptions(screen.getByLabelText(/baud rate/i), ['38400']);
       userEvent.click(tab);
       await delay(20);
-      userEvent.click(screen.getByRole('button', { name: /confirm/i, hidden: true }));
+      userEvent.click(screen.getByText(/^Confirm$/));
     });
     const [[channel, settings]] = mocked(window.ipc.invoke).mock.calls;
     expect(channel).toEqual('save-settings');
-    expect(settings).toMatchObject({ runtime: { perf: { baudRate: 38400 } } });
+    expect(settings).toMatchObject({ runtime: { perf: { baudRate: '38400' } } });
+    expect(screen.queryAllByText(/saved settings/i).length).toBeGreaterThan(0);
+    expect(close).toHaveBeenCalled();
   });
 
   it('modifies address settings', async () => {
     await act(async () => {
-      const tab = screen.getByRole('tab', { name: /addresses/i, hidden: true });
+      const tab = screen.getByText(/^addresses$/i);
       userEvent.click(tab);
       await fill(/multicast group/i, '{selectall}192.168.101.101');
       await fill(/remote call port/i, '{selectall}9990');
@@ -90,7 +113,7 @@ describe('runtime settings', () => {
       await fill(/vsd port/i, '{selectall}9994');
       userEvent.click(tab);
       await delay(20);
-      userEvent.click(screen.getByRole('button', { name: /confirm/i, hidden: true }));
+      userEvent.click(screen.getByText(/^Confirm$/));
     });
     const [[channel, settings]] = mocked(window.ipc.invoke).mock.calls;
     expect(channel).toEqual('save-settings');
@@ -106,23 +129,23 @@ describe('runtime settings', () => {
         },
       },
     });
-  });
+    expect(screen.queryAllByText(/saved settings/i).length).toBeGreaterThan(0);
+    expect(close).toHaveBeenCalled();
+  }, 8000);
 
   it('modifies monitoring settings', async () => {
-    const tab = screen.getByRole('tab', { name: /monitoring/i, hidden: true });
-    userEvent.click(tab);
-    const interval = screen.getByLabelText(/health check interval/i);
     await act(async () => {
-      await userEvent.type(interval, '{selectall}-1', { delay: 5 });
+      const tab = screen.getByText(/^monitoring$/i);
+      userEvent.click(tab);
+      const interval = screen.getByLabelText(/health check interval/i);
+      await userEvent.type(interval, '{selectall}-1', { delay: 1 });
       userEvent.selectOptions(screen.getByLabelText(/log level/i), ['critical']);
       userEvent.click(screen.getByLabelText(/enable debug mode/i));
-    });
-    expect(interval).toHaveValue('10');
-    await act(async () => {
-      await userEvent.type(interval, '{selectall}1000', { delay: 5 });
+      expect(interval).toHaveValue('10');
+      await userEvent.type(interval, '{selectall}1000', { delay: 1 });
       userEvent.click(tab);
       await delay(20);
-      userEvent.click(screen.getByRole('button', { name: /confirm/i, hidden: true }));
+      userEvent.click(screen.getByText(/^Confirm$/));
     });
     const [[channel, settings]] = mocked(window.ipc.invoke).mock.calls;
     expect(channel).toEqual('save-settings');
@@ -135,22 +158,50 @@ describe('runtime settings', () => {
         },
       },
     });
+    expect(screen.queryAllByText(/saved settings/i).length).toBeGreaterThan(0);
+    expect(close).toHaveBeenCalled();
   });
 
-  afterEach(async () => {
+  it('modifies other settings', async () => {
+    await act(async () => {
+      const tab = screen.getByText(/^other$/i);
+      userEvent.click(tab);
+      expect(await screen.findByText(/^no options$/i)).toBeInTheDocument();
+      const addButton = screen.getByText(/^add option$/i);
+      userEvent.click(addButton);
+      await userEvent.type(
+        screen.getByPlaceholderText(/^example: log-level$/i),
+        'log-level',
+        { delay: 1 }
+      );
+      await userEvent.type(screen.getByPlaceholderText(/^click to edit/i), 'info', {
+        delay: 1,
+      });
+      userEvent.click(tab);
+      await delay(20);
+      userEvent.click(screen.getByText(/^Confirm$/));
+    });
+    const [[channel, settings]] = mocked(window.ipc.invoke).mock.calls;
+    expect(channel).toEqual('save-settings');
+    expect(settings).toMatchObject({
+      runtime: {
+        options: { 'log-level': 'info' },
+      },
+    });
     expect(screen.queryAllByText(/saved settings/i).length).toBeGreaterThan(0);
-  });
+    expect(close).toHaveBeenCalled();
+  }, 8000);
 });
 
 it('modifies editor settings', async () => {
-  userEvent.click(screen.getByRole('tab', { name: /editor/i, hidden: true }));
+  userEvent.click(screen.getByText(/^editor$/i));
   const fontSize = screen.getByLabelText(/font size/i);
   const tabSize = screen.getByLabelText(/tab size/i);
   await act(async () => {
     userEvent.click(screen.getByLabelText(/dark theme/i));
     userEvent.selectOptions(screen.getByLabelText(/syntax theme/i), ['monokai']);
-    await userEvent.type(fontSize, '{selectall}1000', { delay: 5 });
-    await userEvent.type(tabSize, '{selectall}-1', { delay: 5 });
+    await userEvent.type(fontSize, '{selectall}1000', { delay: 1 });
+    await userEvent.type(tabSize, '{selectall}-1', { delay: 1 });
     userEvent.selectOptions(screen.getByLabelText(/file encoding/i), ['ascii']);
     const labels = [
       /enable syntax highlighting/i,
@@ -170,11 +221,11 @@ it('modifies editor settings', async () => {
   expect(fontSize).toHaveValue('64');
   expect(tabSize).toHaveValue('1');
   await act(async () => {
-    await userEvent.type(fontSize, '{selectall}0', { delay: 5 });
-    await userEvent.type(tabSize, '{selectall}100', { delay: 5 });
+    await userEvent.type(fontSize, '{selectall}0', { delay: 1 });
+    await userEvent.type(tabSize, '{selectall}100', { delay: 1 });
     userEvent.click(fontSize);
     await delay(20);
-    userEvent.click(screen.getByRole('button', { name: /confirm/i, hidden: true }));
+    userEvent.click(screen.getByText(/^Confirm$/));
   });
   expect(screen.queryAllByText(/saved settings/i).length).toBeGreaterThan(0);
   const [[channel, settings]] = mocked(window.ipc.invoke).mock.calls;
@@ -197,14 +248,15 @@ it('modifies editor settings', async () => {
       trimWhitespace: false,
     },
   });
-});
+  expect(close).toHaveBeenCalled();
+}, 8000);
 
 it('modifies console settings', async () => {
   const tab = screen.getByRole('tab', { name: /console/i, hidden: true });
   userEvent.click(tab);
   const maxLines = screen.getByLabelText(/max lines/i);
   await act(async () => {
-    await userEvent.type(maxLines, '{selectall}10000', { delay: 5 });
+    await userEvent.type(maxLines, '{selectall}10000', { delay: 1 });
     userEvent.selectOptions(screen.getByLabelText(/open console automatically/i), [
       'error',
     ]);
@@ -221,10 +273,10 @@ it('modifies console settings', async () => {
   });
   expect(maxLines).toHaveValue('1000');
   await act(async () => {
-    await userEvent.type(maxLines, '{selectall}-1', { delay: 5 });
+    await userEvent.type(maxLines, '{selectall}-1', { delay: 1 });
     userEvent.click(tab);
     await delay(20);
-    userEvent.click(screen.getByRole('button', { name: /confirm/i, hidden: true }));
+    userEvent.click(screen.getByText(/^Confirm$/));
   });
   expect(screen.queryAllByText(/saved settings/i).length).toBeGreaterThan(0);
   const [[channel, settings]] = mocked(window.ipc.invoke).mock.calls;
@@ -240,10 +292,11 @@ it('modifies console settings', async () => {
       pinToBottom: false,
     },
   });
+  expect(close).toHaveBeenCalled();
 });
 
 it('modifies keybindings', async () => {
-  const tab = screen.getByRole('tab', { name: /keybindings/i, hidden: true });
+  const tab = screen.getByText(/^keybindings$/i);
   userEvent.click(tab);
   const keybindings = {
     newFile: { win: 'alt+a' },
@@ -266,49 +319,53 @@ it('modifies keybindings', async () => {
   };
   await act(async () => {
     const nodes = screen.queryAllByPlaceholderText(/ctrl\s*\+\s*shift\s*\+\s*p/i);
-    expect(nodes.length).toBe(Object.keys(keybindings).length);
+    expect(nodes).toHaveLength(Object.keys(keybindings).length);
     for (let index = 0; index < nodes.length; index++) {
       const finalKey = String.fromCharCode('a'.charCodeAt(0) + index);
-      await userEvent.type(nodes[index], '{selectall}alt+' + finalKey, { delay: 5 });
+      await userEvent.type(nodes[index], '{selectall}alt+' + finalKey, { delay: 1 });
     }
     userEvent.click(tab);
     await delay(20);
-    userEvent.click(screen.getByRole('button', { name: /confirm/i, hidden: true }));
+    userEvent.click(screen.getByText(/^Confirm$/));
   });
   expect(screen.queryAllByText(/saved settings/i).length).toBeGreaterThan(0);
   const [[channel, settings]] = mocked(window.ipc.invoke).mock.calls;
   expect(channel).toEqual('save-settings');
   expect(settings).toMatchObject({ keybindings });
-}, 10000);
+  expect(close).toHaveBeenCalled();
+}, 16000);
 
 // TODO: check password button show
 
 it('validates keybindings', async () => {
-  const tab = screen.getByRole('tab', { name: /keybindings/i, hidden: true });
+  const tab = screen.getByText(/^keybindings$/i);
   userEvent.click(tab);
   const input = screen.getByDisplayValue(/ctrl\s*\+\s*n/i);
   await userEvent.type(input, '{selectall}{backspace}', { delay: 1 });
   userEvent.click(tab);
-  expect(await screen.findByText(/invalid keybinding/i)).toBeInTheDocument();
+  const warning = await screen.findByText(/invalid keybinding/i);
+  expect(warning).toBeInTheDocument();
   await userEvent.type(input, '{selectall}CTRL+P', { delay: 1 });
   userEvent.click(tab);
-  await waitForElementToBeRemoved(() => screen.queryByText(/invalid keybinding/i));
+  expect(warning).not.toBeInTheDocument();
   await userEvent.type(input, '{selectall}ctrl+', { delay: 1 });
   userEvent.click(tab);
   expect(await screen.findByText(/invalid keybinding/i)).toBeInTheDocument();
-  userEvent.click(screen.getByRole('button', { name: /confirm/i, hidden: true }));
+  userEvent.click(screen.getByText(/^Confirm$/));
   const [[, settings]] = mocked(window.ipc.invoke).mock.calls;
   expect(settings).not.toMatchObject({ keybindings: { newFile: { win: 'ctrl+' } } });
-});
+  await delay(20);
+  expect(close).toHaveBeenCalled();
+}, 12000);
 
 it('can revert settings', async () => {
-  userEvent.click(await screen.findByRole('button', { name: /confirm/i }));
+  // TODO
+  // userEvent.click(await screen.findByText(/^Confirm$/));
+  // expect(close).toHaveBeenCalled();
 });
 
 it('can restore default settings', async () => {
-  userEvent.click(await screen.findByRole('button', { name: /confirm/i }));
-});
-
-afterEach(() => {
-  expect(close).toHaveBeenCalled();
+  // TODO
+  // userEvent.click(await screen.findByText(/^Confirm$/));
+  // expect(close).toHaveBeenCalled();
 });
