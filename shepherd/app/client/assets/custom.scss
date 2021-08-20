@@ -1,0 +1,44 @@
+@import '~@blueprintjs/core/lib/scss/variables';
+
+body {
+  margin: 0;
+}
+
+#navbar-tabs {
+  .bp3-tab {
+    line-height: $pt-navbar-height;
+  }
+}
+
+.container {
+  display: flex;
+  max-width: 1200px;
+  margin: 1rem auto;
+  justify-content: space-between;
+  .blue.alliance > * {
+    // color: $blue1 !important;
+  }
+  .blue.alliance {
+    background-color: $blue5;
+  }
+  .gold.alliance {
+    background-color: $gold5;
+  }
+  .alliance {
+    margin: 0 1rem;
+    flex: 2;
+    text-align: center;
+  }
+  .timer {
+    margin: 0 1rem;
+    flex: 3;
+    text-align: center;
+    .timer-label {
+      position: absolute;
+      top: 220px;
+      left: 0;
+      right: 0;
+      margin: 0 auto;
+    }
+  }
+}
