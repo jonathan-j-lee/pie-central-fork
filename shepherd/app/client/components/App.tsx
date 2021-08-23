@@ -11,6 +11,9 @@ import Dashboard from './Dashboard';
 FocusStyleManager.onlyShowFocusOnTabs();
 
 export default function App() {
+  React.useEffect(() => {
+    const ws = new WebSocket(`ws://${window.location.host}`);
+  }, []);
   return (
     <Router>
       <Navigation />

@@ -2,10 +2,16 @@ const path = require('path');
 const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 
+const optionalModules = new Set([
+  ...Object.keys(require('knex/package.json').browser),
+  ...Object.keys(require('@mikro-orm/core/package.json').peerDependencies),
+  ...Object.keys(require('@mikro-orm/core/package.json').devDependencies || {}),
+]);
+
 module.exports = [
   {
     mode: 'development',
-    entry: './app/server/main.ts',
+    entry: './app/server/index.ts',
     target: 'node',
     module: {
       rules: [
@@ -17,9 +23,33 @@ module.exports = [
         },
       ],
     },
+    resolve: {
+      extensions: ['.ts', '.js'],
+    },
     output: {
       path: path.join(__dirname, 'build'),
       filename: 'server.js',
+    },
+    plugins: [
+      new webpack.IgnorePlugin({
+        checkResource(resource) {
+          const baseResource = resource
+            .split('/', resource[0] === '@' ? 2 : 1)
+            .join('/');
+          if (optionalModules.has(baseResource)) {
+            try {
+              require.resolve(resource);
+              return false;
+            } catch {
+              return true;
+            }
+          }
+          return false;
+        },
+      }),
+    ],
+    externals: {
+      sqlite3: 'commonjs sqlite3',
     },
   },
   {

@@ -1,9 +1,19 @@
 import * as React from 'react';
 import { useHistory, useLocation } from 'react-router-dom';
-import { Button, Icon, IconName, Navbar, Tab, Tabs } from '@blueprintjs/core';
+import {
+  Alignment,
+  Button,
+  Icon,
+  IconName,
+  Navbar,
+  Tab,
+  Tabs,
+} from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import LogIn from './LogIn';
+import { useAppSelector } from '../store';
 
-const Title = (props: { icon: IconName, title: string }) => (
+const Title = (props: { icon: IconName; title: string }) => (
   <>
     <Icon icon={props.icon} /> {props.title}
   </>
@@ -12,6 +22,7 @@ const Title = (props: { icon: IconName, title: string }) => (
 export default function Navigation() {
   const history = useHistory();
   const location = useLocation();
+  const username = useAppSelector((state) => state.user.username);
   return (
     <Navbar id="navbar-tabs">
       <Navbar.Group>
@@ -31,11 +42,16 @@ export default function Navigation() {
             title={<Title icon={IconNames.CALENDAR} title="Schedule" />}
           />
           <Tab id="/game" title={<Title icon={IconNames.FLAG} title="Game" />} />
-          <Tab
-            id="/dashboard"
-            title={<Title icon={IconNames.DASHBOARD} title="Dashboard" />}
-          />
+          {username && (
+            <Tab
+              id="/dashboard"
+              title={<Title icon={IconNames.DASHBOARD} title="Dashboard" />}
+            />
+          )}
         </Tabs>
+      </Navbar.Group>
+      <Navbar.Group align={Alignment.RIGHT}>
+        <LogIn />
       </Navbar.Group>
     </Navbar>
   );
