@@ -9,13 +9,18 @@ import passport from 'passport';
 import winston from 'winston';
 import { Server as WebSocketServer } from 'ws';
 import { Strategy as LocalStrategy } from 'passport-local';
-import { BaseEntity, EntityRepository, MikroORM, RequestContext } from '@mikro-orm/core';
+import {
+  BaseEntity,
+  EntityData,
+  EntityRepository,
+  MikroORM,
+  RequestContext,
+} from '@mikro-orm/core';
 import db, { User as UserModel, Alliance, Team } from './db';
 
 declare global {
   namespace Express {
-    interface User extends UserModel {
-    }
+    interface User extends UserModel {}
   }
 }
 
@@ -25,50 +30,53 @@ const logger = winston.createLogger({
 });
 
 function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
-  if (req.isAuthenticated()) {
+  if (process.env.NODE_ENV === 'development' || req.isAuthenticated()) {
     next();
   } else {
     res.sendStatus(401);
   }
 }
 
-function api<T extends BaseEntity<T, any>>(
+function crud<T extends BaseEntity<T, any>>(
   app: Express,
   repository: EntityRepository<T>,
   baseRoute: string,
-  parseId: (id: string) => any = (id) => id,
+  pkName: keyof T,
+  options: { noRetrieve?: boolean } = {},
 ) {
-  app.get(baseRoute, async (req, res) => {
-    const entities: Array<T> = await repository.findAll();
-    res.json(entities.map((entity) => entity.toJSON()));
-  });
+  // TODO: log requests/errors
 
-  app.post(baseRoute, async (req, res) => {
+  if (!options.noRetrieve) {
+    app.get(baseRoute, async (req, res) => {
+      const entities: Array<T> = await repository.findAll();
+      res.json(entities.map((entity) => entity.toJSON()));
+    });
+  }
+
+  app.put(baseRoute, ensureAuthenticated, async (req, res) => {
     try {
-      const entity = repository.create(req.body);
-      await repository.persistAndFlush(entity);
-      res.json(entity.toJSON());
+      const entities = [];
+      for (const data of req.body) {
+        const id = data[pkName];
+        if (id === null || id === undefined) {
+          entities.push(repository.create(data));
+        } else {
+          const entity = await repository.findOneOrFail(id);
+          entities.push(entity.assign(data));
+        }
+      }
+      await repository.persistAndFlush(entities);
+      res.json(entities.map((entity) => entity.toJSON()));
     } catch (err) {
       return res.status(400).send({ err: err.message });
     }
   });
 
-  app.put(path.join(baseRoute, ':id'), async (req, res) => {
+  app.delete(baseRoute, ensureAuthenticated, async (req, res) => {
     try {
-      const prevEntity = await repository.findOneOrFail(parseId(req.params.id));
-      const entity = prevEntity.assign(req.body);
-      await repository.persistAndFlush(entity);
-      res.json(entity.toJSON());
-    } catch (err) {
-      return res.status(400).send({ err: err.message });
-    }
-  });
-
-  app.delete(path.join(baseRoute, ':id'), async (req, res) => {
-    try {
-      const entity = await repository.findOneOrFail(parseId(req.params.id));
-      await repository.removeAndFlush(entity);
-      res.json(entity.toJSON());
+      const entities = await repository.find({ [pkName]: { $in: req.body } });
+      await repository.removeAndFlush(entities);
+      res.json(entities.map((entity) => entity.toJSON()));
     } catch (err) {
       return res.status(400).send({ err: err.message });
     }
@@ -138,13 +146,13 @@ export default async function (options) {
 
   app.get('/user', (req, res) => {
     res.json({
-      username: req.user?.username,
+      username: req.user?.username ?? null,
     });
   });
 
-  // api(app, orm.em.getRepository(UserModel), '/user');
-  api(app, orm.em.getRepository(Alliance), '/alliance', (id) => Number(id));
-  api(app, orm.em.getRepository(Team), '/team', (id) => Number(id));
+  crud(app, orm.em.getRepository(UserModel), '/users', 'username', { noRetrieve: true });
+  crud(app, orm.em.getRepository(Team), '/teams', 'id');
+  crud(app, orm.em.getRepository(Alliance), '/alliances', 'id');
 
   app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
@@ -154,7 +162,8 @@ export default async function (options) {
     logger.info('WS connection');
   });
 
-  server.listen(options.port, () => {  // TODO: add hostname
+  server.listen(options.port, () => {
+    // TODO: add hostname
     logger.info(`Serving on ${options.port}`);
   });
 }

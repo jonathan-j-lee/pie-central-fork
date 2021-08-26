@@ -41,6 +41,10 @@ export default function Navigation() {
             id="/schedule"
             title={<Title icon={IconNames.CALENDAR} title="Schedule" />}
           />
+          <Tab
+            id="/leaderboard"
+            title={<Title icon={IconNames.CROWN} title="Leaderboard" />}
+          />
           <Tab id="/game" title={<Title icon={IconNames.FLAG} title="Game" />} />
           {username && (
             <Tab

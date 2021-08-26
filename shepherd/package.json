@@ -19,6 +19,7 @@
   "private": true,
   "dependencies": {
     "@blueprintjs/core": "^3.47.0",
+    "@blueprintjs/select": "^3.17.0",
     "@mikro-orm/core": "^4.5.7",
     "@mikro-orm/reflection": "^4.5.9",
     "@mikro-orm/sqlite": "^4.5.7",

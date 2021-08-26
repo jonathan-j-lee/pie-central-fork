@@ -15,33 +15,28 @@ export const logIn = createAsyncThunk<LogInResponse, LogInRequest | undefined>(
   async (payload, thunkAPI) => {
     let response;
     if (payload) {
-      response = await request.post('/login')
-        .send(payload);
+      response = await request.post('/login').send(payload);
     } else {
       response = await request.get('/user');
     }
     return response.body as LogInResponse;
-  },
+  }
 );
 
-export const logOut = createAsyncThunk(
-  'user/logOut',
-  async (arg, thunkAPI) => {
-    await request.post('/logout');
-  },
-);
+export const logOut = createAsyncThunk('user/logOut', async (arg, thunkAPI) => {
+  await request.post('/logout');
+});
 
 export interface UserState {
   username: null | string;
-};
+}
 
 export default createSlice({
   name: 'user',
   initialState: {
     username: null,
   } as UserState,
-  reducers: {
-  },
+  reducers: {},
   extraReducers: (builder) => {
     builder
       .addCase(logIn.fulfilled, (state, action) => {

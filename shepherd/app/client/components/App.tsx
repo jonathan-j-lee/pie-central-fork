@@ -5,6 +5,7 @@ import { FocusStyleManager } from '@blueprintjs/core';
 import Navigation from './Navigation';
 import Scoreboard from './Scoreboard';
 import Schedule from './Schedule';
+import Leaderboard from './Leaderboard';
 import Game from './Game';
 import Dashboard from './Dashboard';
 
@@ -17,21 +18,26 @@ export default function App() {
   return (
     <Router>
       <Navigation />
-      <Switch>
-        <Route path="/scoreboard">
-          <Scoreboard />
-        </Route>
-        <Route path="/schedule">
-          <Schedule />
-        </Route>
-        <Route path="/game">
-          <Game />
-        </Route>
-        <Route path="/dashboard">
-          <Dashboard />
-        </Route>
-        <Redirect exact from="*" to="/scoreboard" />
-      </Switch>
+      <main>
+        <Switch>
+          <Route path="/scoreboard">
+            <Scoreboard />
+          </Route>
+          <Route path="/schedule">
+            <Schedule />
+          </Route>
+          <Route path="/leaderboard">
+            <Leaderboard />
+          </Route>
+          <Route path="/game">
+            <Game />
+          </Route>
+          <Route path="/dashboard">
+            <Dashboard />
+          </Route>
+          <Redirect exact from="*" to="/scoreboard" />
+        </Switch>
+      </main>
     </Router>
   );
 }

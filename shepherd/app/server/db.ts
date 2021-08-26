@@ -78,9 +78,12 @@ export class Team extends BaseEntity<Team, 'id'> {
   id!: number;
 
   @Property()
+  number!: number;
+
+  @Property()
   name!: string;
 
-  @ManyToOne()
+  @ManyToOne({ nullable: true })
   alliance?: Alliance;
 }
 
