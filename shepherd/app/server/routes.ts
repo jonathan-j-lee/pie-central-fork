@@ -9,14 +9,8 @@ import passport from 'passport';
 import winston from 'winston';
 import { Server as WebSocketServer } from 'ws';
 import { Strategy as LocalStrategy } from 'passport-local';
-import {
-  BaseEntity,
-  EntityData,
-  EntityRepository,
-  MikroORM,
-  RequestContext,
-} from '@mikro-orm/core';
-import db, { User as UserModel, Alliance, Team } from './db';
+import { BaseEntity, EntityRepository, RequestContext } from '@mikro-orm/core';
+import db, { User as UserModel, Alliance, Team, Match, MatchEvent } from './db';
 
 declare global {
   namespace Express {
@@ -42,8 +36,9 @@ function crud<T extends BaseEntity<T, any>>(
   repository: EntityRepository<T>,
   baseRoute: string,
   pkName: keyof T,
-  options: { noRetrieve?: boolean } = {},
+  options: { noRetrieve?: boolean; update?: (entity: T, data: any) => Promise<T> } = {}
 ) {
+  const update = options.update ?? (async (entity, data) => entity.assign(data));
   // TODO: log requests/errors
 
   if (!options.noRetrieve) {
@@ -62,7 +57,7 @@ function crud<T extends BaseEntity<T, any>>(
           entities.push(repository.create(data));
         } else {
           const entity = await repository.findOneOrFail(id);
-          entities.push(entity.assign(data));
+          entities.push(await update(entity, data));
         }
       }
       await repository.persistAndFlush(entities);
@@ -150,9 +145,26 @@ export default async function (options) {
     });
   });
 
-  crud(app, orm.em.getRepository(UserModel), '/users', 'username', { noRetrieve: true });
+  crud(app, orm.em.getRepository(UserModel), '/users', 'username', {
+    noRetrieve: true,
+  });
   crud(app, orm.em.getRepository(Team), '/teams', 'id');
   crud(app, orm.em.getRepository(Alliance), '/alliances', 'id');
+  crud(app, orm.em.getRepository(Match), '/matches', 'id', {
+    async update(match, data) {
+      match = match.assign(data);
+      const events: MatchEvent[] = data.events ?? [];
+      for (const eventData of events) {
+        if (eventData.id) {
+          const [entity] = await match.events.matching({ where: { id: eventData.id } });
+          if (entity) {
+            match.events.add(entity.assign(eventData));
+          }
+        }
+      }
+      return match;
+    },
+  });
 
   app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));

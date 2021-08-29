@@ -11,6 +11,7 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import LogIn from './LogIn';
+import { DEV_ENV } from './Util';
 import { useAppSelector } from '../store';
 
 const Title = (props: { icon: IconName; title: string }) => (
@@ -46,7 +47,7 @@ export default function Navigation() {
             title={<Title icon={IconNames.CROWN} title="Leaderboard" />}
           />
           <Tab id="/game" title={<Title icon={IconNames.FLAG} title="Game" />} />
-          {username && (
+          {(username || DEV_ENV) && (
             <Tab
               id="/dashboard"
               title={<Title icon={IconNames.DASHBOARD} title="Dashboard" />}

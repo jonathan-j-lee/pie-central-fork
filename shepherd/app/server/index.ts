@@ -8,6 +8,7 @@ yargs(hideBin(process.argv))
     'serve',
     'Start the server.',
     {
+      // TODO: add debug flag
       port: {
         alias: 'p',
         default: 4040,

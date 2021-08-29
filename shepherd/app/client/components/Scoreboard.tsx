@@ -1,6 +1,6 @@
 import * as React from 'react';
-
 import { Card, H1, H2, Intent, Spinner } from '@blueprintjs/core';
+import { displayTime } from './Util';
 
 enum Mode {
   AUTO = 'auto',
@@ -18,15 +18,6 @@ const displayMode = (mode: Mode) => {
     default:
       return '(Unknown phase)';
   }
-};
-
-const displayTime = (duration: number, places: number = 1) => {
-  const minutes = Math.trunc(duration / 60)
-    .toString()
-    .padStart(2, '0');
-  const secondsRounded = (duration % 60).toFixed(places);
-  const seconds = secondsRounded.toString().padStart(2, '0');
-  return `${minutes}:${seconds}`;
 };
 
 function Timer(props: { mode: Mode; timeRemaining: number; totalTime: number }) {

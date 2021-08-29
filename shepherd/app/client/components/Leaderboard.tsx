@@ -4,89 +4,21 @@ import {
   ButtonGroup,
   EditableText,
   H2,
-  HTMLTable,
-  IButtonProps,
   InputGroup,
   Intent,
-  MenuItem,
   NumericInput,
 } from '@blueprintjs/core';
-import { Select } from '@blueprintjs/select';
 import * as _ from 'lodash';
 import { IconNames } from '@blueprintjs/icons';
+
+import EntityTable from './EntityTable';
+import { AddButton, ConfirmButton, DeleteButton, EditButton } from './EntityButtons';
+import { AllianceSelect } from './EntitySelects';
+import { PLACEHOLDER, DEV_ENV, displayTeam, TeamMembers } from './Util';
+
 import { useAppDispatch, useAppSelector } from '../store';
 import alliancesSlice, * as allianceUtils from '../store/alliances';
 import teamsSlice, * as teamUtils from '../store/teams';
-
-const DeleteButton = (props: IButtonProps) => (
-  <Button minimal icon={IconNames.CROSS} intent={Intent.DANGER} {...props} />
-);
-
-const DEV_ENV = process.env.NODE_ENV === 'development';
-const PLACEHOLDER = <>&mdash;</>;
-
-interface EntityTableProps<T> {
-  columns: Array<{ field: string; heading: string }>;
-  entities: Array<T>;
-  render: (entity: T, index?: number) => React.ReactNode;
-  emptyMessage?: string;
-}
-
-function EntityTable<T>(props: EntityTableProps<T>) {
-  const [sortedBy, setSortedBy] = React.useState<string | null>(null);
-  const [ascending, setAscending] = React.useState(false);
-  let entities = _.sortBy(props.entities, sortedBy ? [sortedBy] : []);
-  if (!ascending) {
-    entities = _.reverse(entities);
-  }
-  const selectSortIcon = (field: string) => {
-    if (field !== sortedBy) {
-      return IconNames.DOUBLE_CARET_VERTICAL;
-    } else if (ascending) {
-      return IconNames.CARET_UP;
-    } else {
-      return IconNames.CARET_DOWN;
-    }
-  };
-  return (
-    <HTMLTable striped className="entity-table">
-      <thead>
-        <tr>
-          {props.columns.map((column, index) => (
-            <td key={index}>
-              {column.heading}
-              <Button
-                minimal
-                className="sort-button"
-                icon={selectSortIcon(column.field)}
-                onClick={() => {
-                  if (column.field !== sortedBy) {
-                    setSortedBy(column.field);
-                    setAscending(true);
-                  } else {
-                    setAscending(!ascending);
-                  }
-                }}
-              />
-            </td>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {entities.map((entity, index) => props.render(entity, index))}
-        {entities.length === 0 && (
-          <tr>
-            <td colSpan={props.columns.length} className="empty-row">
-              {props.emptyMessage || 'No entities'}
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </HTMLTable>
-  );
-}
-
-const AllianceSelect = Select.ofType<allianceUtils.Alliance>();
 
 function TeamsRoster(props: { edit: boolean }) {
   const dispatch = useAppDispatch();
@@ -111,7 +43,7 @@ function TeamsRoster(props: { edit: boolean }) {
       render={(team) => {
         const alliance = team.alliance
           ? allianceUtils.selectors.selectById(alliancesState, team.alliance)
-          : null;
+          : undefined;
         return (
           <tr key={team.id}>
             <td>
@@ -147,30 +79,14 @@ function TeamsRoster(props: { edit: boolean }) {
             <td>
               {props.edit ? (
                 <AllianceSelect
-                  items={alliances.filter((alliance) => alliance.id >= 0)}
-                  itemPredicate={(query, alliance) =>
-                    alliance.name.toLowerCase().includes(query.toLowerCase())
-                  }
-                  itemRenderer={(alliance, { handleClick }) => (
-                    <MenuItem
-                      key={alliance.id}
-                      text={alliance.name}
-                      onClick={handleClick}
-                    />
-                  )}
-                  onItemSelect={(alliance) => {
+                  entity={alliance}
+                  entities={alliances}
+                  onSelect={(alliance) =>
                     dispatch(
                       teamsSlice.actions.upsert({ ...team, alliance: alliance.id })
-                    );
-                  }}
-                  noResults={<MenuItem disabled text="No available alliances." />}
-                >
-                  <Button
-                    icon={IconNames.PEOPLE}
-                    rightIcon={IconNames.CARET_DOWN}
-                    text={alliance?.name ?? '(None)'}
-                  />
-                </AllianceSelect>
+                    )
+                  }
+                />
               ) : (
                 alliance?.name || PLACEHOLDER
               )}
@@ -198,6 +114,7 @@ function AlliancesRoster(props: { edit: boolean }) {
   const teamsByAlliance = _.groupBy(teams, (team) => team.alliance);
   const alliancesState = useAppSelector((state) => state.alliances);
   const alliances = allianceUtils.selectors.selectAll(alliancesState);
+  // TODO: do not break team number from name
   return (
     <EntityTable
       columns={[
@@ -227,10 +144,7 @@ function AlliancesRoster(props: { edit: boolean }) {
             )}
           </td>
           <td>
-            {(teamsByAlliance[alliance.id] ?? [])
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((team) => `${team.name} (#${team.number})`)
-              .join(', ') || PLACEHOLDER}
+            <TeamMembers teams={teamsByAlliance[alliance.id] ?? []} />
           </td>
           {!props.edit && <td>{alliance.wins ?? '0'}</td>}
           {!props.edit && <td>{alliance.losses ?? '0'}</td>}
@@ -251,10 +165,6 @@ export default function Leaderboard() {
   const dispatch = useAppDispatch();
   const username = useAppSelector((state) => state.user.username);
   const [edit, setEdit] = React.useState(false);
-  React.useEffect(() => {
-    dispatch(allianceUtils.fetch());
-    dispatch(teamUtils.fetch());
-  }, [dispatch]);
   return (
     <>
       <div className="container">
@@ -268,41 +178,25 @@ export default function Leaderboard() {
         </div>
       </div>
       {(username || DEV_ENV) && (
-        <div className="leaderboard-buttons">
-          <ButtonGroup>
-            <Button
-              text={edit ? 'View' : 'Edit'}
-              icon={edit ? IconNames.EYE_OPEN : IconNames.EDIT}
-              onClick={() => setEdit(!edit)}
-            />
-            {edit && (
-              <>
-                <Button
-                  text="Add team"
-                  intent={Intent.PRIMARY}
-                  icon={IconNames.ADD}
-                  onClick={() => dispatch(teamUtils.add())}
-                />
-                <Button
-                  text="Add alliance"
-                  intent={Intent.PRIMARY}
-                  icon={IconNames.ADD}
-                  onClick={() => dispatch(allianceUtils.add())}
-                />
-                <Button
-                  text="Confirm"
-                  intent={Intent.SUCCESS}
-                  icon={IconNames.TICK}
-                  onClick={() => {
-                    dispatch(teamUtils.save());
-                    dispatch(allianceUtils.save());
-                    setEdit(false);
-                  }}
-                />
-              </>
-            )}
-          </ButtonGroup>
-        </div>
+        <ButtonGroup className="edit-button-group">
+          <EditButton edit={edit} setEdit={setEdit} />
+          {edit && (
+            <>
+              <AddButton text="Add team" onClick={() => dispatch(teamUtils.add())} />
+              <AddButton
+                text="Add alliance"
+                onClick={() => dispatch(allianceUtils.add())}
+              />
+              <ConfirmButton
+                onClick={() => {
+                  dispatch(teamUtils.save());
+                  dispatch(allianceUtils.save());
+                  setEdit(false);
+                }}
+              />
+            </>
+          )}
+        </ButtonGroup>
       )}
     </>
   );

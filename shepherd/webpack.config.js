@@ -18,7 +18,7 @@ module.exports = [
         {
           test: /\.ts$/i,
           exclude: /\.test\.tsx?$/i,
-          include: /app\/server/,
+          include: /app/,
           use: 'ts-loader',
         },
       ],
@@ -61,7 +61,7 @@ module.exports = [
         {
           test: /\.tsx?$/i,
           exclude: /\.test\.tsx?$/i,
-          include: /app\/client/,
+          include: /app/,
           use: 'ts-loader',
         },
         {

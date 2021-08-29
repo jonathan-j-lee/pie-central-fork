@@ -1,9 +1,4 @@
-import {
-  createAsyncThunk,
-  createEntityAdapter,
-  createSlice,
-  PayloadAction,
-} from '@reduxjs/toolkit';
+import { createSlice } from '@reduxjs/toolkit';
 import { makeEndpointClient, generateTempId } from './entities';
 import * as _ from 'lodash';
 
@@ -11,7 +6,7 @@ export interface Team {
   id: number;
   number: number;
   name: string;
-  alliance?: number;
+  alliance: number | null;
   wins?: number;
   losses?: number;
 }
@@ -42,4 +37,5 @@ export const add = () =>
     id: generateTempId(),
     number: 0,
     name: '',
+    alliance: null,
   });

@@ -5,7 +5,6 @@ import {
   Entity,
   EntityRepository,
   Enum,
-  ManyToMany,
   ManyToOne,
   MikroORM,
   OneToMany,
@@ -15,6 +14,7 @@ import {
 import { TsMorphMetadataProvider } from '@mikro-orm/reflection';
 import winston from 'winston';
 import { promisify } from 'util';
+import { AllianceColor, MatchEventType } from '../types';
 
 const logger = winston.createLogger({
   level: 'debug',
@@ -60,6 +60,7 @@ export class User extends BaseEntity<User, 'username'> {
   }
 }
 
+// TODO: more stringent database constraints
 @Entity()
 export class Alliance extends BaseEntity<Alliance, 'id'> {
   @PrimaryKey()
@@ -92,29 +93,22 @@ export class Match extends BaseEntity<Match, 'id'> {
   @PrimaryKey()
   id!: number;
 
-  @Property()
+  @ManyToOne({ nullable: true })
   next?: Match;
 
-  @OneToMany(() => MatchEvent, (event) => event.match)
+  @ManyToOne({ nullable: true })
+  blueAlliance?: Alliance;
+
+  @ManyToOne({ nullable: true })
+  goldAlliance?: Alliance;
+
+  @OneToMany({
+    eager: true,
+    orphanRemoval: true,
+    entity: () => MatchEvent,
+    mappedBy: (event) => event.match,
+  })
   events = new Collection<MatchEvent>(this);
-
-  // @Property({ persist: false })
-  // get blueAlliance() {
-  // }
-}
-
-enum MatchEventType {
-  JOIN_BLUE = 'join-blue',
-  JOIN_GOLD = 'join-gold',
-  START_AUTO = 'start-auto',
-  STOP_AUTO = 'stop-auto',
-  START_TELEOP = 'start-teleop',
-  STOP_TELEOP = 'stop-teleop',
-  ADD = 'add',
-  SUBTRACT = 'subtract',
-  MULTIPLY = 'multiply',
-  EXTEND = 'extend',
-  OTHER = 'other',
 }
 
 @Entity()
@@ -125,20 +119,22 @@ export class MatchEvent extends BaseEntity<MatchEvent, 'id'> {
   @ManyToOne()
   match!: Match;
 
-  // FIXME: @Enum()
-  @Property()
-  type!: MatchEventType;
+  @Enum(() => MatchEventType)
+  type = MatchEventType.OTHER;
 
   @Property()
-  timestamp = new Date();
+  timestamp = Date.now();
 
-  @Property()
+  @Enum(() => AllianceColor)
+  alliance = AllianceColor.NONE;
+
+  @ManyToOne({ nullable: true })
   team?: Team;
 
-  @Property()
+  @Property({ nullable: true })
   value?: number;
 
-  @Property()
+  @Property({ nullable: true })
   description?: string;
 }
 

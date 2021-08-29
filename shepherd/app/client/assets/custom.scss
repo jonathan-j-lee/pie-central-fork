@@ -21,12 +21,6 @@ main {
   .blue.alliance > * {
     // color: $blue1 !important;
   }
-  .blue.alliance {
-    background-color: $blue5;
-  }
-  .gold.alliance {
-    background-color: $gold5;
-  }
   .alliance {
     margin: 0 1rem;
     flex: 2;
@@ -68,15 +62,35 @@ main {
   }
   td {
     white-space: nowrap;
-    padding: 0.4rem !important;
+    padding: 0.6rem !important;
     vertical-align: middle !important;
   }
   .empty-row {
-    padding: 0.8rem !important;
     text-align: center !important;
   }
 }
 
-.leaderboard-buttons {
-  margin-top: 1rem;
+.blue.win, .blue.alliance, .blue.bg {
+  background-color: $blue5 !important;
+}
+
+.gold.win, .gold.alliance, .gold.bg {
+  background-color: $gold5 !important;
+}
+
+.tie {
+  background-color: $gray5 !important;
+}
+
+.score-icon {
+  margin-right: 0.4rem;
+}
+
+.alliance-heading {
+  text-align: center !important;
+}
+
+main > h2,
+.edit-button-group {
+  margin-top: 1rem !important;
 }
