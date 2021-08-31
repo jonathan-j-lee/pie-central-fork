@@ -1,13 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit';
-import { makeEndpointClient, generateTempId } from './entities';
 import * as _ from 'lodash';
-
-export interface Alliance {
-  id: number;
-  name: string;
-  wins?: number;
-  losses?: number;
-}
+import { makeEndpointClient, generateTempId } from './entities';
+import { Alliance } from '../../types';
 
 export const { adapter, selectors, fetch, save, sliceOptions } = makeEndpointClient<
   Alliance,

@@ -3,8 +3,9 @@ import { BrowserRouter as Router, Switch, Route, Redirect } from 'react-router-d
 import { FocusStyleManager } from '@blueprintjs/core';
 
 import { useAppDispatch } from '../store';
+import controlSlice, * as controlUtils from '../store/control';
 import * as allianceUtils from '../store/alliances';
-import * as matchUtils from '../store/matches';
+import matchSlice, * as matchUtils from '../store/matches';
 import * as teamUtils from '../store/teams';
 
 import Navigation from './Navigation';
@@ -19,13 +20,11 @@ FocusStyleManager.onlyShowFocusOnTabs();
 export default function App() {
   const dispatch = useAppDispatch();
   React.useEffect(() => {
+    dispatch(controlUtils.init());
     dispatch(allianceUtils.fetch());
     dispatch(teamUtils.fetch());
     dispatch(matchUtils.fetch());
   }, [dispatch]);
-  React.useEffect(() => {
-    const ws = new WebSocket(`ws://${window.location.host}`);
-  }, []);
   return (
     <Router>
       <Navigation />

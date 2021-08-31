@@ -7,10 +7,13 @@ import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
 import passport from 'passport';
 import winston from 'winston';
+import * as _ from 'lodash';
 import { Server as WebSocketServer } from 'ws';
 import { Strategy as LocalStrategy } from 'passport-local';
 import { BaseEntity, EntityRepository, RequestContext } from '@mikro-orm/core';
 import db, { User as UserModel, Alliance, Team, Match, MatchEvent } from './db';
+import FieldControl from './control';
+import { MatchEventType } from '../types';
 
 declare global {
   namespace Express {
@@ -31,19 +34,25 @@ function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+// TODO: type the data parameter
 function crud<T extends BaseEntity<T, any>>(
   app: Express,
   repository: EntityRepository<T>,
   baseRoute: string,
   pkName: keyof T,
-  options: { noRetrieve?: boolean; update?: (entity: T, data: any) => Promise<T> } = {}
+  options: {
+    noRetrieve?: boolean;
+    mapUpdate?: (data: any) => any;
+    update?: (entity: T, data: any) => Promise<T>;
+  } = {}
 ) {
-  const update = options.update ?? (async (entity, data) => entity.assign(data));
+  const mapUpdate = options.mapUpdate ?? ((data) => data);
+  const update = options.update ?? (async (entity, data) => entity);
   // TODO: log requests/errors
 
   if (!options.noRetrieve) {
     app.get(baseRoute, async (req, res) => {
-      const entities: Array<T> = await repository.findAll();
+      const entities: T[] = await repository.findAll();
       res.json(entities.map((entity) => entity.toJSON()));
     });
   }
@@ -51,12 +60,12 @@ function crud<T extends BaseEntity<T, any>>(
   app.put(baseRoute, ensureAuthenticated, async (req, res) => {
     try {
       const entities = [];
-      for (const data of req.body) {
+      for (const data of req.body.map(mapUpdate)) {
         const id = data[pkName];
         if (id === null || id === undefined) {
           entities.push(repository.create(data));
         } else {
-          const entity = await repository.findOneOrFail(id);
+          const entity = (await repository.findOneOrFail(id)).assign(data);
           entities.push(await update(entity, data));
         }
       }
@@ -84,6 +93,7 @@ export default async function (options) {
   const users = orm.em.getRepository(UserModel);
   const server = http.createServer(app);
   const wsServer = new WebSocketServer({ server });
+  const fc = new FieldControl(wsServer, orm);
 
   passport.use(
     new LocalStrategy(async (username, password, done) => {
@@ -151,14 +161,14 @@ export default async function (options) {
   crud(app, orm.em.getRepository(Team), '/teams', 'id');
   crud(app, orm.em.getRepository(Alliance), '/alliances', 'id');
   crud(app, orm.em.getRepository(Match), '/matches', 'id', {
+    mapUpdate: (match) => ({ ...match, events: Match.mapEvents(match.events) }),
     async update(match, data) {
-      match = match.assign(data);
       const events: MatchEvent[] = data.events ?? [];
-      for (const eventData of events) {
-        if (eventData.id) {
-          const [entity] = await match.events.matching({ where: { id: eventData.id } });
+      for (const event of events) {
+        if (event.id) {
+          const [entity] = await match.events.matching({ where: { id: event.id } });
           if (entity) {
-            match.events.add(entity.assign(eventData));
+            match.events.add(entity.assign(event));
           }
         }
       }
@@ -170,9 +180,21 @@ export default async function (options) {
     res.sendFile(path.join(__dirname, 'index.html'));
   });
 
-  wsServer.on('connection', (ws) => {
-    logger.info('WS connection');
+  wsServer.on('connection', async (ws) => {
+    logger.info('WS connection established');
+
+    // TODO: add authentication here
+    ws.on('message', async (message) => {
+      await fc.handle(JSON.parse(message.toString()));
+      await fc.broadcast();
+    });
+
+    await fc.broadcast([ws]);
   });
+
+  setInterval(async () => {
+    await fc.broadcast();
+  }, 4000);
 
   server.listen(options.port, () => {
     // TODO: add hostname

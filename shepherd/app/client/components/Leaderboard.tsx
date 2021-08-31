@@ -13,8 +13,8 @@ import { IconNames } from '@blueprintjs/icons';
 
 import EntityTable from './EntityTable';
 import { AddButton, ConfirmButton, DeleteButton, EditButton } from './EntityButtons';
-import { AllianceSelect } from './EntitySelects';
-import { PLACEHOLDER, DEV_ENV, displayTeam, TeamMembers } from './Util';
+import { select, AllianceSelect } from './EntitySelects';
+import { PLACEHOLDER, DEV_ENV, TeamMembers } from './Util';
 
 import { useAppDispatch, useAppSelector } from '../store';
 import alliancesSlice, * as allianceUtils from '../store/alliances';
@@ -25,7 +25,6 @@ function TeamsRoster(props: { edit: boolean }) {
   const teamsState = useAppSelector((state) => state.teams);
   const teams = teamUtils.selectors.selectAll(teamsState);
   const alliancesState = useAppSelector((state) => state.alliances);
-  const alliances = allianceUtils.selectors.selectAll(alliancesState);
   return (
     <EntityTable
       columns={[
@@ -40,69 +39,64 @@ function TeamsRoster(props: { edit: boolean }) {
             ]),
       ]}
       entities={teams}
-      render={(team) => {
-        const alliance = team.alliance
-          ? allianceUtils.selectors.selectById(alliancesState, team.alliance)
-          : undefined;
-        return (
-          <tr key={team.id}>
-            <td>
-              {props.edit ? (
-                <InputGroup
-                  placeholder="Enter a name"
-                  defaultValue={team.name}
-                  onBlur={({ currentTarget: { value: name } }) =>
-                    dispatch(teamsSlice.actions.upsert({ ...team, name }))
-                  }
-                />
-              ) : (
-                team.name || PLACEHOLDER
-              )}
-            </td>
-            <td>
-              {props.edit ? (
-                <NumericInput
-                  fill
-                  allowNumericCharactersOnly
-                  min={0}
-                  clampValueOnBlur
-                  minorStepSize={null}
-                  defaultValue={team.number}
-                  onValueChange={(number) =>
-                    dispatch(teamsSlice.actions.upsert({ ...team, number }))
-                  }
-                />
-              ) : (
-                team.number ?? PLACEHOLDER
-              )}
-            </td>
-            <td>
-              {props.edit ? (
-                <AllianceSelect
-                  entity={alliance}
-                  entities={alliances}
-                  onSelect={(alliance) =>
-                    dispatch(
-                      teamsSlice.actions.upsert({ ...team, alliance: alliance.id })
-                    )
-                  }
-                />
-              ) : (
-                alliance?.name || PLACEHOLDER
-              )}
-            </td>
-            {!props.edit && <td>{team.wins ?? '0'}</td>}
-            {!props.edit && <td>{team.losses ?? '0'}</td>}
-            {props.edit && (
-              <td>
-                <DeleteButton
-                  onClick={() => dispatch(teamsSlice.actions.remove(team.id))}
-                />
-              </td>
+      render={(team) => (
+        <tr key={team.id}>
+          <td>
+            {props.edit ? (
+              <InputGroup
+                placeholder="Enter a name"
+                defaultValue={team.name}
+                onBlur={({ currentTarget: { value: name } }) =>
+                  dispatch(teamsSlice.actions.upsert({ ...team, name }))
+                }
+              />
+            ) : (
+              team.name || PLACEHOLDER
             )}
-          </tr>
-        );
-      }}
+          </td>
+          <td>
+            {props.edit ? (
+              <NumericInput
+                fill
+                allowNumericCharactersOnly
+                min={0}
+                clampValueOnBlur
+                minorStepSize={null}
+                defaultValue={team.number}
+                onValueChange={(number) =>
+                  dispatch(teamsSlice.actions.upsert({ ...team, number }))
+                }
+              />
+            ) : (
+              team.number ?? PLACEHOLDER
+            )}
+          </td>
+          <td>
+            {props.edit ? (
+              <AllianceSelect
+                id={team.alliance}
+                onSelect={(alliance) =>
+                  dispatch(
+                    teamsSlice.actions.upsert({ ...team, alliance: alliance.id })
+                  )
+                }
+              />
+            ) : (
+              select(allianceUtils.selectors, alliancesState, team.alliance)?.name ||
+              PLACEHOLDER
+            )}
+          </td>
+          {!props.edit && <td>{team.wins ?? '0'}</td>}
+          {!props.edit && <td>{team.losses ?? '0'}</td>}
+          {props.edit && (
+            <td>
+              <DeleteButton
+                onClick={() => dispatch(teamsSlice.actions.remove(team.id))}
+              />
+            </td>
+          )}
+        </tr>
+      )}
     />
   );
 }
@@ -178,7 +172,7 @@ export default function Leaderboard() {
         </div>
       </div>
       {(username || DEV_ENV) && (
-        <ButtonGroup className="edit-button-group">
+        <ButtonGroup className="spacer">
           <EditButton edit={edit} setEdit={setEdit} />
           {edit && (
             <>

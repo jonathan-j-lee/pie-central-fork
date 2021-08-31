@@ -1,12 +1,10 @@
 import * as React from 'react';
-import * as _ from 'lodash';
-import { Team } from '../store/teams';
+import { Alert, Button, Intent, IButtonProps } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import { Team, displayTeam } from '../../types';
 
 export const DEV_ENV = process.env.NODE_ENV === 'development';
 export const PLACEHOLDER = <>&mdash;</>;
-
-export const displayTeam = (team?: Team) =>
-  team?.name ? `${team.name} (#${team.number})` : PLACEHOLDER;
 
 export function TeamMembers(props: { teams: Team[] }) {
   return props.teams.length ? (
@@ -21,11 +19,49 @@ export function TeamMembers(props: { teams: Team[] }) {
   );
 }
 
-export const displayTime = (duration: number, places: number = 1) => {
-  const minutes = Math.trunc(duration / 60)
-    .toString()
-    .padStart(2, '0');
-  const seconds = duration % 60;
-  const secondsFormatted = (seconds < 10 ? '0' : '') + seconds.toFixed(places);
-  return `${minutes}:${secondsFormatted}`;
-};
+interface AlertButtonProps extends IButtonProps {
+  getWarnings: () => string[];
+}
+
+export function AlertButton({ getWarnings, ...props }: AlertButtonProps) {
+  const [event, setEvent] = React.useState<React.MouseEvent<HTMLElement> | null>(null);
+  const [warnings, setWarnings] = React.useState<string[]>([]);
+  return (
+    <>
+      <Alert
+        canEscapeKeyCancel
+        canOutsideClickCancel
+        isOpen={warnings.length > 0}
+        icon={IconNames.WARNING_SIGN}
+        intent={Intent.DANGER}
+        cancelButtonText="Cancel"
+        confirmButtonText="Confirm"
+        onConfirm={() => {
+          if (event) {
+            props.onClick?.(event);
+          }
+        }}
+        onClose={() => {
+          setEvent(null);
+          setWarnings([]);
+        }}
+      >
+        {warnings.map((warning, index) => (
+          <p key={index}>{warning}</p>
+        ))}
+      </Alert>
+      <Button
+        {...props}
+        onClick={(event) => {
+          const warnings = getWarnings();
+          if (warnings.length > 0) {
+            setEvent(event);
+            setWarnings(warnings);
+          } else {
+            props.onClick?.(event);
+          }
+        }}
+      />
+    </>
+  );
+}

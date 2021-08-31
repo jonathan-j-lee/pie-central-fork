@@ -1,15 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit';
-import { makeEndpointClient, generateTempId } from './entities';
 import * as _ from 'lodash';
-
-export interface Team {
-  id: number;
-  number: number;
-  name: string;
-  alliance: number | null;
-  wins?: number;
-  losses?: number;
-}
+import { makeEndpointClient, generateTempId } from './entities';
+import { Team } from '../../types';
 
 export const { adapter, selectors, fetch, save, sliceOptions } = makeEndpointClient<
   Team,
@@ -38,4 +30,5 @@ export const add = () =>
     number: 0,
     name: '',
     alliance: null,
+    hostname: '',
   });

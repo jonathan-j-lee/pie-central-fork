@@ -12,9 +12,15 @@ import {
   Property,
 } from '@mikro-orm/core';
 import { TsMorphMetadataProvider } from '@mikro-orm/reflection';
+import * as _ from 'lodash';
 import winston from 'winston';
 import { promisify } from 'util';
-import { AllianceColor, MatchEventType } from '../types';
+import {
+  AllianceColor,
+  GameState,
+  MatchEvent as MatchEventData,
+  MatchEventType,
+} from '../types';
 
 const logger = winston.createLogger({
   level: 'debug',
@@ -60,6 +66,7 @@ export class User extends BaseEntity<User, 'username'> {
   }
 }
 
+// FIXME: TsMorphMetadataProvider is broken
 // TODO: more stringent database constraints
 @Entity()
 export class Alliance extends BaseEntity<Alliance, 'id'> {
@@ -86,6 +93,11 @@ export class Team extends BaseEntity<Team, 'id'> {
 
   @ManyToOne({ nullable: true })
   alliance?: Alliance;
+
+  @Property()
+  hostname!: string;
+
+  // TODO: add connection preferences
 }
 
 @Entity()
@@ -109,6 +121,37 @@ export class Match extends BaseEntity<Match, 'id'> {
     mappedBy: (event) => event.match,
   })
   events = new Collection<MatchEvent>(this);
+
+  static mapEvents(
+    events: Partial<MatchEventData>[],
+    game?: GameState
+  ): Partial<MatchEventData>[] {
+    const processed: Partial<MatchEventData>[] = [];
+    const gameState = game ?? GameState.fromEvents([]);
+    for (const event of events) {
+      if (event.type === MatchEventType.JOIN) {
+        event.timestamp = 0;
+        if (event.team === null || event.team === undefined) {
+          continue;
+        }
+        const index = _.findIndex(
+          processed,
+          (maybeJoin) =>
+            maybeJoin.type === MatchEventType.JOIN && maybeJoin.team === event.team
+        );
+        if (index >= 0) {
+          processed[index] = { ...processed[index], ...event };
+          continue;
+        }
+      }
+      if (event.team !== null && event.team !== undefined && !event.alliance) {
+        event.alliance = gameState.getAlliance(event.team);
+      }
+      processed.push(event);
+      gameState.apply(event);
+    }
+    return processed;
+  }
 }
 
 @Entity()
@@ -122,8 +165,8 @@ export class MatchEvent extends BaseEntity<MatchEvent, 'id'> {
   @Enum(() => MatchEventType)
   type = MatchEventType.OTHER;
 
-  @Property()
-  timestamp = Date.now();
+  @Property({ columnType: 'integer' })
+  timestamp = Date.now(); // TODO: keep sorted by timestamp
 
   @Enum(() => AllianceColor)
   alliance = AllianceColor.NONE;
@@ -131,7 +174,7 @@ export class MatchEvent extends BaseEntity<MatchEvent, 'id'> {
   @ManyToOne({ nullable: true })
   team?: Team;
 
-  @Property({ nullable: true })
+  @Property({ columnType: 'real', nullable: true })
   value?: number;
 
   @Property({ nullable: true })

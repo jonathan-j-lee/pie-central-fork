@@ -5,7 +5,7 @@ import * as _ from 'lodash';
 
 interface EntityTableProps<T> {
   columns: Array<{ field: string; heading: string }>;
-  entities: Array<T>;
+  entities: T[];
   render: (entity: T, index?: number) => React.ReactNode;
   headings?: React.ReactNode;
   sortedBy?: string;

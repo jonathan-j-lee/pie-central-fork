@@ -70,16 +70,52 @@ main {
   }
 }
 
-.blue.win, .blue.alliance, .blue.bg {
+table {
+  label.bp3-control.bp3-checkbox {
+    margin: 0;
+  }
+}
+
+.blue.win,
+.blue.alliance,
+.blue.bg {
   background-color: $blue5 !important;
 }
 
-.gold.win, .gold.alliance, .gold.bg {
+.gold.win,
+.gold.alliance,
+.gold.bg {
   background-color: $gold5 !important;
 }
 
 .tie {
   background-color: $gray5 !important;
+}
+
+td.score {
+  padding: 0 !important;
+  div {
+    padding: 0.6rem;
+  }
+}
+
+// FIXME: margin when editing cell (height not 100%)
+$stripe-size: 0.5rem;
+
+$stripe-colors: (
+  '.blue.win': $blue4,
+  '.gold.win': $gold4,
+  '.tie': $gray4,
+);
+
+@each $name, $color in $stripe-colors {
+  #{$name} > .current {
+    background: repeating-linear-gradient(
+      -45deg,
+      transparent 0 $stripe-size,
+      #{$color} $stripe-size 2 * $stripe-size
+    ) !important;
+  }
 }
 
 .score-icon {
@@ -90,7 +126,17 @@ main {
   text-align: center !important;
 }
 
-main > h2,
-.edit-button-group {
+.spacer {
   margin-top: 1rem !important;
+}
+
+.control-bar {
+  display: inline-flex;
+  .bp3-form-group {
+    margin-right: 1rem;
+  }
+}
+
+.no-match {
+  margin: 1rem 0;
 }

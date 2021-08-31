@@ -10,7 +10,6 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import request from 'superagent';
-import * as _ from 'lodash';
 import { notifySuccess, OutcomeButton } from './Notification';
 import { useAppDispatch, useAppSelector } from '../store';
 import { logIn, logOut } from '../store/user';
@@ -71,18 +70,20 @@ export default function LogIn() {
               intent={Intent.SUCCESS}
               text="Log in"
               onClick={async () => {
-                const form = document.getElementById('login') as HTMLFormElement | null;
-                if (form) {
-                  const formData = new FormData(form).entries();
-                  const payload = _.fromPairs(Array.from(formData));
-                  try {
-                    await dispatch(logIn(payload)).unwrap();
-                    notifySuccess('Successfully logged in.');
-                    setError(null);
-                    setShow(false);
-                  } catch (err) {
-                    setError(err);
-                  }
+                const getValue = (id: string) =>
+                  (document.getElementById(id) as HTMLInputElement | null)?.value || '';
+                try {
+                  await dispatch(
+                    logIn({
+                      username: getValue('username'),
+                      password: getValue('password'),
+                    })
+                  ).unwrap();
+                  notifySuccess('Successfully logged in.');
+                  setError(null);
+                  setShow(false);
+                } catch (err) {
+                  setError(err);
                 }
               }}
             />

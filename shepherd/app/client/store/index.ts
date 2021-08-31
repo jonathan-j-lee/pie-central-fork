@@ -1,6 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
 import alliances from './alliances';
+import control, { wsClient } from './control';
 import matches from './matches';
 import teams from './teams';
 import user from './user';
@@ -8,10 +9,12 @@ import user from './user';
 const store = configureStore({
   reducer: {
     alliances: alliances.reducer,
+    control: control.reducer,
     matches: matches.reducer,
     teams: teams.reducer,
     user: user.reducer,
   },
+  middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(wsClient),
 });
 
 export default store;

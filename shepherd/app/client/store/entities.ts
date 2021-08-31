@@ -25,6 +25,7 @@ export function makeEndpointClient<T, ID extends number | string>(
     const state: State | undefined = rootState[name];
     if (state) {
       const entities = selectors.selectAll(state);
+      // TODO: use set for checking modified
       const modified = entities
         .filter((entity) => state.modified.includes(selectId(entity)))
         .map((entity) => mapModified(entity));
