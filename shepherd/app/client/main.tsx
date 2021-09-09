@@ -7,11 +7,14 @@ import '@blueprintjs/core/lib/css/blueprint.css';
 import './assets/custom.scss';
 
 import App from './components/App';
+import ErrorBoundary from './components/ErrorBoundary';
 import store from './store';
 
 ReactDOM.render(
   <Provider store={store}>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </Provider>,
   document.getElementById('content')
 );

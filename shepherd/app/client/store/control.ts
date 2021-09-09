@@ -20,7 +20,7 @@ const slice = createSlice({
       phase: MatchPhase.IDLE,
       timeRemaining: 0,
       totalTime: 0,
-      running: false,
+      stage: 'done',
     },
     robots: [],
   } as ControlState,

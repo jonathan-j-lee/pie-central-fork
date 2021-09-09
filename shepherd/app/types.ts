@@ -23,6 +23,14 @@ export enum MatchPhase {
   TELEOP = 'teleop',
 }
 
+export enum LogLevel {
+  DEBUG = 'debug',
+  INFO = 'info',
+  WARNING = 'warning',
+  ERROR = 'error',
+  CRITICAL = 'critical',
+}
+
 export interface Alliance {
   id: number;
   name: string;
@@ -36,6 +44,10 @@ export interface Team {
   name: string;
   alliance: number | null;
   hostname: string;
+  callPort: number;
+  logPort: number;
+  updatePort: number;
+  multicastGroup: string;
   wins?: number;
   losses?: number;
 }
@@ -63,7 +75,7 @@ export interface TimerState {
   phase: MatchPhase;
   timeRemaining: number;
   totalTime: number;
-  running: boolean;
+  stage: 'init' | 'running' | 'done';
 }
 
 export interface ControlRequest {
@@ -71,18 +83,29 @@ export interface ControlRequest {
   events?: Partial<MatchEvent>[];
   activations?: number[];
   reconnect?: boolean;
-  timer?: TimerState;
+  timer?: TimerState | null;
 }
 
-export interface Robot {
+export interface LogEvent {
+  timestamp: string;
+  level: LogLevel;
+  event: string;
+  exception?: string;
+  student_code?: boolean; // eslint-disable-line camelcase
+}
+
+export interface RobotUpdate {
   teamId: number;
+  logEvents: LogEvent[];
+  updateRate: number;
+  uids: string[];
 }
 
 export interface ControlState {
   matchId: number | null;
   clientTimestamp: number;
   timer: TimerState;
-  robots: Robot[];
+  robots: RobotUpdate[];
 }
 
 export interface ControlResponse {
@@ -126,6 +149,10 @@ export function displayPhase(phase: MatchPhase) {
   }
 }
 
+export function isRunning(phase: MatchPhase) {
+  return phase === MatchPhase.AUTO || phase === MatchPhase.TELEOP;
+}
+
 export function displaySummary(event: MatchEvent, team?: Team) {
   const alliance = displayAllianceColor(event.alliance);
   const value = event.value ?? 0;
@@ -157,7 +184,7 @@ export function displaySummary(event: MatchEvent, team?: Team) {
 }
 
 interface MatchInterval {
-  phase: MatchPhase | null;
+  phase: MatchPhase;
   start: number;
   stop: number;
 }
@@ -194,14 +221,14 @@ export class AllianceState {
     switch (event.type) {
       case MatchEventType.JOIN:
         if (team !== null) {
-          this.intervals.set(team, { phase: null, start: 0, stop: 0 });
+          this.intervals.set(team, { phase: MatchPhase.IDLE, start: 0, stop: 0 });
         }
         break;
       case MatchEventType.AUTO:
-        this.setTimer(event, MatchPhase.AUTO, 30);
+        this.setTimer(event, MatchPhase.AUTO, 30 * 1000);
         break;
       case MatchEventType.TELEOP:
-        this.setTimer(event, MatchPhase.TELEOP, 180);
+        this.setTimer(event, MatchPhase.TELEOP, 180 * 1000);
         break;
       case MatchEventType.IDLE:
         this.setTimer(event, MatchPhase.IDLE, 0);
@@ -262,24 +289,15 @@ export class GameState {
 
   getTimer(now?: number): Partial<TimerState> {
     const timestamp = now ?? Date.now();
-    const intervals = Array.from(this.blue.intervals.values()).concat(
-      Array.from(this.gold.intervals.values())
-    );
-    if (intervals.every((interval) => interval.phase === null)) {
-      return { running: false };
-    }
-    const runningIntervals = intervals
-      .filter(
-        (interval) =>
-          interval.phase === MatchPhase.AUTO || interval.phase === MatchPhase.TELEOP
-      )
-      .filter((interval) => timestamp < interval.stop);
-    if (runningIntervals.length === 0) {
-      return { running: false, timeRemaining: 0 };
+    const intervals = Array.from(this.blue.intervals.values())
+      .concat(Array.from(this.gold.intervals.values()))
+      .filter((interval) => isRunning(interval.phase) && timestamp < interval.stop);
+    if (intervals.length === 0) {
+      return { stage: 'done', timeRemaining: 0 };
     }
     const totalTime = Math.max(...intervals.map((timer) => timer.stop - timer.start));
     const timeRemaining = Math.min(...intervals.map((timer) => timer.stop - timestamp));
-    return { running: true, totalTime, timeRemaining };
+    return { stage: 'running', totalTime, timeRemaining };
   }
 
   get intervals(): [number, MatchInterval][] {
@@ -296,9 +314,6 @@ export class GameState {
     }
     return AllianceColor.NONE;
   }
-
-  // get phase() {
-  // }
 
   apply(event: Partial<MatchEvent>) {
     if (event.alliance === AllianceColor.BLUE) {

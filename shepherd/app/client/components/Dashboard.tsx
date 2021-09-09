@@ -15,9 +15,10 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import * as _ from 'lodash';
+import { DeleteButton } from './EntityButtons';
 import EntityTable from './EntityTable';
 import { select, AllianceColorSelect, MatchSelect, TeamSelect } from './EntitySelects';
-import { AlertButton } from './Util';
+import { PLACEHOLDER, AlertButton } from './Util';
 import { useAppDispatch, useAppSelector } from '../store';
 import * as controlUtils from '../store/control';
 import teamsSlice, * as teamUtils from '../store/teams';
@@ -29,7 +30,6 @@ import {
   MatchEvent,
   MatchEventType,
   MatchPhase,
-  Robot,
   Team,
   displayAllianceColor,
   displayPhase,
@@ -66,7 +66,7 @@ function MatchConnector(props: { phase: MatchPhase; totalTime: number }) {
                   phase: props.phase,
                   timeRemaining: props.totalTime * 1000,
                   totalTime: props.totalTime * 1000,
-                  running: false,
+                  stage: 'init',
                 },
               })
             );
@@ -125,8 +125,8 @@ function TimerControl(props: { teamSelection: TeamSelection }) {
       <FormGroup
         label="Start or stop robots"
         helperText={
-          "Activate the robots selected in the table below. " +
-          "The robots will shut off automatically afterr the number of seconds given."
+          'Activate the robots selected in the table below. ' +
+          'The robots will shut off automatically after the number of seconds given.'
         }
       >
         <ControlGroup>
@@ -243,6 +243,7 @@ interface TeamConnectionTableProps {
 }
 
 function TeamConnectionTable(props: TeamConnectionTableProps) {
+  const dispatch = useAppDispatch();
   const robots = useAppSelector((state) => state.control.robots);
   const teamsState = useAppSelector((state) => state.teams);
   const match = useMatch();
@@ -272,13 +273,14 @@ function TeamConnectionTable(props: TeamConnectionTableProps) {
           <td>Alliance</td>
           <td>Team</td>
           <td>Hostname</td>
-          <td>Connection Status</td>
+          <td>Update Rate</td>
+          <td>UIDs</td>
         </tr>
       </thead>
       <tbody>
         {robots.length === 0 && (
           <tr>
-            <td colSpan={5} className="empty-row">
+            <td colSpan={6} className="empty-row">
               No teams connected
             </td>
           </tr>
@@ -299,8 +301,27 @@ function TeamConnectionTable(props: TeamConnectionTableProps) {
               </td>
               <td>{displayAllianceColor(game.getAlliance(team.id))}</td>
               <td>{displayTeam(team)}</td>
-              <td></td>
-              <td></td>
+              <td>
+                <code>{team.hostname || PLACEHOLDER}</code>
+              </td>
+              <td>{robot.updateRate.toFixed(2)} updates per second</td>
+              <td>{robot.uids.join(', ') || PLACEHOLDER}</td>
+              <td>
+                <DeleteButton
+                  onClick={async () => {
+                    if (!match) {
+                      return;
+                    }
+                    const query = { type: MatchEventType.JOIN, team: team.id };
+                    const [target] = matchUtils.queryEvent(match, query);
+                    if (target) {
+                      dispatch(matchUtils.removeEvent(match, target.id));
+                      await dispatch(matchUtils.save()).unwrap();
+                      dispatch(controlUtils.send({}));
+                    }
+                  }}
+                />
+              </td>
             </tr>
           );
         })}
@@ -344,7 +365,8 @@ function TeamAdder() {
           disabled={!match || teamId === null}
           onClick={async () => {
             const team = select(teamUtils.selectors, teamsState, teamId);
-            if (!match || !team) { // Satisfy the typechecker
+            if (!match || !team) {
+              // Satisfy the typechecker
               return;
             }
             if (hostname) {
@@ -359,11 +381,7 @@ function TeamAdder() {
               dispatch(matchUtils.addEvent(match, { ...query, alliance }));
             }
             await dispatch(matchUtils.save()).unwrap();
-            dispatch(
-              controlUtils.send({
-                matchId: match.id,
-              })
-            );
+            dispatch(controlUtils.send({ matchId: match.id }));
           }}
         />
       </ControlGroup>
@@ -382,7 +400,11 @@ function ScoreAdjustment() {
       helperText="Add or subtract points from an alliance's score."
     >
       <ControlGroup>
-        <AllianceColorSelect disabled={!match} alliance={alliance} setAlliance={setAlliance} />
+        <AllianceColorSelect
+          disabled={!match}
+          alliance={alliance}
+          setAlliance={setAlliance}
+        />
         <NumericInput
           allowNumericCharactersOnly
           disabled={!match}
@@ -391,18 +413,20 @@ function ScoreAdjustment() {
           onValueChange={(value) => setPoints(value)}
         />
         <Button
-          disabled={!match}
+          disabled={!match || points === 0}
           text="Add score"
           icon={IconNames.ADD}
           intent={Intent.SUCCESS}
           onClick={async () => {
             if (match && points !== 0) {
-              dispatch(matchUtils.addEvent(match, {
-                type: MatchEventType.ADD,
-                alliance,
-                value: points,
-                description: 'Score manually adjusted by referee.',
-              }));
+              dispatch(
+                matchUtils.addEvent(match, {
+                  type: MatchEventType.ADD,
+                  alliance,
+                  value: points,
+                  description: 'Score manually adjusted by referee.',
+                })
+              );
               await dispatch(matchUtils.save()).unwrap();
             }
           }}

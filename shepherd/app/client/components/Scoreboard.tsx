@@ -9,16 +9,18 @@ import {
   GameState,
   MatchPhase,
   TimerState,
+  isRunning,
   displayTeam,
   displayTime,
   displayPhase,
 } from '../../types';
 
 function Timer(props: TimerState) {
+  const timeRemaining = Math.max(props.timeRemaining, 0);
   const fraction =
-    props.phase === MatchPhase.IDLE || props.totalTime === 0
+    !isRunning(props.phase) || props.totalTime === 0
       ? undefined
-      : props.timeRemaining / props.totalTime;
+      : timeRemaining / props.totalTime;
   let intent: Intent | undefined = undefined;
   if (fraction) {
     intent = Intent.SUCCESS;
@@ -38,7 +40,7 @@ function Timer(props: TimerState) {
     <div className="timer" ref={timerRef}>
       <div className="timer-label">
         <H1>{displayPhase(props.phase)}</H1>
-        <H1>{displayTime(props.timeRemaining / 1000)}</H1>
+        <H1>{displayTime(timeRemaining / 1000)}</H1>
       </div>
       <Spinner size={400} value={fraction} intent={intent} />
     </div>
@@ -59,7 +61,7 @@ export default function Scoreboard() {
     if (controlState.timer.timeRemaining <= 0) {
       return;
     }
-    if (!controlState.timer.running) {
+    if (controlState.timer.stage !== 'running') {
       setTimeRemaining(controlState.timer.timeRemaining);
       return;
     }
@@ -82,6 +84,7 @@ export default function Scoreboard() {
     };
   }, [controlState, setTimeRemaining]);
 
+  // TODO: look up alliance names
   return (
     <div className="container">
       <Card className="blue alliance">

@@ -31,4 +31,8 @@ export const add = () =>
     name: '',
     alliance: null,
     hostname: '',
+    callPort: 6000,
+    logPort: 6001,
+    updatePort: 6003,
+    multicastGroup: '224.1.1.1',
   });

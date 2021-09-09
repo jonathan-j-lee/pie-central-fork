@@ -7,13 +7,13 @@ import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
 import passport from 'passport';
 import winston from 'winston';
-import * as _ from 'lodash';
 import { Server as WebSocketServer } from 'ws';
 import { Strategy as LocalStrategy } from 'passport-local';
 import { BaseEntity, EntityRepository, RequestContext } from '@mikro-orm/core';
+
 import db, { User as UserModel, Alliance, Team, Match, MatchEvent } from './db';
 import FieldControl from './control';
-import { MatchEventType } from '../types';
+import games from './games';
 
 declare global {
   namespace Express {
@@ -47,7 +47,7 @@ function crud<T extends BaseEntity<T, any>>(
   } = {}
 ) {
   const mapUpdate = options.mapUpdate ?? ((data) => data);
-  const update = options.update ?? (async (entity, data) => entity);
+  const update = options.update ?? (async (entity) => entity);
   // TODO: log requests/errors
 
   if (!options.noRetrieve) {
@@ -93,7 +93,8 @@ export default async function (options) {
   const users = orm.em.getRepository(UserModel);
   const server = http.createServer(app);
   const wsServer = new WebSocketServer({ server });
-  const fc = new FieldControl(wsServer, orm);
+  const fc = new FieldControl(orm);
+  const dirname = path.dirname(__filename);
 
   passport.use(
     new LocalStrategy(async (username, password, done) => {
@@ -119,7 +120,7 @@ export default async function (options) {
   });
 
   app.use(helmet());
-  app.use('/static', express.static(path.join(__dirname, 'static')));
+  app.use('/static', express.static(path.join(dirname, 'static')));
   app.use(cookieParser());
   app.use(bodyParser.urlencoded({ extended: true }));
   app.use(bodyParser.json());
@@ -137,21 +138,20 @@ export default async function (options) {
   app.post('/login', passport.authenticate('local'), (req, res) => {
     const username = req.user?.username;
     logger.info('Logged in', { username });
-    res.json({
-      username,
-    });
+    res.sendStatus(200);
   });
 
   app.post('/logout', (req, res) => {
     const username = req.user?.username;
     req.logout();
     logger.info('Logged out', { username });
-    res.json({});
+    res.sendStatus(200);
   });
 
   app.get('/user', (req, res) => {
     res.json({
       username: req.user?.username ?? null,
+      game: options.game ?? null,
     });
   });
 
@@ -177,8 +177,15 @@ export default async function (options) {
   });
 
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.join(dirname, 'index.html'));
   });
+
+  if (options.game) {
+    const setupGame = games[options.game];
+    if (setupGame) {
+      setupGame(app, fc);
+    }
+  }
 
   wsServer.on('connection', async (ws) => {
     logger.info('WS connection established');
@@ -186,14 +193,14 @@ export default async function (options) {
     // TODO: add authentication here
     ws.on('message', async (message) => {
       await fc.handle(JSON.parse(message.toString()));
-      await fc.broadcast();
+      await fc.broadcast(wsServer.clients);
     });
 
     await fc.broadcast([ws]);
   });
 
   setInterval(async () => {
-    await fc.broadcast();
+    await fc.broadcast(wsServer.clients);
   }, 4000);
 
   server.listen(options.port, () => {

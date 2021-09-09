@@ -26,6 +26,7 @@ export default function LogIn() {
     <>
       {username && <code id="username-label">{username}</code>}
       <Button
+        className="log-in"
         icon={username ? IconNames.LOG_OUT : IconNames.LOG_IN}
         text={username ? 'Log out' : 'Log in'}
         onClick={async () => {

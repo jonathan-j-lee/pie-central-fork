@@ -1,20 +1,24 @@
-import { EntityData, EntityManager, EntityRepository, MikroORM } from '@mikro-orm/core';
+import { EntityManager, MikroORM } from '@mikro-orm/core';
 import RuntimeClient from '@pioneers/runtime-client';
-import WebSocket, { Server as WebSocketServer } from 'ws';
+import WebSocket from 'ws';
 import winston from 'winston';
 import * as _ from 'lodash';
-import { Match as MatchModel, MatchEvent as MatchEventModel } from './db';
 import {
-  AllianceColor,
-  AllianceState,
+  Match as MatchModel,
+  MatchEvent as MatchEventModel,
+  Team as TeamModel,
+} from './db';
+import {
   GameState,
   Match,
   MatchEvent,
+  LogEvent,
   ControlRequest,
   ControlResponse,
   MatchEventType,
   MatchPhase,
   TimerState,
+  RobotUpdate,
 } from '../types';
 
 const logger = winston.createLogger({
@@ -27,6 +31,10 @@ class Robot {
   private client: RuntimeClient;
   private idleCallback: () => Promise<void>;
   private timeout: { id: ReturnType<typeof setTimeout>; stop: number } | null = null;
+  private logEvents: LogEvent[];
+  private updates: number = 0;
+  private lastUpdate: number;
+  private uids: string[];
 
   constructor(
     teamId: number,
@@ -36,12 +44,56 @@ class Robot {
     this.teamId = teamId;
     this.client = client;
     this.idleCallback = idleCallback;
+    this.logEvents = [];
+    this.lastUpdate = Date.now();
+    this.uids = [];
+  }
+
+  static async connect(team: TeamModel, idleCallback: () => Promise<void>) {
+    const client = new RuntimeClient();
+    const robot = new Robot(team.id, client, idleCallback);
+    await robot.open(team);
+    return robot;
+  }
+
+  async open(team: TeamModel) {
+    const ctx = { team: team.id, hostname: team.hostname };
+    const options = {
+      host: team.hostname,
+      callPort: team.callPort,
+      logPort: team.logPort,
+      updatePort: team.updatePort,
+      // TODO: add log levels
+      multicastGroup: team.multicastGroup,
+    };
+    await this.client.open(
+      (err, [update]) => {
+        if (update) {
+          this.updates += 1;
+          this.uids = _.keys(update);
+        } else {
+          logger.error('Failed to receive peripheral update', { ...ctx, err });
+        }
+      },
+      (err, event) => {
+        if (event) {
+          this.logEvents.push(event);
+        } else {
+          logger.error('Failed to receive log event', { ...ctx, err });
+        }
+      },
+      options
+    );
+  }
+
+  close() {
+    this.client.close();
   }
 
   async idle() {
     logger.debug('Idling robot', { teamId: this.teamId });
     this.clearTimeout();
-    // await this.client.request('executor-service', 'idle');
+    await this.client.request('executor-service', 'idle');
   }
 
   private setTimeout(stop: number) {
@@ -65,56 +117,54 @@ class Robot {
   async auto(stop: number) {
     logger.debug('Entering autonomous mode', { teamId: this.teamId });
     this.setTimeout(stop);
-    // await this.client.request('executor-service', 'auto');
+    await this.client.request('executor-service', 'auto');
   }
 
   async teleop(stop: number) {
     logger.debug('Entering teleop mode', { teamId: this.teamId });
     this.setTimeout(stop);
-    // await this.client.request('executor-service', 'teleop');
+    await this.client.request('executor-service', 'teleop');
   }
 
   async estop() {
     logger.error('Emergency-stopping robot', { teamId: this.teamId });
     this.clearTimeout();
-    // this.client.notify('executor-service', 'estop');
+    this.client.notify('executor-service', 'estop');
   }
 
   async exec() {
     // TODO
   }
-}
 
-function getTimeRemaining(blueStop: number, goldStop: number): number {
-  const now = Date.now();
-  const blueTime = blueStop - now;
-  const goldTime = goldStop - now;
-  if (blueTime <= 0 && goldTime <= 0) {
-    return 0;
-  } else if (blueTime <= 0) {
-    return goldTime;
-  } else if (goldTime <= 0) {
-    return blueTime;
-  } else {
-    return Math.min(blueTime, goldTime);
+  makeUpdate(): RobotUpdate {
+    const now = Date.now();
+    const delta = now - this.lastUpdate;
+    const update = {
+      teamId: this.teamId,
+      logEvents: this.logEvents,
+      updateRate: delta > 0 ? (1000 * this.updates) / delta : 0,
+      uids: this.uids,
+    };
+    this.logEvents = [];
+    this.updates = 0;
+    this.lastUpdate = now;
+    return update;
   }
 }
 
 export default class FieldControl {
-  private wsServer: WebSocketServer;
   private orm: MikroORM;
   private matchId: number | null = null;
   private timer: TimerState;
   private robots: Map<number, Robot>;
 
-  constructor(wsServer: WebSocketServer, orm: MikroORM) {
-    this.wsServer = wsServer;
+  constructor(orm: MikroORM) {
     this.orm = orm;
     this.timer = {
       phase: MatchPhase.IDLE,
       timeRemaining: 0,
       totalTime: 0,
-      running: false,
+      stage: 'init',
     };
     this.robots = new Map();
   }
@@ -132,7 +182,7 @@ export default class FieldControl {
     const robot = this.robots.get(teamId);
     this.robots.delete(teamId);
     if (robot) {
-      // TODO
+      robot.close();
     }
   }
 
@@ -151,44 +201,48 @@ export default class FieldControl {
       return robot;
     }
     const match = this.matchId;
-    const newRobot = new Robot(teamId, null, async () => {
+    const team = await this.orm.em.findOneOrFail(TeamModel, { id: teamId });
+    const newRobot = await Robot.connect(team, async () => {
       await this.handle({
         events: [{ match, type: MatchEventType.IDLE, team: teamId }],
         activations: [teamId],
       });
     });
-    // TODO: connect
     this.robots.set(teamId, newRobot);
     return newRobot;
   }
 
   private async connectAll(activations?: number[]) {
-    const match = await this.getMatch();
+    const match = await this.getMatch(this.orm.em.fork());
     const game = GameState.fromEvents(match.toJSON().events);
     const teamIds = new Set<number>();
     for (const [teamId, interval] of game.intervals) {
-      const robot = await this.getRobot(teamId);
-      teamIds.add(teamId);
-      if (activations && !activations.includes(teamId)) {
-        continue;
-      }
-      // TODO: set mode concurrently
-      switch (interval.phase) {
-        case MatchPhase.AUTO:
-          await robot.auto(interval.stop);
-          break;
-        case MatchPhase.TELEOP:
-          await robot.teleop(interval.stop);
-          break;
-        case MatchPhase.IDLE:
-          await robot.idle();
-          break;
-        case MatchPhase.ESTOP:
-          await robot.estop();
-          break;
+      try {
+        const robot = await this.getRobot(teamId);
+        teamIds.add(teamId);
+        if (activations && !activations.includes(teamId)) {
+          continue;
+        }
+        // TODO: set mode concurrently
+        switch (interval.phase) {
+          case MatchPhase.AUTO:
+            await robot.auto(interval.stop);
+            break;
+          case MatchPhase.TELEOP:
+            await robot.teleop(interval.stop);
+            break;
+          case MatchPhase.IDLE:
+            await robot.idle();
+            break;
+          case MatchPhase.ESTOP:
+            await robot.estop();
+            break;
+        }
+      } catch (err) {
+        logger.error('Unable to connect to and start robot', { err });
       }
     }
-    for (const teamId of Array.from(this.robots.keys())) {
+    for (const teamId of this.robots.keys()) {
       if (!teamIds.has(teamId)) {
         await this.disconnect(teamId);
       }
@@ -197,15 +251,14 @@ export default class FieldControl {
 
   private async appendEvents(events: Partial<MatchEvent>[]) {
     if (events.length > 0) {
-      await this.orm.em.transactional(async (em) => {
-        const match = await this.getMatch(em);
-        const game = GameState.fromEvents(match.toJSON().events);
-        const mappedEvents = MatchModel.mapEvents(events, game);
-        for (const event of mappedEvents) {
-          match.events.add(em.create(MatchEventModel, event));
-        }
-        await em.persistAndFlush(match);
-      });
+      const em = this.orm.em.fork();
+      const match = await this.getMatch(em);
+      const game = GameState.fromEvents(match.toJSON().events);
+      const mappedEvents = MatchModel.mapEvents(events, game);
+      for (const event of mappedEvents) {
+        match.events.add(em.create(MatchEventModel, event));
+      }
+      await em.persistAndFlush(match);
     }
   }
 
@@ -219,37 +272,38 @@ export default class FieldControl {
         await this.disconnectAll();
       }
       await this.connectAll(req.activations);
-    } catch {}
+    } catch (err) {
+      logger.error('Error while handling control request', { err });
+    }
   }
 
   private async makeResponse(): Promise<ControlResponse> {
     const res: ControlResponse = {
       control: {
         matchId: this.matchId,
-        timer: this.timer,
-        robots: Array.from(this.robots.entries()).map(([teamId, robot]) => ({
-          teamId,
-        })),
+        robots: Array.from(this.robots.values()).map((robot) => robot.makeUpdate()),
       },
       match: null,
     };
     try {
       const match = (await this.getMatch()).toJSON() as Match;
       const game = GameState.fromEvents(match.events);
-      // TODO: do not overwrite
-      // FIXME: pause should not zero timer
-      res.control.timer = _.merge(res.control.timer, game.getTimer());
+      const timer = game.getTimer();
+      if (
+        (this.timer.stage === 'init' && timer.stage === 'running') ||
+        this.timer.stage === 'running'
+      ) {
+        this.timer = { ...this.timer, ...timer };
+      }
+      res.control.timer = this.timer;
       return { ...res, match };
     } catch {
       return res;
     }
   }
 
-  async broadcast(clients?: Set<WebSocket> | WebSocket[]) {
+  async broadcast(clients: Set<WebSocket> | WebSocket[]) {
     const res = await this.makeResponse();
-    if (!clients) {
-      clients = this.wsServer.clients;
-    }
     const buf = JSON.stringify(res);
     clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {

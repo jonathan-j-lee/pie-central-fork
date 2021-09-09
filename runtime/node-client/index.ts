@@ -21,7 +21,7 @@ export interface ClientOptions {
   /** The port that publishes log events (log frontend). */
   logPort: number;
   /** Log levels to subscribe to. */
-  logLevels: Array<string>;
+  logLevels: string[];
   /** The port that accepts control inputs. */
   controlPort: number;
   /** The port that Smart Device updates are published to. */

@@ -1,5 +1,7 @@
 import yargs from 'yargs';
+import * as _ from 'lodash';
 import { hideBin } from 'yargs/helpers';
+import games from './games';
 import serve from './routes';
 
 yargs(hideBin(process.argv))
@@ -21,6 +23,9 @@ yargs(hideBin(process.argv))
       'session-secret': {
         default: '',
         type: 'string',
+      },
+      game: {
+        choices: _.keys(games),
       },
     },
     serve

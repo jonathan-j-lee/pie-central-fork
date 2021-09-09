@@ -52,7 +52,7 @@ main {
   margin-right: 1rem;
 }
 
-.entity-table {
+table {
   width: 100%;
   .sort-button {
     margin-left: 0.5rem;
@@ -65,9 +65,10 @@ main {
     padding: 0.6rem !important;
     vertical-align: middle !important;
   }
-  .empty-row {
-    text-align: center !important;
-  }
+}
+
+.empty-row {
+  text-align: center !important;
 }
 
 table {
@@ -139,4 +140,15 @@ $stripe-colors: (
 
 .no-match {
   margin: 1rem 0;
+}
+
+.log-in {
+  margin-right: 1rem;
+}
+
+.error-boundary {
+  padding: 1rem;
+  p {
+    font-size: 16px;
+  }
 }

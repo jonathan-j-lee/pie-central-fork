@@ -97,7 +97,17 @@ export class Team extends BaseEntity<Team, 'id'> {
   @Property()
   hostname!: string;
 
-  // TODO: add connection preferences
+  @Property({ default: 6000 })
+  callPort!: number;
+
+  @Property({ default: 6001 })
+  logPort!: number;
+
+  @Property({ default: 6003 })
+  updatePort!: number;
+
+  @Property({ default: '224.1.1.1' })
+  multicastGroup!: string;
 }
 
 @Entity()

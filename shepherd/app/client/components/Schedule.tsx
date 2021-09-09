@@ -106,6 +106,7 @@ function MatchList(props: { edit: boolean }) {
         { field: 'goldScore', heading: 'Score' },
       ]}
       entities={matches}
+      emptyMessage="No matches"
       headings={
         <tr>
           <td />
@@ -214,6 +215,7 @@ function MatchEventList(props: { match: Match; edit: boolean }) {
       ]}
       sortedBy="timestamp"
       entities={props.match.events}
+      emptyMessage="No events"
       render={(event) => {
         const team = select(teamUtils.selectors, teamsState, event.team);
         return (

@@ -11,6 +11,7 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import LogIn from './LogIn';
+import Refresh from './Refresh';
 import { DEV_ENV } from './Util';
 import { useAppSelector } from '../store';
 
@@ -24,6 +25,7 @@ export default function Navigation() {
   const history = useHistory();
   const location = useLocation();
   const username = useAppSelector((state) => state.user.username);
+  const game = useAppSelector((state) => state.user.game);
   return (
     <Navbar id="navbar-tabs">
       <Navbar.Group>
@@ -46,7 +48,9 @@ export default function Navigation() {
             id="/leaderboard"
             title={<Title icon={IconNames.CROWN} title="Leaderboard" />}
           />
-          <Tab id="/game" title={<Title icon={IconNames.FLAG} title="Game" />} />
+          {game && (
+            <Tab id="/game" title={<Title icon={IconNames.FLAG} title="Game" />} />
+          )}
           {(username || DEV_ENV) && (
             <Tab
               id="/dashboard"
@@ -57,6 +61,7 @@ export default function Navigation() {
       </Navbar.Group>
       <Navbar.Group align={Alignment.RIGHT}>
         <LogIn />
+        <Refresh interval={60 * 1000} />
       </Navbar.Group>
     </Navbar>
   );
