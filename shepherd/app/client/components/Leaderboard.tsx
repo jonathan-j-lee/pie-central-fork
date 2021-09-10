@@ -8,6 +8,7 @@ import {
   H2,
   InputGroup,
   Intent,
+  INumericInputProps,
   NumericInput,
 } from '@blueprintjs/core';
 import * as _ from 'lodash';
@@ -24,14 +25,19 @@ import alliancesSlice, * as allianceUtils from '../store/alliances';
 import teamsSlice, * as teamUtils from '../store/teams';
 import { LogLevel, Team } from '../../types';
 
-const portInputOptions = {
-  minorStepSize: null,
-  min: 1,
-  max: 65535,
-  leftIcon: IconNames.FLOW_END as IconName,
-  majorStepSize: 10,
-  clampValueOnBlur: true,
-};
+function PortInput(props: INumericInputProps) {
+  return (
+    <NumericInput
+      minorStepSize={null}
+      min={1}
+      max={65535}
+      leftIcon={IconNames.FLOW_END}
+      majorStepSize={10}
+      clampValueOnBlur
+      {...props}
+    />
+  );
+}
 
 function RobotSettings(props: { team: Team }) {
   const dispatch = useAppDispatch();
@@ -66,8 +72,7 @@ function RobotSettings(props: { team: Team }) {
             label="Remote call port"
             helperText="Port that Shepherd should connect to for sending calls."
           >
-            <NumericInput
-              {...portInputOptions}
+            <PortInput
               defaultValue={props.team.callPort}
               onValueChange={(callPort) =>
                 callPort > 0 &&
@@ -79,8 +84,7 @@ function RobotSettings(props: { team: Team }) {
             label="Log publisher port"
             helperText="Port that Shepherd should connect to for receiving logged events."
           >
-            <NumericInput
-              {...portInputOptions}
+            <PortInput
               defaultValue={props.team.logPort}
               onValueChange={(logPort) =>
                 logPort > 0 &&
@@ -92,8 +96,7 @@ function RobotSettings(props: { team: Team }) {
             label="Update port"
             helperText="Port that Shepherd should bind to for receiving Smart Device updates."
           >
-            <NumericInput
-              {...portInputOptions}
+            <PortInput
               defaultValue={props.team.updatePort}
               onValueChange={(updatePort) =>
                 updatePort > 0 &&
@@ -137,10 +140,14 @@ function RobotSettings(props: { team: Team }) {
   );
 }
 
+function useTeams() {
+  const teams = useAppSelector((state) => state.teams);
+  return teamUtils.selectors.selectAll(teams);
+}
+
 function TeamsRoster(props: { edit: boolean }) {
   const dispatch = useAppDispatch();
-  const teamsState = useAppSelector((state) => state.teams);
-  const teams = teamUtils.selectors.selectAll(teamsState);
+  const teams = useTeams();
   const alliancesState = useAppSelector((state) => state.alliances);
   return (
     <EntityTable
@@ -226,8 +233,7 @@ function TeamsRoster(props: { edit: boolean }) {
 
 function AlliancesRoster(props: { edit: boolean }) {
   const dispatch = useAppDispatch();
-  const teamsState = useAppSelector((state) => state.teams);
-  const teams = teamUtils.selectors.selectAll(teamsState);
+  const teams = useTeams();
   const teamsByAlliance = _.groupBy(teams, (team) => team.alliance);
   const alliancesState = useAppSelector((state) => state.alliances);
   const alliances = allianceUtils.selectors.selectAll(alliancesState);

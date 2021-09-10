@@ -1,12 +1,13 @@
 import * as React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  Button,
   ButtonGroup,
+  FormGroup,
   H2,
   HTMLSelect,
   HTMLTable,
   Icon,
+  Intent,
   InputGroup,
   NumericInput,
   TextArea,
@@ -21,9 +22,12 @@ import {
   select,
   AllianceColorSelect,
   AllianceSelect,
+  FixtureSelect,
+  MatchSelect,
   TeamSelect,
 } from './EntitySelects';
-import { PLACEHOLDER, DEV_ENV, TeamMembers } from './Util';
+import Tournament from './Tournament';
+import { PLACEHOLDER, DEV_ENV, AlertButton, TeamMembers } from './Util';
 import {
   AllianceColor,
   GameState,
@@ -39,6 +43,7 @@ import {
 
 import { useAppDispatch, useAppSelector } from '../store';
 import * as allianceUtils from '../store/alliances';
+import * as bracketUtils from '../store/bracket';
 import matchesSlice, * as matchUtils from '../store/matches';
 import * as teamUtils from '../store/teams';
 
@@ -83,17 +88,25 @@ function Score(props: ScoreProps) {
 function MatchList(props: { edit: boolean }) {
   const dispatch = useAppDispatch();
   const currentMatch = useAppSelector((state) => state.control.matchId);
+  const alliancesState = useAppSelector((state) => state.alliances);
   const matchesState = useAppSelector((state) => state.matches);
+  const bracket = useAppSelector((state) => state.bracket);
+  const fixtures = bracketUtils.getFixtures(bracket);
   const matches = matchUtils.selectors.selectAll(matchesState).map((match) => {
     const game = GameState.fromEvents(match.events);
+    let fixture = undefined;
+    if (match.fixture) {
+      [fixture] = fixtures.filter((fixture) => fixture.id === match.fixture);
+    }
     return {
       ...match,
       blueScore: game.blue.score,
       goldScore: game.gold.score,
+      blueAlliance: select(allianceUtils.selectors, alliancesState, fixture?.blue?.winner)?.name,
+      goldAlliance: select(allianceUtils.selectors, alliancesState, fixture?.gold?.winner)?.name,
     };
   });
   const teamsState = useAppSelector((state) => state.teams);
-  const alliancesState = useAppSelector((state) => state.alliances);
   return (
     <EntityTable
       columns={[
@@ -104,6 +117,9 @@ function MatchList(props: { edit: boolean }) {
         { field: 'goldAlliance', heading: 'Alliance' },
         { field: 'goldTeams', heading: 'Teams' },
         { field: 'goldScore', heading: 'Score' },
+        ...(props.edit ? [
+          { field: 'fixture', heading: 'Fixture' },
+        ] : []),
       ]}
       entities={matches}
       emptyMessage="No matches"
@@ -133,44 +149,16 @@ function MatchList(props: { edit: boolean }) {
                 PLACEHOLDER
               )}
             </td>
-            <td>
-              {props.edit ? (
-                <AllianceSelect
-                  id={match.blueAlliance}
-                  onSelect={({ id: blueAlliance }) =>
-                    dispatch(matchesSlice.actions.upsert({ ...match, blueAlliance }))
-                  }
-                />
-              ) : (
-                select(allianceUtils.selectors, alliancesState, match.blueAlliance)
-                  ?.name || PLACEHOLDER
-              )}
-            </td>
-            <td>
-              <TeamMembers teams={getTeams(AllianceColor.BLUE)} />
-            </td>
+            <td>{match.blueAlliance ?? PLACEHOLDER}</td>
+            <td><TeamMembers teams={getTeams(AllianceColor.BLUE)} /></td>
             <Score
               allyScore={match.blueScore}
               opponentScore={match.goldScore}
               current={match.id === currentMatch}
               className="blue"
             />
-            <td>
-              {props.edit ? (
-                <AllianceSelect
-                  id={match.goldAlliance}
-                  onSelect={({ id: goldAlliance }) =>
-                    dispatch(matchesSlice.actions.upsert({ ...match, goldAlliance }))
-                  }
-                />
-              ) : (
-                select(allianceUtils.selectors, alliancesState, match.goldAlliance)
-                  ?.name || PLACEHOLDER
-              )}
-            </td>
-            <td>
-              <TeamMembers teams={getTeams(AllianceColor.GOLD)} />
-            </td>
+            <td>{match.goldAlliance ?? PLACEHOLDER}</td>
+            <td><TeamMembers teams={getTeams(AllianceColor.GOLD)} /></td>
             <Score
               allyScore={match.goldScore}
               opponentScore={match.blueScore}
@@ -178,11 +166,21 @@ function MatchList(props: { edit: boolean }) {
               className="gold"
             />
             {props.edit && (
-              <td>
-                <DeleteButton
-                  onClick={() => dispatch(matchesSlice.actions.remove(match.id))}
-                />
-              </td>
+              <>
+                <td>
+                  <FixtureSelect
+                    id={match.fixture}
+                    onSelect={({ id: fixture }) =>
+                      dispatch(matchesSlice.actions.upsert({ ...match, fixture }))
+                    }
+                  />
+                </td>
+                <td>
+                  <DeleteButton
+                    onClick={() => dispatch(matchesSlice.actions.remove(match.id))}
+                  />
+                </td>
+              </>
             )}
           </tr>
         );
@@ -199,6 +197,7 @@ function MatchEventList(props: { match: Match; edit: boolean }) {
       .filter((event) => event.timestamp)
       .map((event) => Number(event.timestamp))
   );
+  // TODO: if an alliance is selected, narrow the list of teams
   return (
     <EntityTable
       columns={[
@@ -364,6 +363,7 @@ export default function Schedule() {
   const dispatch = useAppDispatch();
   const matchesState = useAppSelector((state) => state.matches);
   const username = useAppSelector((state) => state.user.username);
+  const bracket = useAppSelector((state) => state.bracket);
   const [edit, setEdit] = React.useState(false);
   const query = useQuery();
   // TODO: redirect if does not exist
@@ -374,6 +374,7 @@ export default function Schedule() {
   return (
     <>
       <H2>Matches</H2>
+      <Tournament edit={edit} />
       <MatchList edit={edit} />
       {match && (
         <>
@@ -382,26 +383,54 @@ export default function Schedule() {
         </>
       )}
       {(username || DEV_ENV) && (
-        <ButtonGroup className="spacer">
-          <EditButton edit={edit} setEdit={setEdit} />
-          {edit && (
-            <>
-              <AddButton text="Add match" onClick={() => dispatch(matchUtils.add())} />
-              {match && (
-                <AddButton
-                  text="Add event"
-                  onClick={() => dispatch(matchUtils.addEvent(match))}
+        <div className="control-bar spacer">
+          <ButtonGroup>
+            <EditButton edit={edit} setEdit={setEdit} />
+            {edit && (
+              <>
+                <AddButton text="Add match" onClick={() => dispatch(matchUtils.add())} />
+                {match && (
+                  <AddButton
+                    text="Add event"
+                    onClick={() => dispatch(matchUtils.addEvent(match))}
+                  />
+                )}
+                <ConfirmButton
+                  onClick={() => {
+                    dispatch(matchUtils.save());
+                    setEdit(false);
+                  }}
                 />
-              )}
-              <ConfirmButton
-                onClick={() => {
-                  dispatch(matchUtils.save());
-                  setEdit(false);
+              </>
+            )}
+          </ButtonGroup>
+          {edit && (
+            <ButtonGroup>
+              <AlertButton
+                getWarnings={() => bracket ? [
+                  'Generating a bracket will delete an existing one. ' +
+                  'Are you sure you want to continue?'
+                ] : []}
+                text="Generate bracket"
+                intent={Intent.PRIMARY}
+                icon={IconNames.MANY_TO_ONE}
+                onClick={async () => {
+                  await dispatch(bracketUtils.generate()).unwrap();
                 }}
               />
-            </>
+              <AlertButton
+                getWarnings={() => ['Are you sure you want to delete the current bracket?']}
+                disabled={!bracket}
+                text="Remove bracket"
+                intent={Intent.DANGER}
+                icon={IconNames.TRASH}
+                onClick={async () => {
+                  await dispatch(bracketUtils.remove()).unwrap();
+                }}
+              />
+            </ButtonGroup>
           )}
-        </ButtonGroup>
+        </div>
       )}
     </>
   );

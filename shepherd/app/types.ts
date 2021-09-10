@@ -63,11 +63,23 @@ export interface MatchEvent {
   description: string | null;
 }
 
+export interface Fixture {
+  id: number;
+  root: boolean;
+  winner: number | null;
+  blue: Fixture | null;
+  gold: Fixture | null;
+  matches: number[];
+}
+
+export interface FixtureUpdate {
+  id: number;
+  winner: number | null;
+}
+
 export interface Match {
   id: number;
-  next?: number;
-  blueAlliance?: number;
-  goldAlliance?: number;
+  fixture: number | null;
   events: MatchEvent[];
 }
 

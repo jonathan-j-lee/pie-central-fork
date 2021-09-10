@@ -6,9 +6,10 @@ import { Select } from '@blueprintjs/select';
 import type { RootState } from '../store';
 import { useAppSelector } from '../store';
 import * as allianceUtils from '../store/alliances';
+import * as bracketUtils from '../store/bracket';
 import * as teamUtils from '../store/teams';
 import * as matchUtils from '../store/matches';
-import { Alliance, AllianceColor, Match, Team } from '../../types';
+import { Alliance, AllianceColor, Fixture, Match, Team } from '../../types';
 
 interface EntitySelectProps<T> {
   id?: null | number;
@@ -70,6 +71,49 @@ export const AllianceSelect = makeSelect<Alliance>(
   (alliance) => alliance?.name ?? '',
   IconNames.PEOPLE
 );
+
+const FixtureSelectFactory = Select.ofType<Fixture>();
+
+export function FixtureSelect(props: EntitySelectProps<Fixture>) {
+  const alliancesState = useAppSelector((state) => state.alliances);
+  const bracket = useAppSelector((state) => state.bracket);
+  const fixtures = bracketUtils
+    .getFixtures(bracket)
+    .filter((fixture) => fixture.blue?.winner || fixture.gold?.winner);
+  let fixture = undefined;
+  if (props.id) {
+    [fixture] = fixtures.filter((fixture) => fixture.id === props.id);
+  }
+  const selectName = (fixture?: Fixture) => {
+    if (!fixture) {
+      return '';
+    }
+    const blue = select(allianceUtils.selectors, alliancesState, fixture.blue?.winner);
+    const gold = select(allianceUtils.selectors, alliancesState, fixture.gold?.winner);
+    return `${blue?.name ?? '?'} vs. ${gold?.name ?? '?'}`;
+  };
+  return (
+    <FixtureSelectFactory
+      disabled={props.disabled}
+      items={fixtures}
+      itemPredicate={(query, fixture) =>
+        selectName(fixture).toLowerCase().includes(query.toLowerCase())
+      }
+      itemRenderer={(fixture, { handleClick }) =>
+        <MenuItem key={fixture.id} text={selectName(fixture)} onClick={handleClick} />
+      }
+      onItemSelect={(fixture) => props.onSelect(fixture)}
+      noResults={<MenuItem disabled text={props.noResults || 'No results.'} />}
+    >
+      <Button
+        disabled={props.disabled}
+        icon={IconNames.MANY_TO_ONE}
+        rightIcon={IconNames.CARET_DOWN}
+        text={selectName(fixture) || props.placeholder || '(None)'}
+      />
+    </FixtureSelectFactory>
+  );
+}
 
 export const TeamSelect = makeSelect<Team>(
   (state) => state.teams,

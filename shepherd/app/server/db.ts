@@ -8,6 +8,7 @@ import {
   ManyToOne,
   MikroORM,
   OneToMany,
+  OneToOne,
   PrimaryKey,
   Property,
 } from '@mikro-orm/core';
@@ -111,18 +112,33 @@ export class Team extends BaseEntity<Team, 'id'> {
 }
 
 @Entity()
+export class Fixture extends BaseEntity<Fixture, 'id'> {
+  @PrimaryKey()
+  id!: number;
+
+  @Property({ default: false })
+  root!: boolean;
+
+  @ManyToOne({ nullable: true })
+  winner?: Alliance;
+
+  @OneToOne({ nullable: true })
+  blue?: Fixture;
+
+  @OneToOne({ nullable: true })
+  gold?: Fixture;
+
+  @OneToMany(() => Match, (match) => match.fixture)
+  matches = new Collection<Match>(this);
+}
+
+@Entity()
 export class Match extends BaseEntity<Match, 'id'> {
   @PrimaryKey()
   id!: number;
 
   @ManyToOne({ nullable: true })
-  next?: Match;
-
-  @ManyToOne({ nullable: true })
-  blueAlliance?: Alliance;
-
-  @ManyToOne({ nullable: true })
-  goldAlliance?: Alliance;
+  fixture?: Fixture;
 
   @OneToMany({
     eager: true,
@@ -193,7 +209,7 @@ export class MatchEvent extends BaseEntity<MatchEvent, 'id'> {
 
 async function init(filename: string) {
   const orm = await MikroORM.init({
-    entities: [User, Alliance, Team, Match, MatchEvent],
+    entities: [User, Alliance, Fixture, Team, Match, MatchEvent],
     type: 'sqlite',
     dbName: filename,
     discovery: { disableDynamicFileAccess: true },

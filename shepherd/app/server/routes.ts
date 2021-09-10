@@ -11,9 +11,10 @@ import { Server as WebSocketServer } from 'ws';
 import { Strategy as LocalStrategy } from 'passport-local';
 import { BaseEntity, EntityRepository, RequestContext } from '@mikro-orm/core';
 
-import db, { User as UserModel, Alliance, Team, Match, MatchEvent } from './db';
+import db, { User as UserModel, Alliance, Fixture, Team, Match, MatchEvent } from './db';
 import FieldControl from './control';
 import games from './games';
+import { FixtureUpdate } from '../types';
 
 declare global {
   namespace Express {
@@ -91,6 +92,8 @@ export default async function (options) {
   const app = express();
   const orm = await db.init(options.dbFilename);
   const users = orm.em.getRepository(UserModel);
+  const allianceRepo = orm.em.getRepository(Alliance);
+  const fixtureRepo = orm.em.getRepository(Fixture);
   const server = http.createServer(app);
   const wsServer = new WebSocketServer({ server });
   const fc = new FieldControl(orm);
@@ -174,6 +177,115 @@ export default async function (options) {
       }
       return match;
     },
+  });
+
+  function loadFixtures(fixtureMap: Map<Fixture['id'], Fixture>, fixture: Fixture) {
+    const data = fixture.toJSON();
+    if (data.blue !== null) {
+      const blue = fixtureMap.get(data.blue);
+      data.blue = blue ? loadFixtures(fixtureMap, blue) : null;
+    }
+    if (data.gold !== null) {
+      const gold = fixtureMap.get(data.gold);
+      data.gold = gold ? loadFixtures(fixtureMap, gold) : null;
+    }
+    return data;
+  }
+
+  app.get('/bracket', async (req, res, done) => {
+    try {
+      const fixtureMap = new Map<Fixture['id'], Fixture>();
+      const fixtures = await fixtureRepo.findAll();
+      for (const fixture of fixtures) {
+        fixtureMap.set(fixture.id, fixture);
+      }
+      const root = await fixtureRepo.findOneOrFail({ root: true });
+      res.json(loadFixtures(fixtureMap, root));
+    } catch (err) {
+      done(err);
+    }
+  });
+
+  async function getRanking() {
+    const alliances = await allianceRepo.findAll();
+    return alliances.map((alliance) => alliance.id);
+  }
+
+  function lastBinaryPower(x: number) {
+    return Math.pow(2, Math.floor(Math.log2(x)));
+  }
+
+  function *pairFixtures(fixtures: Fixture[]) {
+    if (fixtures.length % 2 === 1) {
+      throw new Error('provide an even number of fixtures');
+    }
+    const count = fixtures.length / 2;
+    for (let i = 0; i < count; i++) {
+      yield fixtureRepo.create({
+        blue: fixtures[i],
+        gold: fixtures[fixtures.length - 1 - i],
+        root: false,
+      });
+    }
+  }
+
+  async function deleteBracket() {
+    let fixtures = await fixtureRepo.findAll();
+    await fixtureRepo.removeAndFlush(fixtures);
+  }
+
+  app.post('/bracket', ensureAuthenticated, async (req, res) => {
+    await deleteBracket();
+    let fixtures = await fixtureRepo.findAll();
+    await fixtureRepo.removeAndFlush(fixtures);
+    const alliances = req.body instanceof Array ? req.body : await getRanking();
+    if (alliances.length === 0) {
+      return res.sendStatus(400);
+    }
+    fixtures = alliances.map((alliance) => fixtureRepo.create({
+      winner: alliance,
+      root: false,
+    }));
+    while (fixtures.length > 1) {
+      const byes = fixtures.length - lastBinaryPower(fixtures.length);
+      if (byes > 0) {
+        const worst = fixtures.splice(-2 * byes, 2 * byes);
+        fixtures = fixtures.concat(Array.from(pairFixtures(worst)));
+      } else {
+        fixtures = Array.from(pairFixtures(fixtures));
+      }
+    }
+    const [root] = fixtures;
+    root.root = true;
+    await fixtureRepo.persistAndFlush(root);
+    res.sendStatus(200);
+  });
+
+  app.put('/bracket', ensureAuthenticated, async (req, res) => {
+    const update = req.body as FixtureUpdate;
+    const fixture = await fixtureRepo.findOneOrFail({ id: update.id });
+    if (fixture.winner !== null) {
+      const chain = [];
+      let current: Fixture | null = fixture;
+      while (current) {
+        chain.push(current);
+        current = await fixtureRepo.findOne({
+          $or: [
+            { blue: current.id },
+            { gold: current.id },
+          ],
+          winner: current.winner,
+        });
+      }
+      await fixtureRepo.persistAndFlush(chain.map((fixture) => fixture.assign({ winner: null })));
+    }
+    await fixtureRepo.persistAndFlush(fixture.assign({ winner: update.winner }));
+    res.sendStatus(200);
+  });
+
+  app.delete('/bracket', ensureAuthenticated, async (req, res) => {
+    await deleteBracket();
+    res.sendStatus(200);
   });
 
   app.get('*', (req, res) => {

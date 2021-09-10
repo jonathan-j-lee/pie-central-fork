@@ -36,7 +36,7 @@ const slice = createSlice({
 
 export default slice;
 
-export const add = () => slice.actions.upsert({ id: generateTempId(), events: [] });
+export const add = () => slice.actions.upsert({ id: generateTempId(), fixture: null, events: [] });
 
 export const addEvent = (match: Match, initialData?: Partial<MatchEvent>) =>
   slice.actions.upsert({
