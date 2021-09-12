@@ -1,11 +1,12 @@
 import * as React from 'react';
 import { EntityState } from '@reduxjs/toolkit';
 import { Callout, Colors, Intent } from '@blueprintjs/core';
-import { select } from './EntitySelects';
-import { AppDispatch, useAppDispatch, useAppSelector } from '../store';
-import * as allianceUtils from '../store/alliances';
-import { updateWinner } from '../store/bracket';
-import { Alliance, Fixture } from '../../types';
+import { select } from '../EntitySelects';
+import { useAppDispatch, useAppSelector } from '../../hooks';
+import type { AppDispatch } from '../../store';
+import { selectors as allianceSelectors } from '../../store/alliances';
+import { updateWinner } from '../../store/bracket';
+import { Alliance, Fixture } from '../../../types';
 
 import { Container, SVG } from '@svgdotjs/svg.js';
 
@@ -59,7 +60,7 @@ function drawBracket(
   }
   const winner = current.fixture.winner;
 
-  const alliance = select(allianceUtils.selectors, options.alliancesState, current.fixture.winner);
+  const alliance = select(allianceSelectors, options.alliancesState, current.fixture.winner);
   const labelBox = draw
     .rect(options.width, options.height)
     .center(current.x, current.y)
@@ -161,7 +162,7 @@ export default function Tournament(props: { edit: boolean }) {
       .rect(width, height)
       .center(0, 0)
       .fill(bracket.winner === null ? Colors.LIGHT_GRAY3 : Colors.GREEN5);
-    draw.text(select(allianceUtils.selectors, alliancesState, bracket.winner)?.name ?? '?').center(0, 0);
+    draw.text(select(allianceSelectors, alliancesState, bracket.winner)?.name ?? '?').center(0, 0);
   }, [props.edit, dispatch, visRef, alliancesState, bracket]);
   return bracket && (
     <>

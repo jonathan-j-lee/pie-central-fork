@@ -3,13 +3,13 @@ import { EntityState, EntitySelectors } from '@reduxjs/toolkit';
 import { Button, HTMLSelect, MenuItem } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { Select } from '@blueprintjs/select';
+import { useAppSelector } from '../hooks';
 import type { RootState } from '../store';
-import { useAppSelector } from '../store';
 import * as allianceUtils from '../store/alliances';
 import * as bracketUtils from '../store/bracket';
 import * as teamUtils from '../store/teams';
 import * as matchUtils from '../store/matches';
-import { Alliance, AllianceColor, Fixture, Match, Team } from '../../types';
+import { Alliance, AllianceColor, Fixture, Match, MatchEventType, Team } from '../../types';
 
 interface EntitySelectProps<T> {
   id?: null | number;
@@ -127,24 +127,46 @@ export const MatchSelect = makeSelect<Match>(
   (match) => (match?.id !== undefined ? `Match ${match.id}` : '')
 );
 
-interface AllianceColorSelectProps {
-  alliance: AllianceColor;
-  setAlliance: (alliance: AllianceColor) => void;
+interface EnumSelectProps<T> {
+  value: T;
+  setValue: (alliance: T) => void;
   disabled?: boolean;
 }
 
-export function AllianceColorSelect(props: AllianceColorSelectProps) {
+export function AllianceColorSelect(props: EnumSelectProps<AllianceColor>) {
   return (
     <HTMLSelect
-      value={props.alliance}
+      value={props.value}
       onChange={({ currentTarget: { value } }) =>
-        props.setAlliance(value as AllianceColor)
+        props.setValue(value as AllianceColor)
       }
       disabled={props.disabled}
     >
       <option value={AllianceColor.NONE}>None</option>
       <option value={AllianceColor.BLUE}>Blue</option>
       <option value={AllianceColor.GOLD}>Gold</option>
+    </HTMLSelect>
+  );
+}
+
+export function MatchEventTypeSelect(props: EnumSelectProps<MatchEventType>) {
+  return (
+    <HTMLSelect
+      value={props.value}
+      onChange={({ currentTarget: { value } }) =>
+        props.setValue(value as MatchEventType)
+      }
+      disabled={props.disabled}
+    >
+      <option value={MatchEventType.JOIN}>Join an alliance</option>
+      <option value={MatchEventType.AUTO}>Start autonomous</option>
+      <option value={MatchEventType.TELEOP}>Start tele-op</option>
+      <option value={MatchEventType.IDLE}>Stop phase</option>
+      <option value={MatchEventType.ESTOP}>E-stop</option>
+      <option value={MatchEventType.ADD}>Add to score</option>
+      <option value={MatchEventType.MULTIPLY}>Apply score multiplier</option>
+      <option value={MatchEventType.EXTEND}>Extend match phase</option>
+      <option value={MatchEventType.OTHER}>Other</option>
     </HTMLSelect>
   );
 }

@@ -11,7 +11,7 @@ import {
 import { IconNames } from '@blueprintjs/icons';
 import request from 'superagent';
 import { notifySuccess, OutcomeButton } from './Notification';
-import { useAppDispatch, useAppSelector } from '../store';
+import { useAppDispatch, useAppSelector } from '../hooks';
 import { logIn, logOut } from '../store/user';
 
 export default function LogIn() {

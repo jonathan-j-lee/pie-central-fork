@@ -2,14 +2,171 @@ import { createAction, createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { Action, Dispatch, MiddlewareAPI } from 'redux';
 import request from 'superagent';
 import * as _ from 'lodash';
-import matchesSlice from './matches';
-import { ControlRequest, ControlState, MatchPhase, MatchEventType } from '../../types';
+import matchesSlice, {
+  addEvent,
+  queryEvent,
+  removeEvent,
+  save as saveMatches,
+  selectors as matchSelectors,
+  updateEvent,
+} from './matches';
+import teamsSlice, { save as saveTeams, selectors as teamSelectors } from './teams';
+import {
+  AllianceColor,
+  ControlRequest,
+  ControlState,
+  MatchPhase,
+  MatchEventType,
+  RobotStatus,
+  Team,
+} from '../../types';
 import type { RootState } from '.';
-import * as teamUtils from './teams';
-import * as matchUtils from './matches';
 
 export const init = createAction<{ host: string } | undefined>('control/init');
-export const send = createAction<ControlRequest>('control/send');
+const send = createAction<ControlRequest>('control/send');
+
+export interface RobotSelection {
+  [teamId: number]: boolean;
+}
+
+export interface Robot extends RobotStatus {
+  selected: boolean;
+  team: Team;
+}
+
+type Mode =
+  | MatchEventType.AUTO
+  | MatchEventType.TELEOP
+  | MatchEventType.IDLE
+  | MatchEventType.ESTOP;
+
+export const connectMatch = (matchId: number, phase: MatchPhase, totalTime: number) =>
+  send({
+    matchId,
+    timer: {
+      phase,
+      timeRemaining: totalTime * 1000,
+      totalTime: totalTime * 1000,
+      stage: 'init',
+    },
+  });
+
+export const connectTeam = createAsyncThunk<
+  void,
+  { alliance: AllianceColor, teamId: number, hostname: string },
+  { state: RootState }
+>(
+  'control/connectTeam',
+  async ({ alliance, teamId, hostname }, thunkAPI) => {
+    const { control: { matchId }, teams, matches } = thunkAPI.getState();
+    const match = matchId ? matchSelectors.selectById(matches, matchId) : undefined;
+    const team = teamId ? teamSelectors.selectById(teams, teamId) : undefined;
+    if (match && team) {
+      if (hostname) {
+        thunkAPI.dispatch(teamsSlice.actions.upsert({ ...team, hostname }));
+        await thunkAPI.dispatch(saveTeams()).unwrap();
+      }
+      const query = { type: MatchEventType.JOIN, team: teamId };
+      const [target] = queryEvent(match, query);
+      if (target) {
+        thunkAPI.dispatch(updateEvent(match, target.id, { alliance }));
+      } else {
+        thunkAPI.dispatch(addEvent(match, { ...query, alliance }));
+      }
+      await thunkAPI.dispatch(saveMatches()).unwrap();
+      thunkAPI.dispatch(send({}));
+    }
+  },
+);
+
+export const disconnectTeam = createAsyncThunk<
+  void,
+  { teamId: number },
+  { state: RootState }
+>(
+  'control/disconnectTeam',
+  async ({ teamId }, thunkAPI) => {
+    const { control: { matchId }, matches } = thunkAPI.getState();
+    const match = matchId ? matchSelectors.selectById(matches, matchId) : undefined;
+    if (match) {
+      const query = { type: MatchEventType.JOIN, team: teamId };
+      const [target] = queryEvent(match, query);
+      if (target) {
+        thunkAPI.dispatch(removeEvent(match, target.id));
+        await thunkAPI.dispatch(saveMatches()).unwrap();
+        thunkAPI.dispatch(send({}));
+      }
+    }
+  },
+);
+
+export const changeMode = createAsyncThunk<
+  void,
+  { mode: Mode, totalTime?: number, robots: Robot[] },
+  { state: RootState }
+>(
+  'control/changeMode',
+  async ({ mode, totalTime, robots }, thunkAPI) => {
+    const { control: { matchId } } = thunkAPI.getState();
+    if (matchId !== null) {
+      const events = robots
+        .filter((robot) => robot.selected)
+        .map((robot) => ({
+          match: matchId,
+          type: mode,
+          team: robot.teamId,
+          value: totalTime ? 1000 * totalTime : null,
+        }));
+      thunkAPI.dispatch(send({ events }));
+    }
+  },
+);
+
+export const adjustScore = createAsyncThunk<
+  void,
+  { alliance: AllianceColor, points: number },
+  { state: RootState }
+>(
+  'control/adjustScore',
+  async ({ alliance, points }, thunkAPI) => {
+    const { control: { matchId }, matches } = thunkAPI.getState();
+    const match = matchId ? matchSelectors.selectById(matches, matchId) : undefined;
+    if (match && points !== 0) {
+      const event = {
+        type: MatchEventType.ADD,
+        alliance,
+        value: points,
+        description: 'Score manually adjusted by referee.',
+      };
+      thunkAPI.dispatch(addEvent(match, event));
+      await thunkAPI.dispatch(saveMatches()).unwrap();
+    }
+  },
+);
+
+export const extendMatch = createAsyncThunk<
+  void,
+  { extension: number, robots: Robot[] },
+  { state: RootState }
+>(
+  'control/extend',
+  async ({ extension, robots }, thunkAPI) => {
+    if (extension > 0) {
+      const { control: { matchId } } = thunkAPI.getState();
+      if (matchId !== null) {
+        robots = robots.filter((robot) => robot.selected);
+        const events = robots.map((robot) => ({
+          match: matchId,
+          type: MatchEventType.EXTEND,
+          team: robot.teamId,
+          value: extension * 1000,
+        }));
+        const activations = robots.map((robot) => robot.teamId);
+        thunkAPI.dispatch(send({ events, activations }));
+      }
+    }
+  },
+);
 
 const slice = createSlice({
   name: 'control',

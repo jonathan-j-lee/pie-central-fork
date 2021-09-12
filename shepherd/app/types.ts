@@ -106,7 +106,7 @@ export interface LogEvent {
   student_code?: boolean; // eslint-disable-line camelcase
 }
 
-export interface RobotUpdate {
+export interface RobotStatus {
   teamId: number;
   logEvents: LogEvent[];
   updateRate: number;
@@ -117,7 +117,7 @@ export interface ControlState {
   matchId: number | null;
   clientTimestamp: number;
   timer: TimerState;
-  robots: RobotUpdate[];
+  robots: RobotStatus[];
 }
 
 export interface ControlResponse {

@@ -18,7 +18,7 @@ import {
   MatchEventType,
   MatchPhase,
   TimerState,
-  RobotUpdate,
+  RobotStatus,
 } from '../types';
 
 const logger = winston.createLogger({
@@ -93,7 +93,10 @@ class Robot {
   async idle() {
     logger.debug('Idling robot', { teamId: this.teamId });
     this.clearTimeout();
-    await this.client.request('executor-service', 'idle');
+    this.client.request('executor-service', 'idle')
+      .catch((err) =>
+        logger.error('Failed to idle robot', { teamId: this.teamId, err })
+      );
   }
 
   private setTimeout(stop: number) {
@@ -117,13 +120,19 @@ class Robot {
   async auto(stop: number) {
     logger.debug('Entering autonomous mode', { teamId: this.teamId });
     this.setTimeout(stop);
-    await this.client.request('executor-service', 'auto');
+    this.client.request('executor-service', 'auto')
+      .catch((err) =>
+        logger.error('Failed to enter autonomous', { teamId: this.teamId, err })
+      );
   }
 
   async teleop(stop: number) {
     logger.debug('Entering teleop mode', { teamId: this.teamId });
     this.setTimeout(stop);
-    await this.client.request('executor-service', 'teleop');
+    this.client.request('executor-service', 'teleop')
+      .catch((err) =>
+        logger.error('Failed to enter teleop', { teamId: this.teamId, err })
+      );
   }
 
   async estop() {
@@ -136,7 +145,7 @@ class Robot {
     // TODO
   }
 
-  makeUpdate(): RobotUpdate {
+  makeUpdate(): RobotStatus {
     const now = Date.now();
     const delta = now - this.lastUpdate;
     const update = {

@@ -8,7 +8,7 @@ import Schedule from './Schedule';
 import Leaderboard from './Leaderboard';
 import Games from './Games';
 import Dashboard from './Dashboard';
-import { useAppSelector } from '../store';
+import { useAppSelector } from '../hooks';
 
 FocusStyleManager.onlyShowFocusOnTabs();
 

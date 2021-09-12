@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Tag, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAppDispatch } from '../store';
+import { useAppDispatch } from '../hooks';
 import * as allianceUtils from '../store/alliances';
 import * as bracketUtils from '../store/bracket';
 import * as controlUtils from '../store/control';

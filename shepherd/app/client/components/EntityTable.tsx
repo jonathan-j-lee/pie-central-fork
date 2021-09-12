@@ -4,7 +4,7 @@ import { IconNames } from '@blueprintjs/icons';
 import * as _ from 'lodash';
 
 interface EntityTableProps<T> {
-  columns: Array<{ field: string; heading: string }>;
+  columns: { field: string; heading: string }[];
   entities: T[];
   render: (entity: T, index?: number) => React.ReactNode;
   headings?: React.ReactNode;

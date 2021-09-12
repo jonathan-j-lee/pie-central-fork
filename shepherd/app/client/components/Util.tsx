@@ -23,6 +23,7 @@ interface AlertButtonProps extends IButtonProps {
   getWarnings: () => string[];
 }
 
+// TODO: move to notification
 export function AlertButton({ getWarnings, ...props }: AlertButtonProps) {
   const [event, setEvent] = React.useState<React.MouseEvent<HTMLElement> | null>(null);
   const [warnings, setWarnings] = React.useState<string[]>([]);

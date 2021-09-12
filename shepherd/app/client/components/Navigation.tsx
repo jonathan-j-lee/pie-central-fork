@@ -13,7 +13,7 @@ import { IconNames } from '@blueprintjs/icons';
 import LogIn from './LogIn';
 import Refresh from './Refresh';
 import { DEV_ENV } from './Util';
-import { useAppSelector } from '../store';
+import { useAppSelector } from '../hooks';
 
 const Title = (props: { icon: IconName; title: string }) => (
   <>
