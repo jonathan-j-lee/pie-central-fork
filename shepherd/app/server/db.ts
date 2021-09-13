@@ -41,6 +41,9 @@ export class User extends BaseEntity<User, 'username'> {
   @Property({ length: 128 })
   hash!: string;
 
+  @Property({ default: false })
+  darkTheme!: boolean;
+
   static async hashPassword(password: string, salt?: string) {
     let saltBuf;
     if (salt) {

@@ -4,6 +4,10 @@ body {
   margin: 0;
 }
 
+.bp3-dark {
+  background-color: $dark-gray5;
+}
+
 #navbar-tabs {
   .bp3-tab {
     line-height: $pt-navbar-height;
@@ -18,9 +22,6 @@ main {
 .container {
   display: flex;
   justify-content: space-between;
-  .blue.alliance > * {
-    // color: $blue1 !important;
-  }
   .alliance {
     margin: 0 1rem;
     flex: 2;
@@ -77,6 +78,9 @@ table {
   }
 }
 
+$stripe-size: 0.8rem;
+$stripe-angle: -45deg;
+
 .blue.win,
 .blue.alliance,
 .blue.bg {
@@ -93,28 +97,68 @@ table {
   background-color: $gray5 !important;
 }
 
-td.score {
-  padding: 0 !important;
-  div {
-    padding: 0.6rem;
-  }
+.blue.win.current {
+  background: repeating-linear-gradient(
+    $stripe-angle,
+    $blue4 0 $stripe-size,
+    $blue5 $stripe-size 2 * $stripe-size
+  ) !important;
 }
 
-// FIXME: margin when editing cell (height not 100%)
-$stripe-size: 0.5rem;
+.gold.win.current {
+  background: repeating-linear-gradient(
+    $stripe-angle,
+    $gold4 0 $stripe-size,
+    $gold5 $stripe-size 2 * $stripe-size
+  ) !important;
+}
 
-$stripe-colors: (
-  '.blue.win': $blue4,
-  '.gold.win': $gold4,
-  '.tie': $gray4,
-);
+.tie.current {
+  background: repeating-linear-gradient(
+    $stripe-angle,
+    $gray4 0 $stripe-size,
+    $gray5 $stripe-size 2 * $stripe-size
+  ) !important;
+}
 
-@each $name, $color in $stripe-colors {
-  #{$name} > .current {
+.bp3-dark {
+  .blue.win,
+  .blue.alliance,
+  .blue.bg {
+    background-color: $blue2 !important;
+  }
+
+  .gold.win,
+  .gold.alliance,
+  .gold.bg {
+    background-color: $gold2 !important;
+  }
+
+  .tie {
+    background-color: $gray1 !important;
+  }
+
+  .blue.win.current {
     background: repeating-linear-gradient(
-      -45deg,
-      transparent 0 $stripe-size,
-      #{$color} $stripe-size 2 * $stripe-size
+      $stripe-angle,
+      $blue2 0 $stripe-size,
+      $blue1 $stripe-size 2 * $stripe-size
+    ) !important;
+  }
+
+  .gold.win.current {
+    background: repeating-linear-gradient(
+      $stripe-angle,
+      $gold2 0 $stripe-size,
+      $gold1 $stripe-size 2 * $stripe-size
+    ) !important;
+  }
+
+  .tie.current {
+    background: repeating-linear-gradient(
+      $stripe-angle,
+      $gray2 0 $stripe-size,
+      $gray1 $stripe-size 2 * $stripe-size
     ) !important;
   }
 }
@@ -151,4 +195,9 @@ $stripe-colors: (
   p {
     font-size: 16px;
   }
+}
+
+.theme-toggle {
+  margin-bottom: 0;
+  vertical-align: middle !important;
 }

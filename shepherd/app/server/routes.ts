@@ -22,6 +22,12 @@ declare global {
   }
 }
 
+declare module 'express-session' {
+  interface SessionData {
+    darkTheme: boolean;
+  }
+}
+
 const logger = winston.createLogger({
   level: 'debug',
   transports: [new winston.transports.Console()],
@@ -116,7 +122,7 @@ export default async function (options) {
 
   passport.deserializeUser<string>(async (username, done) => {
     try {
-      done(null, await users.findOneOrFail({ username }));
+      done(null, await users.findOneOrFail({ username }, { refresh: true }));
     } catch (err) {
       done(err);
     }
@@ -154,13 +160,21 @@ export default async function (options) {
   app.get('/user', (req, res) => {
     res.json({
       username: req.user?.username ?? null,
+      darkTheme: req.user?.darkTheme ?? req.session.darkTheme ?? true,
       game: options.game ?? null,
     });
   });
 
-  crud(app, orm.em.getRepository(UserModel), '/users', 'username', {
-    noRetrieve: true,
+  app.put('/user', async (req, res) => {
+    req.session.darkTheme = req.body.darkTheme ?? req.session.darkTheme;
+    if (req.user) {
+      req.user.darkTheme = req.session.darkTheme ?? req.user.darkTheme;
+      await users.persistAndFlush(req.user);
+    }
+    res.sendStatus(200);
   });
+
+  crud(app, users, '/users', 'username', { noRetrieve: true });
   crud(app, orm.em.getRepository(Team), '/teams', 'id');
   crud(app, orm.em.getRepository(Alliance), '/alliances', 'id');
   crud(app, orm.em.getRepository(Match), '/matches', 'id', {
@@ -199,8 +213,12 @@ export default async function (options) {
       for (const fixture of fixtures) {
         fixtureMap.set(fixture.id, fixture);
       }
-      const root = await fixtureRepo.findOneOrFail({ root: true });
-      res.json(loadFixtures(fixtureMap, root));
+      const root = await fixtureRepo.findOne({ root: true });
+      if (root) {
+        res.json(loadFixtures(fixtureMap, root));
+      } else {
+        res.json(null);
+      }
     } catch (err) {
       done(err);
     }

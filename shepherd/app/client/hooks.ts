@@ -72,8 +72,18 @@ export function useMatches() {
       const fixture = match.fixture ? fixtureMap.get(match.fixture) : null;
       const blue = fixture?.blue?.winner;
       const gold = fixture?.gold?.winner;
+      let earliestTimestamp = Infinity;
+      let latestTimestamp = 0;
+      for (const event of match.events) {
+        if (event.timestamp) {
+          earliestTimestamp = Math.min(earliestTimestamp, event.timestamp);
+          latestTimestamp = Math.max(latestTimestamp, event.timestamp);
+        }
+      }
       return {
         ...match,
+        earliestTimestamp,
+        latestTimestamp,
         fixtureData: fixture,
         blueScore: game.blue.score,
         goldScore: game.gold.score,

@@ -12,6 +12,7 @@ import {
 import { IconNames } from '@blueprintjs/icons';
 import LogIn from './LogIn';
 import Refresh from './Refresh';
+import ThemeToggle from './ThemeToggle';
 import { DEV_ENV } from './Util';
 import { useAppSelector } from '../hooks';
 
@@ -60,6 +61,7 @@ export default function Navigation() {
         </Tabs>
       </Navbar.Group>
       <Navbar.Group align={Alignment.RIGHT}>
+        <ThemeToggle />
         <LogIn />
         <Refresh interval={60 * 1000} />
       </Navbar.Group>

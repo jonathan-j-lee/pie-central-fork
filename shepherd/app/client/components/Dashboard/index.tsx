@@ -7,6 +7,7 @@ import TeamAdder from './TeamAdder';
 import TeamConnectionTable from './TeamConnectionTable';
 import TimerControl from './TimerControl';
 import TimerExtender from './TimerExtender';
+import MatchProjection from './MatchProjection';
 import { useAppSelector, useRobots } from '../../hooks';
 
 export default function Dashboard() {
@@ -31,6 +32,13 @@ export default function Dashboard() {
       <div className="control-bar spacer">
         <TeamAdder />
         <ScoreAdjustment />
+      </div>
+      <div className="container spacer">
+        <div className="column">
+          <MatchProjection />
+        </div>
+        <div className="column">
+        </div>
       </div>
     </>
   );

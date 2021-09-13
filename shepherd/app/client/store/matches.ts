@@ -20,7 +20,8 @@ export const { adapter, selectors, fetch, save, sliceOptions } = makeEndpointCli
     ({
       ...(match.id < 0 ? _.omit(match, 'id') : match),
       events: match.events.map((event) => (event.id < 0 ? _.omit(event, 'id') : event)),
-    } as any)
+    } as any),
+  (a, b) => a.id - b.id,
 );
 
 const slice = createSlice({

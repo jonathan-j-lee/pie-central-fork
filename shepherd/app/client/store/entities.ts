@@ -5,9 +5,10 @@ export function makeEndpointClient<T, ID extends number | string>(
   name: string,
   selectId: (entity: T) => ID,
   mapModified: (entity: T) => Partial<T> = (entity) => entity,
+  sortComparer?: (a: T, b: T) => number,
   endpoint?: string
 ) {
-  const adapter = createEntityAdapter<T>({ selectId });
+  const adapter = createEntityAdapter<T>({ selectId, sortComparer });
   const selectors = adapter.getSelectors();
   const initialState = adapter.getInitialState({
     modified: [] as ID[],

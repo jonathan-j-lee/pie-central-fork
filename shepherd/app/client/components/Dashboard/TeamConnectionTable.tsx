@@ -57,7 +57,9 @@ export default function TeamConnectionTable(props: TeamConnectionTableProps) {
                 }
               />
             </td>
-            <td>{displayAllianceColor(game.getAlliance(robot.team.id))}</td>
+            <td className={`${game.getAlliance(robot.team.id)} bg`}>
+              {displayAllianceColor(game.getAlliance(robot.team.id))}
+            </td>
             <td>{displayTeam(robot.team)}</td>
             <td><code>{robot.team.hostname || PLACEHOLDER}</code></td>
             <td>{robot.updateRate.toFixed(2)} updates per second</td>

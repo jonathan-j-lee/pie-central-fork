@@ -31,11 +31,9 @@ function Score(props: ScoreProps) {
   const future = !props.current && props.allyScore === 0 && props.opponentScore === 0;
   const past = !props.current && !future;
   return (
-    <td className={`score ${!future && status} ${props.className ?? ''}`}>
-      <div className={props.current ? 'current' : ''}>
-        {past && <Icon icon={icon} className="score-icon" />}
-        {future ? PLACEHOLDER : props.allyScore}
-      </div>
+    <td className={`score ${props.className ?? ''} ${!future && status} ${props.current ? 'current' : ''}`}>
+      {past && <Icon icon={icon} className="score-icon" />}
+      {future ? PLACEHOLDER : props.allyScore}
     </td>
   );
 }
@@ -76,7 +74,7 @@ export default function MatchList(props: { edit: boolean }) {
               PLACEHOLDER
             )}
           </td>
-          <td>{match.blueAlliance ?? PLACEHOLDER}</td>
+          <td>{match.blueAlliance?.name ?? PLACEHOLDER}</td>
           <td><TeamMembers teams={match.blueTeams} /></td>
           <Score
             allyScore={match.blueScore}
@@ -84,7 +82,7 @@ export default function MatchList(props: { edit: boolean }) {
             current={match.id === currentMatch}
             className="blue"
           />
-          <td>{match.goldAlliance ?? PLACEHOLDER}</td>
+          <td>{match.goldAlliance?.name ?? PLACEHOLDER}</td>
           <td><TeamMembers teams={match.goldTeams} /></td>
           <Score
             allyScore={match.goldScore}
