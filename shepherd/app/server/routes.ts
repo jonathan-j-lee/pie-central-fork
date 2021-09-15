@@ -1,5 +1,6 @@
 import * as http from 'http'; // TODO: support HTTPS
 import * as path from 'path';
+import * as _ from 'lodash';
 import express, { Express, Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import session from 'express-session';
@@ -14,7 +15,7 @@ import { BaseEntity, EntityRepository, RequestContext } from '@mikro-orm/core';
 import db, { User as UserModel, Alliance, Fixture, Team, Match, MatchEvent } from './db';
 import FieldControl from './control';
 import games from './games';
-import { FixtureUpdate } from '../types';
+import { FixtureUpdate, LogSettings, User } from '../types';
 
 declare global {
   namespace Express {
@@ -24,7 +25,8 @@ declare global {
 
 declare module 'express-session' {
   interface SessionData {
-    darkTheme: boolean;
+    user?: Partial<User>;
+    log?: Partial<LogSettings>;
   }
 }
 
@@ -102,7 +104,7 @@ export default async function (options) {
   const fixtureRepo = orm.em.getRepository(Fixture);
   const server = http.createServer(app);
   const wsServer = new WebSocketServer({ server });
-  const fc = new FieldControl(orm);
+  const fc = new FieldControl(orm, wsServer);
   const dirname = path.dirname(__filename);
 
   passport.use(
@@ -157,18 +159,28 @@ export default async function (options) {
     res.sendStatus(200);
   });
 
-  app.get('/user', (req, res) => {
+  app.get('/session', (req, res) => {
     res.json({
-      username: req.user?.username ?? null,
-      darkTheme: req.user?.darkTheme ?? req.session.darkTheme ?? true,
-      game: options.game ?? null,
+      user: {
+        username: req.user?.username ?? null,
+        darkTheme: req.user?.darkTheme ?? req.session.user?.darkTheme ?? true,
+        game: options.game ?? null,
+      },
+      log: req.session.log,
     });
   });
 
-  app.put('/user', async (req, res) => {
-    req.session.darkTheme = req.body.darkTheme ?? req.session.darkTheme;
+  function mergeStrategy(obj: any, src: any) {
+    if (_.isArray(src)) {
+      return src;
+    }
+  }
+
+  app.put('/session', async (req, res) => {
+    req.session.user = _.mergeWith(req.session.user, req.body.user, mergeStrategy);
+    req.session.log = _.mergeWith(req.session.log, req.body.log, mergeStrategy);
     if (req.user) {
-      req.user.darkTheme = req.session.darkTheme ?? req.user.darkTheme;
+      req.user.darkTheme = req.session.user?.darkTheme ?? req.user.darkTheme;
       await users.persistAndFlush(req.user);
     }
     res.sendStatus(200);
@@ -323,14 +335,14 @@ export default async function (options) {
     // TODO: add authentication here
     ws.on('message', async (message) => {
       await fc.handle(JSON.parse(message.toString()));
-      await fc.broadcast(wsServer.clients);
+      await fc.broadcast();
     });
 
-    await fc.broadcast([ws]);
+    await fc.broadcast({ clients: [ws] });
   });
 
   setInterval(async () => {
-    await fc.broadcast(wsServer.clients);
+    await fc.broadcast();
   }, 4000);
 
   server.listen(options.port, () => {

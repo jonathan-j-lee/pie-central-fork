@@ -43,6 +43,7 @@ const AdminSettings = () => (
         leftIcon={IconNames.FOLDER_OPEN}
         placeholder="Example: /path/to/studentcode.py"
         validate={validateNonempty}
+        maxLength={128}
       />
     </FormGroup>
     <FormGroup
@@ -108,6 +109,7 @@ const AdminSettings = () => (
           '...',
           '-----END RSA PRIVATE KEY-----',
         ].join('\n')}
+        maxLength={2048}
       />
     </FormGroup>
   </>

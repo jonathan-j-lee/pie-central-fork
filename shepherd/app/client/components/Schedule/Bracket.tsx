@@ -1,7 +1,6 @@
 import * as React from 'react';
 import { EntityState } from '@reduxjs/toolkit';
 import { Callout, Colors, Intent } from '@blueprintjs/core';
-import { select } from '../EntitySelects';
 import { useAppDispatch, useAppSelector } from '../../hooks';
 import type { AppDispatch } from '../../store';
 import { selectors as allianceSelectors } from '../../store/alliances';
@@ -60,7 +59,7 @@ function drawBracket(
   }
   const winner = current.fixture.winner;
 
-  const alliance = select(allianceSelectors, options.alliancesState, current.fixture.winner);
+  const alliance = winner ? allianceSelectors.selectById(options.alliancesState, winner) : undefined;
   const labelBox = draw
     .rect(options.width, options.height)
     .center(current.x, current.y)
@@ -162,7 +161,8 @@ export default function Tournament(props: { edit: boolean }) {
       .rect(width, height)
       .center(0, 0)
       .fill(bracket.winner === null ? Colors.LIGHT_GRAY3 : Colors.GREEN5);
-    draw.text(select(allianceSelectors, alliancesState, bracket.winner)?.name ?? '?').center(0, 0);
+    const winner = bracket.winner ? allianceSelectors.selectById(alliancesState, bracket.winner) : undefined;
+    draw.text(winner?.name ?? '?').center(0, 0);
   }, [props.edit, dispatch, visRef, alliancesState, bracket]);
   return bracket && (
     <>

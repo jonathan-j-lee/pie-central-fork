@@ -2,6 +2,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import alliances from './alliances';
 import bracket from './bracket';
 import control, { wsClient } from './control';
+import log from './log';
 import matches from './matches';
 import teams from './teams';
 import user from './user';
@@ -11,6 +12,7 @@ const store = configureStore({
     alliances: alliances.reducer,
     bracket: bracket.reducer,
     control: control.reducer,
+    log: log.reducer,
     matches: matches.reducer,
     teams: teams.reducer,
     user: user.reducer,

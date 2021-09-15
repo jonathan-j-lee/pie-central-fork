@@ -77,13 +77,13 @@ const LogEvent = ({ settings, event }: LogEventProps) => (
     <span>{event.payload.event}</span>
     {settings.showLevel && <LogLevelTag level={event.payload.level} />}
     <ShowContextTag event={event} />
+    <br />
     {settings.showTraceback && event.payload.exception && (
       <>
-        <br />
         {event.payload.exception.trim()}
+        <br />
       </>
     )}
-    <br />
     {event.showContext && (
       <Highlight className="language-json log-context">
         {JSON.stringify(_.omit(event.payload, NOT_CONTEXT_FIELDS), null, 2)}
@@ -94,6 +94,7 @@ const LogEvent = ({ settings, event }: LogEventProps) => (
 );
 
 export default function Log(props: { transitionDuration?: number }) {
+  // TODO: refactor
   const dispatch = useAppDispatch();
   const editorTheme = useAppSelector((state) => state.settings.editor.editorTheme);
   const log = useAppSelector((state) => state.log);
@@ -103,13 +104,13 @@ export default function Log(props: { transitionDuration?: number }) {
   React.useEffect(() => {
     for (const theme of Object.values(EditorTheme)) {
       const stylesheetId = `highlight-${theme}`;
-      const stylesheet = document.getElementById(stylesheetId) as HTMLLinkElement;
+      const stylesheet = document.getElementById(stylesheetId) as HTMLLinkElement | null;
       if (stylesheet) {
         stylesheet.disabled = true;
       }
     }
     const stylesheetId = `highlight-${editorTheme}`;
-    const enabledStylesheet = document.getElementById(stylesheetId) as HTMLLinkElement;
+    const enabledStylesheet = document.getElementById(stylesheetId) as HTMLLinkElement | null;
     if (enabledStylesheet) {
       enabledStylesheet.disabled = false;
     }
@@ -129,8 +130,8 @@ export default function Log(props: { transitionDuration?: number }) {
         {logEventSelectors
           .selectAll(log)
           .filter(({ payload }) => payload.student_code || settings.showSystem)
-          .map((event, index) => (
-            <LogEvent key={index} event={event} settings={settings} />
+          .map((event) => (
+            <LogEvent key={event.payload.timestamp} event={event} settings={settings} />
           ))}
         <div ref={bottom} />
       </Pre>

@@ -9,7 +9,7 @@ import * as allianceUtils from '../store/alliances';
 import * as bracketUtils from '../store/bracket';
 import * as teamUtils from '../store/teams';
 import * as matchUtils from '../store/matches';
-import { Alliance, AllianceColor, Fixture, Match, MatchEventType, Team } from '../../types';
+import { Alliance, AllianceColor, Fixture, LogLevel, Match, MatchEventType, Team } from '../../types';
 
 interface EntitySelectProps<T> {
   id?: null | number;
@@ -19,8 +19,7 @@ interface EntitySelectProps<T> {
   disabled?: boolean;
 }
 
-// TODO: move to Util
-export function select<T>(
+function select<T>(
   selectors: EntitySelectors<T, EntityState<T>>,
   state: EntityState<T>,
   id?: null | number
@@ -167,6 +166,23 @@ export function MatchEventTypeSelect(props: EnumSelectProps<MatchEventType>) {
       <option value={MatchEventType.MULTIPLY}>Apply score multiplier</option>
       <option value={MatchEventType.EXTEND}>Extend match phase</option>
       <option value={MatchEventType.OTHER}>Other</option>
+    </HTMLSelect>
+  );
+}
+
+export function LogLevelSelect(props: EnumSelectProps<LogLevel>) {
+  return (
+    <HTMLSelect
+      value={props.value}
+      onChange={({ currentTarget: { value } }) =>
+        props.setValue(value as LogLevel)
+      }
+    >
+      <option value={LogLevel.DEBUG}>Debug</option>
+      <option value={LogLevel.INFO}>Info</option>
+      <option value={LogLevel.WARNING}>Warning</option>
+      <option value={LogLevel.ERROR}>Error</option>
+      <option value={LogLevel.CRITICAL}>Critical</option>
     </HTMLSelect>
   );
 }

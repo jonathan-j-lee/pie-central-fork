@@ -12,6 +12,7 @@ import {
   generate as generateBracket,
   remove as removeBracket,
 } from '../../store/bracket';
+import controlSlice from '../../store/control';
 import {
   selectors as matchSelectors,
   addEvent,
@@ -24,7 +25,8 @@ export default function Schedule() {
   const matchesState = useAppSelector((state) => state.matches);
   const username = useAppSelector((state) => state.user.username);
   const bracket = useAppSelector((state) => state.bracket);
-  const [edit, setEdit] = React.useState(false);
+  const edit = useAppSelector((state) => state.control.edit);
+  const setEdit = (edit: boolean) => dispatch(controlSlice.actions.update({ edit }));
   const query = useQuery();
   // TODO: redirect if does not exist
   // TODO: add visualization (cumulative score, timeline)

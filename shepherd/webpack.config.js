@@ -70,18 +70,15 @@ module.exports = [
         {
           test: /\.(sa|sc|c)ss$/i,
           use: [
-            // Creates `style` nodes from JS strings
-            'style-loader',
-            // Translates CSS into CommonJS
+            { loader: 'style-loader', options: { injectType: 'lazyStyleTag' } },
             'css-loader',
-            // Compiles Sass to CSS
             'sass-loader',
           ],
         },
       ],
     },
     resolve: {
-      extensions: ['.tsx', '.ts', '.js', '.sass', '.scss'],
+      extensions: ['.tsx', '.ts', '.js', '.css', '.sass', '.scss'],
     },
     output: {
       path: path.join(__dirname, 'build'),

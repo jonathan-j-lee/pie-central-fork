@@ -58,6 +58,12 @@ export default function Navigation() {
               title={<Title icon={IconNames.DASHBOARD} title="Dashboard" />}
             />
           )}
+          {(username || DEV_ENV) && (
+            <Tab
+              id="/log"
+              title={<Title icon={IconNames.CONSOLE} title="Log" />}
+            />
+          )}
         </Tabs>
       </Navbar.Group>
       <Navbar.Group align={Alignment.RIGHT}>

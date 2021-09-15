@@ -25,6 +25,7 @@ export default function TimerExtender(props: { robots: Robot[] }) {
         <NumericInput
           allowNumericCharactersOnly
           clampValueOnBlur
+          fill
           disabled={disabled}
           placeholder="Number of seconds"
           min={0}

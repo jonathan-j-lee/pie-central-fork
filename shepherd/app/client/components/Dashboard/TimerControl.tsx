@@ -53,6 +53,7 @@ export default function TimerControl(props: { robots: Robot[] }) {
           <NumericInput
             allowNumericCharactersOnly
             clampValueOnBlur
+            fill
             placeholder="Number of seconds"
             disabled={disabled}
             min={0}

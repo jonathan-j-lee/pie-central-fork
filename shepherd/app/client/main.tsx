@@ -2,13 +2,12 @@ import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import { Provider } from 'react-redux';
 
-import '@blueprintjs/icons/lib/css/blueprint-icons.css';
-import '@blueprintjs/core/lib/css/blueprint.css';
-import './assets/custom.scss';
-
+import styles from './assets/custom.scss';
 import App from './components/App';
 import ErrorBoundary from './components/ErrorBoundary';
 import store from './store';
+
+styles.use();
 
 ReactDOM.render(
   <Provider store={store}>

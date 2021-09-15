@@ -7,12 +7,14 @@ import { AddButton, ConfirmButton, EditButton } from '../EntityButtons';
 import { DEV_ENV } from '../Util';
 import { useAppSelector, useAppDispatch } from '../../hooks';
 import { add as addAlliance, save as saveAlliances } from '../../store/alliances';
+import controlSlice from '../../store/control';
 import { add as addTeam, save as saveTeams } from '../../store/teams';
 
 export default function Leaderboard() {
   const dispatch = useAppDispatch();
   const username = useAppSelector((state) => state.user.username);
-  const [edit, setEdit] = React.useState(false);
+  const edit = useAppSelector((state) => state.control.edit);
+  const setEdit = (edit: boolean) => dispatch(controlSlice.actions.update({ edit }));
   return (
     <>
       <div className="container">

@@ -8,11 +8,30 @@ import Schedule from './Schedule';
 import Leaderboard from './Leaderboard';
 import Games from './Games';
 import Dashboard from './Dashboard';
+import Log from './Log';
 import { useAppSelector } from '../hooks';
+
+import lightStyle from '../../../node_modules/highlight.js/styles/atom-one-light.css';
+import darkStyle from '../../../node_modules/highlight.js/styles/atom-one-dark.css';
 
 FocusStyleManager.onlyShowFocusOnTabs();
 
+function useHighlightStylesheet() {
+  const darkTheme = useAppSelector((state) => state.user.darkTheme);
+  React.useEffect(() => {
+    if (darkTheme) {
+      lightStyle.unuse();
+      darkStyle.use();
+    } else {
+      lightStyle.use();
+      darkStyle.unuse();
+    }
+  }, [darkTheme]);
+}
+
 export default function App() {
+  useHighlightStylesheet();
+  const username = useAppSelector((state) => state.user.username);
   const game = useAppSelector((state) => state.user.game);
   return (
     <Router>
@@ -35,6 +54,9 @@ export default function App() {
           )}
           <Route path="/dashboard">
             <Dashboard />
+          </Route>
+          <Route path="/log">
+            <Log />
           </Route>
           <Redirect exact from="*" to="/scoreboard" />
         </Switch>

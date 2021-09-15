@@ -2,7 +2,7 @@ import * as React from 'react';
 import { Classes, Icon, Switch, IconSize } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAppDispatch, useAppSelector } from '../hooks';
-import { save } from '../store/user';
+import { save } from '../store/session';
 
 export default function ThemeToggle() {
   const dispatch = useAppDispatch();
@@ -20,7 +20,7 @@ export default function ThemeToggle() {
       large
       inline
       checked={darkTheme}
-      onChange={() => dispatch(save({ darkTheme: !darkTheme }))}
+      onChange={() => dispatch(save({ user: { darkTheme: !darkTheme } }))}
       labelElement={<Icon icon={IconNames.MOON} size={IconSize.LARGE} />}
     />
   );

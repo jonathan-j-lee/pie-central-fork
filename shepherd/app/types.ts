@@ -31,6 +31,22 @@ export enum LogLevel {
   CRITICAL = 'critical',
 }
 
+const LogLevelPriority = {
+  [LogLevel.DEBUG]: 10,
+  [LogLevel.INFO]: 20,
+  [LogLevel.WARNING]: 30,
+  [LogLevel.ERROR]: 40,
+  [LogLevel.CRITICAL]: 50,
+};
+
+export function getLogLevels(level: LogLevel) {
+  const minLevel = LogLevelPriority[level];
+  return new Set(Object
+    .entries(LogLevelPriority)
+    .filter(([level, priority]) => minLevel <= priority)
+    .map(([level]) => level));
+}
+
 export interface Alliance {
   id: number;
   name: string;
@@ -96,6 +112,7 @@ export interface ControlRequest {
   activations?: number[];
   reconnect?: boolean;
   timer?: TimerState | null;
+  logLevel?: LogLevel;
 }
 
 export interface LogEvent {
@@ -104,17 +121,43 @@ export interface LogEvent {
   event: string;
   exception?: string;
   student_code?: boolean; // eslint-disable-line camelcase
+  alliance?: AllianceColor;
+  team: Partial<Team>;
+}
+
+export interface LogEventFilter {
+  exclude: boolean;
+  key: string;
+  value: any;
+}
+
+export interface LogSettings {
+  maxEvents: number;
+  level: LogLevel;
+  filters: LogEventFilter[];
+  pinToBottom: boolean;
+}
+
+export interface User {
+  username: null | string;
+  darkTheme: boolean;
+  game: null | string;
+}
+
+export interface Session {
+  user?: Partial<User>;
+  log?: Partial<LogSettings>;
 }
 
 export interface RobotStatus {
   teamId: number;
-  logEvents: LogEvent[];
   updateRate: number;
   uids: string[];
 }
 
 export interface ControlState {
   matchId: number | null;
+  edit: boolean;
   clientTimestamp: number;
   timer: TimerState;
   robots: RobotStatus[];
@@ -122,10 +165,11 @@ export interface ControlState {
 
 export interface ControlResponse {
   control: Partial<ControlState>;
-  match: Match | null;
+  match?: Match;
+  events?: LogEvent[];
 }
 
-export const displayTeam = (team?: Team) =>
+export const displayTeam = (team?: Partial<Team>) =>
   team?.name && (team?.number ?? null) !== null
     ? `${team.name} (#${team.number})`
     : '?';
@@ -142,6 +186,9 @@ export function displayAllianceColor(color: AllianceColor) {
 }
 
 export function displayTime(duration: number, places: number = 1) {
+  if (duration < 0) {
+    return '--:--';
+  }
   const minutes = Math.trunc(duration / 60)
     .toString()
     .padStart(2, '0');
@@ -193,6 +240,21 @@ export function displaySummary(event: MatchEvent, team?: Team) {
     default:
       return `An event occurred for the ${alliance} alliance.`;
   }
+}
+
+export function displayLogFilter(filter: LogEventFilter) {
+  return `${filter.exclude ? '!' : ''}${filter.key}:${JSON.stringify(filter.value)}`;
+}
+
+export function parseLogFilter(filter: string): LogEventFilter | null {
+  const match = filter.match(/^(\!)?(.+?)\:(.+)$/i);
+  if (match) {
+    const [, exclude, key, value] = match;
+    try {
+      return { exclude: exclude === '!', key, value: JSON.parse(value) };
+    } catch {}
+  }
+  return null;
 }
 
 interface MatchInterval {

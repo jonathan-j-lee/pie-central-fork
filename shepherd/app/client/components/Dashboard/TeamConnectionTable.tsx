@@ -23,7 +23,7 @@ export default function TeamConnectionTable(props: TeamConnectionTableProps) {
   // TODO: sort by alliance
   const allChecked = props.robots.every((robot) => robot.selected);
   return (
-    <HTMLTable striped>
+    <HTMLTable striped className="team-connection">
       <thead>
         <tr>
           <td>

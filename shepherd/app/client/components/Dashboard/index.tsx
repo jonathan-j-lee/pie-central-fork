@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { NonIdealState } from '@blueprintjs/core';
+import { Card, NonIdealState } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 
 import ScoreAdjustment from './ScoreAdjustment';
@@ -15,24 +15,26 @@ export default function Dashboard() {
   const [robots, setSelection] = useRobots();
   return (
     <>
-      <div className="control-bar spacer">
-        <TimerControl robots={robots} />
-        <TimerExtender robots={robots} />
-      </div>
-      {matchId !== null ? (
-        <TeamConnectionTable robots={robots} setSelection={setSelection} />
-      ) : (
-        <NonIdealState
-          className="no-match"
-          icon={IconNames.OFFLINE}
-          title="No match selected"
-          description="Select a match to play."
-        />
-      )}
-      <div className="control-bar spacer">
-        <TeamAdder />
-        <ScoreAdjustment />
-      </div>
+      <Card>
+        <div className="control-bar">
+          <TimerControl robots={robots} />
+          <TimerExtender robots={robots} />
+        </div>
+        {matchId !== null ? (
+          <TeamConnectionTable robots={robots} setSelection={setSelection} />
+        ) : (
+          <NonIdealState
+            className="team-connection"
+            icon={IconNames.OFFLINE}
+            title="No match selected"
+            description="Select a match to play."
+          />
+        )}
+        <div className="control-bar">
+          <TeamAdder />
+          <ScoreAdjustment />
+        </div>
+      </Card>
       <div className="container spacer">
         <div className="column">
           <MatchProjection />

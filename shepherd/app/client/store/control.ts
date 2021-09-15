@@ -2,15 +2,23 @@ import { createAction, createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { Action, Dispatch, MiddlewareAPI } from 'redux';
 import request from 'superagent';
 import * as _ from 'lodash';
+import { fetch as fetchAlliances } from './alliances';
+import { fetch as fetchBracket } from './bracket';
+import logSlice from './log';
 import matchesSlice, {
   addEvent,
+  fetch as fetchMatches,
   queryEvent,
   removeEvent,
   save as saveMatches,
   selectors as matchSelectors,
   updateEvent,
 } from './matches';
-import teamsSlice, { save as saveTeams, selectors as teamSelectors } from './teams';
+import teamsSlice, {
+  fetch as fetchTeams,
+  save as saveTeams,
+  selectors as teamSelectors,
+} from './teams';
 import {
   AllianceColor,
   ControlRequest,
@@ -168,10 +176,26 @@ export const extendMatch = createAsyncThunk<
   },
 );
 
+export const refresh = createAsyncThunk<void, void, { state: RootState }>(
+  'control/refresh',
+  async (arg, thunkAPI) => {
+    const { edit } = thunkAPI.getState().control;
+    if (!edit) {
+      await Promise.all([
+        thunkAPI.dispatch(fetchAlliances()).unwrap(),
+        thunkAPI.dispatch(fetchBracket()).unwrap(),
+        thunkAPI.dispatch(fetchMatches()).unwrap(),
+        thunkAPI.dispatch(fetchTeams()).unwrap(),
+      ]);
+    }
+  },
+);
+
 const slice = createSlice({
   name: 'control',
   initialState: {
     matchId: null,
+    edit: false,
     clientTimestamp: 0,
     timer: {
       phase: MatchPhase.IDLE,
@@ -196,10 +220,13 @@ export function wsClient({ dispatch }: MiddlewareAPI) {
       ws = new WebSocket(action.payload?.host ?? `ws://${window.location.host}`);
       ws.addEventListener('message', (event) => {
         try {
-          const { control, match } = JSON.parse(event.data);
+          const { control, match, events } = JSON.parse(event.data);
           dispatch(slice.actions.update({ ...control, clientTimestamp: Date.now() }));
           if (match) {
             dispatch(matchesSlice.actions.upsert(match));
+          }
+          if (events) {
+            dispatch(logSlice.actions.append(events));
           }
         } catch {}
       });
