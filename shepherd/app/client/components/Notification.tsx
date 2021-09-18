@@ -1,5 +1,12 @@
 import * as React from 'react';
-import { IButtonProps, Button, Intent, Position, Toaster } from '@blueprintjs/core';
+import {
+  Alert,
+  Button,
+  IButtonProps,
+  Intent,
+  Position,
+  Toaster,
+} from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 
 const toaster = Toaster.create({ position: Position.TOP });
@@ -35,24 +42,86 @@ export async function notify(
   }
 }
 
-interface OutcomeButtonProps extends IButtonProps {
-  onClick: (event: React.MouseEvent<HTMLElement>) => Promise<void>;
+function useAsyncCallback(
+  callback: () => Promise<void>,
+  success?: string,
+  failure?: string,
+): [boolean, () => Promise<void>] {
+  const [loading, setLoading] = React.useState(false);
+  return [
+    loading,
+    async () => {
+      setLoading(true);
+      try {
+        await callback();
+        if (success) {
+          notifySuccess(success);
+        }
+      } catch {
+        if (failure) {
+          notifyFailure(failure);
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+  ];
+}
+
+export interface OutcomeButtonProps extends IButtonProps {
+  onClick: () => Promise<void>;
+  success?: string;
+  failure?: string;
 }
 
 export const OutcomeButton = (props: OutcomeButtonProps) => {
-  const [loading, setLoading] = React.useState(false);
-  return (
-    <Button
-      {...props}
-      loading={loading}
-      onClick={async (event) => {
-        setLoading(true);
-        try {
-          await props.onClick(event);
-        } finally {
-          setLoading(false);
-        }
-      }}
-    />
+  const [loading, onClick] = useAsyncCallback(
+    props.onClick,
+    props.success,
+    props.failure,
   );
+  return <Button {...props} loading={loading} onClick={onClick} />;
 };
+
+export interface AlertButtonProps extends OutcomeButtonProps {
+  getWarnings: () => string[];
+}
+
+export function AlertButton({ getWarnings, ...props }: AlertButtonProps) {
+  const [loading, onClick] = useAsyncCallback(
+    props.onClick,
+    props.success,
+    props.failure,
+  );
+  const [warnings, setWarnings] = React.useState<string[]>([]);
+  return (
+    <>
+      <Alert
+        canEscapeKeyCancel
+        canOutsideClickCancel
+        isOpen={warnings.length > 0}
+        icon={IconNames.WARNING_SIGN}
+        intent={Intent.DANGER}
+        cancelButtonText="Cancel"
+        confirmButtonText="Confirm"
+        loading={loading}
+        onConfirm={onClick}
+        onClose={() => setWarnings([])}
+      >
+        {warnings.map((warning, index) => <p key={index}>{warning}</p>)}
+      </Alert>
+      <Button
+        {...props}
+        loading={loading}
+        onClick={async () => {
+          const warnings = getWarnings();
+          if (warnings.length > 0) {
+            setWarnings(warnings);
+          } else {
+            await onClick();
+          }
+        }}
+      />
+    </>
+  );
+}

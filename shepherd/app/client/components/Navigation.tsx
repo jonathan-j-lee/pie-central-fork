@@ -59,10 +59,7 @@ export default function Navigation() {
             />
           )}
           {(username || DEV_ENV) && (
-            <Tab
-              id="/log"
-              title={<Title icon={IconNames.CONSOLE} title="Log" />}
-            />
+            <Tab id="/log" title={<Title icon={IconNames.CONSOLE} title="Log" />} />
           )}
         </Tabs>
       </Navbar.Group>

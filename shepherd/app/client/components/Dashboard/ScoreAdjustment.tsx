@@ -1,6 +1,5 @@
 import * as React from 'react';
 import {
-  Button,
   ControlGroup,
   FormGroup,
   Intent,
@@ -8,6 +7,7 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { AllianceColorSelect } from '../EntitySelects';
+import { OutcomeButton } from '../Notification';
 import { useAppDispatch, useAppSelector } from '../../hooks';
 import { adjustScore } from '../../store/control';
 import { AllianceColor, MatchEventType } from '../../../types';
@@ -35,12 +35,16 @@ export default function ScoreAdjustment() {
           defaultValue={points}
           onValueChange={(value) => setPoints(value)}
         />
-        <Button
+        <OutcomeButton
           disabled={matchId === null || points === 0}
           text="Add score"
           icon={IconNames.ADD}
           intent={Intent.SUCCESS}
-          onClick={() => dispatch(adjustScore({ alliance, points }))}
+          onClick={async () => {
+            await dispatch(adjustScore({ alliance, points })).unwrap();
+          }}
+          success="Adjusted score."
+          failure="Failed to adjust score."
         />
       </ControlGroup>
     </FormGroup>

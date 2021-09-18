@@ -1,6 +1,5 @@
 import * as React from 'react';
-import { ButtonGroup, H2 } from '@blueprintjs/core';
-
+import { ButtonGroup, H2, Switch } from '@blueprintjs/core';
 import AllianceList from './AllianceList';
 import TeamList from './TeamList';
 import { AddButton, ConfirmButton, EditButton } from '../EntityButtons';
@@ -13,20 +12,22 @@ import { add as addTeam, save as saveTeams } from '../../store/teams';
 export default function Leaderboard() {
   const dispatch = useAppDispatch();
   const username = useAppSelector((state) => state.user.username);
-  const edit = useAppSelector((state) => state.control.edit);
-  const setEdit = (edit: boolean) => dispatch(controlSlice.actions.update({ edit }));
+  const edit = useAppSelector((state) => state.control.editing);
+  const setEdit = (editing: boolean) => dispatch(controlSlice.actions.update({ editing }));
+  const [elimination, setElimination] = React.useState(true);
   return (
     <>
-      <div className="container">
-        <div className="column">
-          <H2>Teams</H2>
-          <TeamList edit={edit} />
-        </div>
-        <div className="column">
-          <H2>Alliances</H2>
-          <AllianceList edit={edit} />
-        </div>
-      </div>
+      <H2>Teams</H2>
+      <TeamList edit={edit} elimination={elimination} />
+      <Switch
+        className="spacer"
+        inline
+        checked={elimination}
+        onChange={() => setElimination(!elimination)}
+        label="Include elimination matches in win/loss statistics"
+      />
+      <H2 className="spacer">Alliances</H2>
+      <AllianceList edit={edit} />
       {(username || DEV_ENV) && (
         <ButtonGroup className="spacer">
           <EditButton edit={edit} setEdit={setEdit} />
@@ -35,9 +36,13 @@ export default function Leaderboard() {
               <AddButton text="Add team" onClick={() => dispatch(addTeam())} />
               <AddButton text="Add alliance" onClick={() => dispatch(addAlliance())} />
               <ConfirmButton
-                onClick={() => {
-                  dispatch(saveTeams());
-                  dispatch(saveAlliances());
+                success="Saved team and alliance data."
+                failure="Failed to save team and alliance data."
+                onClick={async () => {
+                  await Promise.all([
+                    dispatch(saveTeams()).unwrap(),
+                    dispatch(saveAlliances()).unwrap(),
+                  ]);
                   setEdit(false);
                 }}
               />

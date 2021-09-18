@@ -1,6 +1,5 @@
 import * as React from 'react';
 import {
-  Button,
   ControlGroup,
   FormGroup,
   Intent,
@@ -8,6 +7,7 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { AllianceColorSelect, TeamSelect } from '../EntitySelects';
+import { OutcomeButton } from '../Notification';
 import { useAppDispatch, useCurrentMatch } from '../../hooks';
 import { connectTeam } from '../../store/control';
 import { AllianceColor } from '../../../types';
@@ -29,24 +29,24 @@ export default function TeamAdder() {
           value={alliance}
           setValue={setAlliance}
         />
-        <TeamSelect
-          disabled={!match}
-          id={teamId}
-          onSelect={(team) => setTeamId(team.id)}
-        />
+        <TeamSelect disabled={!match} id={teamId} onSelect={setTeamId} />
         <InputGroup
           disabled={!match}
           placeholder="Example: 192.168.1.1"
           onBlur={({ currentTarget: { value } }) => setHostname(value)}
         />
-        <Button
+        <OutcomeButton
           text="Add team"
           icon={IconNames.ADD}
           intent={Intent.SUCCESS}
           disabled={!match || teamId === null}
-          onClick={() =>
-            teamId && dispatch(connectTeam({ alliance, teamId, hostname }))
-          }
+          onClick={async () => {
+            if (teamId) {
+              await dispatch(connectTeam({ alliance, teamId, hostname })).unwrap();
+            }
+          }}
+          success="Added team to match."
+          failure="Failed to add team to match."
         />
       </ControlGroup>
     </FormGroup>

@@ -18,6 +18,7 @@ import { IconName, IconNames } from '@blueprintjs/icons';
 import Highlight from 'react-highlight';
 import * as _ from 'lodash';
 import { LogLevelSelect } from './EntitySelects';
+import { OutcomeButton } from './Notification';
 import { useAppDispatch, useAppSelector, useCurrentMatch } from '../hooks';
 import logSlice, {
   LogEvent as LogEventData,
@@ -128,7 +129,7 @@ function LogControl({ events }: { events: LogEventData[] }) {
         />
       </ControlGroup>
       <ButtonGroup className="log-actions">
-        <Button
+        <OutcomeButton
           text="Copy"
           icon={IconNames.DUPLICATE}
           onClick={async () => {
@@ -137,11 +138,17 @@ function LogControl({ events }: { events: LogEventData[] }) {
               .join('\n');
             await navigator.clipboard.writeText(text);
           }}
+          success="Copied log."
+          failure="Failed to copy log."
         />
-        <Button
+        <OutcomeButton
           text="Clear"
           icon={IconNames.CLEAN}
-          onClick={() => dispatch(logSlice.actions.clear())}
+          onClick={async () => {
+            dispatch(logSlice.actions.clear());
+          }}
+          success="Cleared log."
+          failure="Failed to clear log."
         />
         <Button
           text="Tail"

@@ -1,12 +1,12 @@
 import * as React from 'react';
 import {
-  Button,
   ControlGroup,
   FormGroup,
   Intent,
   NumericInput,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { OutcomeButton } from '../Notification';
 import { useAppDispatch, useAppSelector } from '../../hooks';
 import { extendMatch, Robot } from '../../store/control';
 import { MatchEventType } from '../../../types';
@@ -15,7 +15,7 @@ export default function TimerExtender(props: { robots: Robot[] }) {
   const dispatch = useAppDispatch();
   const matchId = useAppSelector((state) => state.control.matchId);
   const [extension, setExtension] = React.useState(0);
-  const disabled = props.robots.length === 0;
+  const disabled = props.robots.filter((robot) => robot.selected).length === 0;
   return (
     <FormGroup
       label="Extend the match"
@@ -32,12 +32,16 @@ export default function TimerExtender(props: { robots: Robot[] }) {
           defaultValue={extension}
           onValueChange={(extension) => setExtension(extension)}
         />
-        <Button
-          disabled={disabled}
+        <OutcomeButton
+          disabled={disabled || extension === 0}
           text="Add time"
           intent={Intent.SUCCESS}
           icon={IconNames.TIME}
-          onClick={() => dispatch(extendMatch({ extension, robots: props.robots }))}
+          onClick={async () => {
+            await dispatch(extendMatch({ extension, robots: props.robots })).unwrap();
+          }}
+          success="Extended match for selected robots."
+          failure="Failed to extend match for selected robots."
         />
       </ControlGroup>
     </FormGroup>

@@ -9,21 +9,19 @@ import { PLACEHOLDER } from '../Util';
 import { useAppDispatch, useAppSelector, useTeams } from '../../hooks';
 import teamsSlice from '../../store/teams';
 
-export default function TeamList(props: { edit: boolean }) {
+export default function TeamList(props: { edit: boolean; elimination: boolean }) {
   const dispatch = useAppDispatch();
-  const teams = useTeams();
+  const teams = useTeams(props.elimination);
   return (
     <EntityTable
       columns={[
         { field: 'name', heading: 'Name' },
         { field: 'number', heading: 'Number' },
         { field: 'alliance', heading: 'Alliance' },
-        ...(props.edit
-          ? []
-          : [
-              { field: 'wins', heading: 'Wins' },
-              { field: 'losses', heading: 'Losses' },
-            ]),
+        { field: 'stats.wins', heading: 'Wins' },
+        { field: 'stats.losses', heading: 'Losses' },
+        { field: 'stats.ties', heading: 'Ties' },
+        { field: 'stats.totalScore', heading: 'Total Score' },
       ]}
       entities={teams}
       emptyMessage="No teams"
@@ -63,7 +61,7 @@ export default function TeamList(props: { edit: boolean }) {
             {props.edit ? (
               <AllianceSelect
                 id={team.alliance}
-                onSelect={({ id: alliance }) =>
+                onSelect={(alliance) =>
                   dispatch(teamsSlice.actions.upsert({ ...team, alliance }))
                 }
               />
@@ -71,8 +69,10 @@ export default function TeamList(props: { edit: boolean }) {
               team.allianceData?.name || PLACEHOLDER
             )}
           </td>
-          {!props.edit && <td>{team.wins ?? '0'}</td>}
-          {!props.edit && <td>{team.losses ?? '0'}</td>}
+          <td>{team.stats?.wins ?? '0'}</td>
+          <td>{team.stats?.losses ?? '0'}</td>
+          <td>{team.stats?.ties ?? '0'}</td>
+          <td>{team.stats?.totalScore ?? '0'}</td>
           {props.edit && <td><RobotSettings team={team} /></td>}
           {props.edit && (
             <td>

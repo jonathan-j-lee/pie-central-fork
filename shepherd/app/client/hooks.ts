@@ -8,14 +8,26 @@ import { getFixtures } from './store/bracket';
 import { Robot, RobotSelection } from './store/control';
 import { selectors as matchSelectors } from './store/matches';
 import { selectors as teamSelectors } from './store/teams';
-import { Fixture, GameState, RobotStatus, Team, TimerState } from '../types';
+import {
+  AllianceColor,
+  Fixture,
+  GameState,
+  RobotStatus,
+  Team,
+  TimerState,
+  countMatchStatistics,
+  getAllianceAllegiance,
+} from '../types';
 
 export const useAppDispatch = () => useDispatch<AppDispatch>();
 export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;
 
 export function useBracket(): [Fixture | null, Fixture[]] {
-  const bracket = useAppSelector((state) => state.bracket);
-  return [bracket, getFixtures(bracket)];
+  const alliances = useAppSelector((state) => state.alliances);
+  let bracket = useAppSelector((state) => state.bracket);
+  const fixtures: Fixture[] = [];
+  bracket = getFixtures(bracket, fixtures, alliances);
+  return [bracket, fixtures];
 }
 
 export function useAlliances() {
@@ -25,17 +37,27 @@ export function useAlliances() {
     teamSelectors.selectAll(teams),
     (team) => team.alliance,
   );
+  const matches = useMatches();
+  const matchId = useAppSelector((state) => state.control.matchId);
   return allianceSelectors
     .selectAll(alliances)
     .map((alliance) => ({
       ...alliance,
       teams: teamsByAlliance[alliance.id] ?? [],
+      stats: countMatchStatistics(
+        matches.filter((match) => match.id !== matchId && match.game.started),
+        (match) => getAllianceAllegiance(alliance, match.fixtureData),
+        (match) => match.game,
+      ),
     }));
 }
 
-export function useTeams() {
+export function useTeams(elimination?: boolean) {
   const teams = useAppSelector((state) => state.teams);
   const alliances = useAppSelector((state) => state.alliances);
+  const matchesState = useAppSelector((state) => state.matches);
+  const matches = useMatches();
+  const matchId = useAppSelector((state) => state.control.matchId);
   return teamSelectors
     .selectAll(teams)
     .map((team) => ({
@@ -43,11 +65,17 @@ export function useTeams() {
       allianceData: team.alliance
         ? allianceSelectors.selectById(alliances, team.alliance)
         : undefined,
+      stats: countMatchStatistics(
+        matches.filter((match) =>
+          match.id !== matchId && match.game.started && (elimination || !match.fixture)
+        ),
+        (match) => match.game.getAlliance(team.id),
+        (match) => match.game,
+      ),
     }));
 }
 
 export function useMatches() {
-  const alliances = useAppSelector((state) => state.alliances);
   const teamsState = useAppSelector((state) => state.teams);
   const getTeams = (teamIds: number[]) => {
     const teams = [];
@@ -69,9 +97,8 @@ export function useMatches() {
     .selectAll(matches)
     .map((match) => {
       const game = GameState.fromEvents(match.events);
-      const fixture = match.fixture ? fixtureMap.get(match.fixture) : null;
-      const blue = fixture?.blue?.winner;
-      const gold = fixture?.gold?.winner;
+      const fixture = match.fixture ? fixtureMap.get(match.fixture) : undefined;
+      // FIXME: make a part of the transition API
       let earliestTimestamp = Infinity;
       let latestTimestamp = 0;
       for (const event of match.events) {
@@ -85,10 +112,10 @@ export function useMatches() {
         earliestTimestamp,
         latestTimestamp,
         fixtureData: fixture,
+        game,
+        started: game.started,
         blueScore: game.blue.score,
         goldScore: game.gold.score,
-        blueAlliance: blue ? allianceSelectors.selectById(alliances, blue) : null,
-        goldAlliance: gold ? allianceSelectors.selectById(alliances, gold) : null,
         blueTeams: getTeams(game.blue.teams),
         goldTeams: getTeams(game.gold.teams),
       };

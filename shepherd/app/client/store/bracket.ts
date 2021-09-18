@@ -1,6 +1,7 @@
-import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { createAsyncThunk, createSlice, EntityState } from '@reduxjs/toolkit';
 import request from 'superagent';
-import { Fixture, FixtureUpdate } from '../../types';
+import { selectors as allianceSelectors } from './alliances';
+import { Alliance, Fixture, FixtureUpdate } from '../../types';
 
 export const fetch = createAsyncThunk(
   'bracket/fetch',
@@ -19,8 +20,12 @@ export const updateWinner = createAsyncThunk(
 
 export const generate = createAsyncThunk(
   'bracket/generate',
-  async (arg, thunkAPI) => {
-    await request.post('/bracket');
+  async (ranking: number[] | undefined, thunkAPI) => {
+    const req = request.post('/bracket');
+    if (ranking) {
+      req.send(ranking);
+    }
+    await req;
     await thunkAPI.dispatch(fetch()).unwrap();
   },
 );
@@ -32,11 +37,27 @@ export const remove = createAsyncThunk(
   },
 );
 
-export function getFixtures(fixture: Fixture | null): Fixture[] {
+export function getFixtures(
+  fixture: Fixture | null,
+  fixtures: Fixture[],
+  alliances?: EntityState<Alliance>,
+): Fixture | null {
   if (!fixture) {
-    return [];
+    return null;
   }
-  return [fixture].concat(getFixtures(fixture.blue)).concat(getFixtures(fixture.gold));
+  if (fixture.winner && alliances) {
+    fixture = {
+      ...fixture,
+      winningAlliance: allianceSelectors.selectById(alliances, fixture.winner),
+    };
+  }
+  fixture = {
+    ...fixture,
+    blue: getFixtures(fixture.blue, fixtures, alliances),
+    gold: getFixtures(fixture.gold, fixtures, alliances),
+  };
+  fixtures.push(fixture);
+  return fixture;
 }
 
 export default createSlice({

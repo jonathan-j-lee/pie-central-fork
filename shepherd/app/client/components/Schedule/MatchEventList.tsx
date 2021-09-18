@@ -14,6 +14,7 @@ import { updateEvent, removeEvent } from '../../store/matches';
 import { selectors as teamSelectors } from '../../store/teams';
 import {
   AllianceColor,
+  GameState,
   Match,
   MatchEventType,
   displayAllianceColor,
@@ -33,20 +34,20 @@ const TYPES_WITH_VALUE = [
 export default function MatchEventList(props: { match: Match; edit: boolean }) {
   const dispatch = useAppDispatch();
   const teams = useAppSelector((state) => state.teams);
-  const events = props.match.events.map((event) => {
-    const team = event.team ? teamSelectors.selectById(teams, event.team) : undefined;
-    return { ...event, teamData: team, teamName: team?.name ?? '' };
-  });
+  const events = props.match.events.map((event) => ({
+    ...event,
+    teamData: event.team ? teamSelectors.selectById(teams, event.team) : undefined,
+  }));
   const earliestTimestamp = Math.min(
     ...events.map((event) => event.timestamp).filter((timestamp) => timestamp)
   );
-  // TODO: if an alliance is selected, narrow the list of teams
+  const game = GameState.fromEvents(props.match.events);
   return (
     <EntityTable
       columns={[
         { field: 'timestamp', heading: 'Timestamp' },
         { field: 'alliance', heading: 'Alliance' },
-        { field: 'teamName', heading: 'Team' },
+        { field: 'teamData.name', heading: 'Team' },
         ...(props.edit
           ? [
               { field: 'type', heading: 'Type' },
@@ -101,9 +102,21 @@ export default function MatchEventList(props: { match: Match; edit: boolean }) {
             {props.edit ? (
               <TeamSelect
                 id={event.team}
-                onSelect={({ id: team }) =>
+                onSelect={(team) =>
                   dispatch(updateEvent(props.match, event.id, { team }))
                 }
+                {...(event.type === MatchEventType.JOIN ? {} : {
+                  filter(team) {
+                    switch (event.alliance) {
+                      case AllianceColor.BLUE:
+                        return game.blue.teams.includes(team.id);
+                      case AllianceColor.GOLD:
+                        return game.gold.teams.includes(team.id);
+                      default:
+                        return false;
+                    }
+                  },
+                })}
               />
             ) : event.team ? (
               displayTeam(event.teamData)

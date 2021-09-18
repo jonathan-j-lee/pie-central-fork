@@ -1,4 +1,4 @@
-import { createAction, createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { createAction, createAsyncThunk, createSlice, isAnyOf } from '@reduxjs/toolkit';
 import { Action, Dispatch, MiddlewareAPI } from 'redux';
 import request from 'superagent';
 import * as _ from 'lodash';
@@ -179,8 +179,8 @@ export const extendMatch = createAsyncThunk<
 export const refresh = createAsyncThunk<void, void, { state: RootState }>(
   'control/refresh',
   async (arg, thunkAPI) => {
-    const { edit } = thunkAPI.getState().control;
-    if (!edit) {
+    const { editing } = thunkAPI.getState().control;
+    if (!editing) {
       await Promise.all([
         thunkAPI.dispatch(fetchAlliances()).unwrap(),
         thunkAPI.dispatch(fetchBracket()).unwrap(),
@@ -195,7 +195,8 @@ const slice = createSlice({
   name: 'control',
   initialState: {
     matchId: null,
-    edit: false,
+    editing: false,
+    loading: false,
     clientTimestamp: 0,
     timer: {
       phase: MatchPhase.IDLE,
@@ -207,6 +208,12 @@ const slice = createSlice({
   } as ControlState,
   reducers: {
     update: (state, action) => ({ ...state, ...action.payload }),
+  },
+  extraReducers(builder) {
+    builder
+      .addCase(refresh.pending, (state) => ({ ...state, loading: true }))
+      .addMatcher(isAnyOf(refresh.fulfilled, refresh.rejected),
+        (state) => ({ ...state, loading: false }));
   },
 });
 

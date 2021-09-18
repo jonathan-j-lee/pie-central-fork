@@ -210,6 +210,19 @@ $stripe-angle: -45deg;
   }
 }
 
+.help-dialog {
+  min-width: 40rem;
+  p:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.bracket-formula {
+  display: block;
+  text-align: center;
+  margin: 1rem 0;
+}
+
 .team-connection {
   margin: 1.5rem 0;
 }

@@ -1,56 +1,52 @@
 import * as React from 'react';
-import { EntityState, EntitySelectors } from '@reduxjs/toolkit';
 import { Button, HTMLSelect, MenuItem } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { Select } from '@blueprintjs/select';
-import { useAppSelector } from '../hooks';
+import { useAppSelector, useBracket } from '../hooks';
 import type { RootState } from '../store';
-import * as allianceUtils from '../store/alliances';
-import * as bracketUtils from '../store/bracket';
-import * as teamUtils from '../store/teams';
-import * as matchUtils from '../store/matches';
-import { Alliance, AllianceColor, Fixture, LogLevel, Match, MatchEventType, Team } from '../../types';
+import { selectors as allianceSelectors } from '../store/alliances';
+import { selectors as teamSelectors } from '../store/teams';
+import { selectors as matchSelectors } from '../store/matches';
+import { Alliance, AllianceColor, Fixture, LogLevel, Match, MatchEventType, Team, displayTeam } from '../../types';
 
 interface EntitySelectProps<T> {
-  id?: null | number;
-  onSelect: (entity: T) => void;
+  id: number | null;
+  onSelect: (id: number | null) => void;
+  filter?: (entity: T) => boolean;
   noResults?: string;
   placeholder?: string;
   disabled?: boolean;
 }
 
-function select<T>(
-  selectors: EntitySelectors<T, EntityState<T>>,
-  state: EntityState<T>,
-  id?: null | number
-) {
-  return id !== undefined && id !== null && !isNaN(id)
-    ? selectors.selectById(state, id)
-    : undefined;
-}
-
 function makeSelect<T extends { id: number }>(
-  selectState: (state: RootState) => EntityState<T>,
-  selectors: EntitySelectors<T, EntityState<T>>,
+  useEntities: (id: number | null) => [T | undefined, T[]],
   selectName: (entity?: T) => string,
   icon?: IconName
 ) {
-  const SelectFactory = Select.ofType<T>();
+  const SelectFactory = Select.ofType<T | null>();
   return (props: EntitySelectProps<T>) => {
-    const entityState = useAppSelector(selectState);
-    const entities = selectors.selectAll(entityState);
-    const entity = select(selectors, entityState, props.id);
+    const [entity, entities] = useEntities(props.id);
     return (
       <SelectFactory
         disabled={props.disabled}
-        items={entities.filter((entity) => entity.id >= 0)}
+        items={
+          ([null] as (T | null)[]).concat(
+            entities
+              .filter((entity) => entity.id >= 0)
+              .filter(props.filter ?? (() => true))
+          )
+        }
         itemPredicate={(query, entity) =>
-          selectName(entity).toLowerCase().includes(query.toLowerCase())
+          selectName(entity ?? undefined).toLowerCase().includes(query.toLowerCase())
         }
         itemRenderer={(entity, { handleClick }) => (
-          <MenuItem key={entity.id} text={selectName(entity)} onClick={handleClick} />
+          <MenuItem
+            key={entity?.id ?? null}
+            text={entity ? selectName(entity) : '(None)'}
+            onClick={handleClick}
+          />
         )}
-        onItemSelect={(entity) => props.onSelect(entity)}
+        onItemSelect={(entity) => props.onSelect(entity?.id ?? null)}
         noResults={<MenuItem disabled text={props.noResults || 'No results.'} />}
       >
         <Button
@@ -65,64 +61,50 @@ function makeSelect<T extends { id: number }>(
 }
 
 export const AllianceSelect = makeSelect<Alliance>(
-  (state) => state.alliances,
-  allianceUtils.selectors,
+  (id) => {
+    const alliances = useAppSelector((state) => state.alliances);
+    return [
+      id ? allianceSelectors.selectById(alliances, id) : undefined,
+      allianceSelectors.selectAll(alliances),
+    ];
+  },
   (alliance) => alliance?.name ?? '',
   IconNames.PEOPLE
 );
 
-const FixtureSelectFactory = Select.ofType<Fixture>();
-
-export function FixtureSelect(props: EntitySelectProps<Fixture>) {
-  const alliancesState = useAppSelector((state) => state.alliances);
-  const bracket = useAppSelector((state) => state.bracket);
-  const fixtures = bracketUtils
-    .getFixtures(bracket)
-    .filter((fixture) => fixture.blue?.winner || fixture.gold?.winner);
-  let fixture = undefined;
-  if (props.id) {
-    [fixture] = fixtures.filter((fixture) => fixture.id === props.id);
-  }
-  const selectName = (fixture?: Fixture) => {
-    if (!fixture) {
-      return '';
-    }
-    const blue = select(allianceUtils.selectors, alliancesState, fixture.blue?.winner);
-    const gold = select(allianceUtils.selectors, alliancesState, fixture.gold?.winner);
-    return `${blue?.name ?? '?'} vs. ${gold?.name ?? '?'}`;
-  };
-  return (
-    <FixtureSelectFactory
-      disabled={props.disabled}
-      items={fixtures}
-      itemPredicate={(query, fixture) =>
-        selectName(fixture).toLowerCase().includes(query.toLowerCase())
-      }
-      itemRenderer={(fixture, { handleClick }) =>
-        <MenuItem key={fixture.id} text={selectName(fixture)} onClick={handleClick} />
-      }
-      onItemSelect={(fixture) => props.onSelect(fixture)}
-      noResults={<MenuItem disabled text={props.noResults || 'No results.'} />}
-    >
-      <Button
-        disabled={props.disabled}
-        icon={IconNames.MANY_TO_ONE}
-        rightIcon={IconNames.CARET_DOWN}
-        text={selectName(fixture) || props.placeholder || '(None)'}
-      />
-    </FixtureSelectFactory>
-  );
-}
+export const FixtureSelect = makeSelect<Fixture>(
+  (id) => {
+    let [, fixtures] = useBracket();
+    fixtures = fixtures
+      .filter((fixture) => fixture.blue?.winner || fixture.gold?.winner);
+    const [fixture] = fixtures.filter((fixture) => fixture.id === id);
+    return [fixture, fixtures];
+  },
+  (fixture) => fixture
+    ? `${fixture.blue?.winningAlliance?.name || '?'} vs. ${fixture.gold?.winningAlliance?.name || '?'}`
+    : '',
+  IconNames.MANY_TO_ONE,
+);
 
 export const TeamSelect = makeSelect<Team>(
-  (state) => state.teams,
-  teamUtils.selectors,
-  (team) => team?.name ?? ''
+  (id) => {
+    const teams = useAppSelector((state) => state.teams);
+    return [
+      id ? teamSelectors.selectById(teams, id) : undefined,
+      teamSelectors.selectAll(teams),
+    ];
+  },
+  (team) => team ? displayTeam(team) : '',
 );
 
 export const MatchSelect = makeSelect<Match>(
-  (state) => state.matches,
-  matchUtils.selectors,
+  (id) => {
+    const matches = useAppSelector((state) => state.matches);
+    return [
+      id ? matchSelectors.selectById(matches, id) : undefined,
+      matchSelectors.selectAll(matches),
+    ] as [Match | undefined, Match[]];
+  },
   (match) => (match?.id !== undefined ? `Match ${match.id}` : '')
 );
 

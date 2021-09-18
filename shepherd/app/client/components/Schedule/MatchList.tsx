@@ -13,7 +13,8 @@ import matchesSlice from '../../store/matches';
 interface ScoreProps {
   allyScore: number;
   opponentScore: number;
-  current?: boolean;
+  current: boolean;
+  started: boolean;
   className?: string;
 }
 
@@ -28,8 +29,8 @@ function Score(props: ScoreProps) {
   } else {
     icon = IconNames.BAN_CIRCLE;
   }
-  const future = !props.current && props.allyScore === 0 && props.opponentScore === 0;
-  const past = !props.current && !future;
+  const past = !props.current && props.started;
+  const future = !props.current && !past;
   return (
     <td className={`score ${props.className ?? ''} ${!future && status} ${props.current ? 'current' : ''}`}>
       {past && <Icon icon={icon} className="score-icon" />}
@@ -46,15 +47,13 @@ export default function MatchList(props: { edit: boolean }) {
     <EntityTable
       columns={[
         { field: 'id', heading: 'Number' },
-        { field: 'blueAlliance.name', heading: 'Alliance' },
-        { field: 'blueTeams', heading: 'Teams' },
+        { field: 'fixtureData.blue.winningAlliance.name', heading: 'Alliance' },
+        { field: 'blueTeams', heading: 'Teams' }, // TODO: fix sorting
         { field: 'blueScore', heading: 'Score' },
-        { field: 'goldAlliance.name', heading: 'Alliance' },
+        { field: 'fixtureData.gold.winningAlliance.name', heading: 'Alliance' },
         { field: 'goldTeams', heading: 'Teams' },
         { field: 'goldScore', heading: 'Score' },
-        ...(props.edit ? [
-          { field: 'fixture', heading: 'Fixture' },
-        ] : []),
+        { field: 'fixture', heading: 'Elimination Round' },
       ]}
       entities={matches}
       emptyMessage="No matches"
@@ -74,38 +73,44 @@ export default function MatchList(props: { edit: boolean }) {
               PLACEHOLDER
             )}
           </td>
-          <td>{match.blueAlliance?.name ?? PLACEHOLDER}</td>
+          <td>{match.fixtureData?.blue?.winningAlliance?.name ?? PLACEHOLDER}</td>
           <td><TeamMembers teams={match.blueTeams} /></td>
           <Score
             allyScore={match.blueScore}
             opponentScore={match.goldScore}
             current={match.id === currentMatch}
+            started={match.started}
             className="blue"
           />
-          <td>{match.goldAlliance?.name ?? PLACEHOLDER}</td>
+          <td>{match.fixtureData?.gold?.winningAlliance?.name ?? PLACEHOLDER}</td>
           <td><TeamMembers teams={match.goldTeams} /></td>
           <Score
             allyScore={match.goldScore}
             opponentScore={match.blueScore}
             current={match.id === currentMatch}
+            started={match.started}
             className="gold"
           />
+          <td>
+            {props.edit ? (
+              <FixtureSelect
+                id={match.fixture}
+                onSelect={(fixture) =>
+                  dispatch(matchesSlice.actions.upsert({ ...match, fixture }))
+                }
+              />
+            ) : (
+              match.fixtureData?.blue || match.fixtureData?.gold
+                ? `${match.fixtureData?.blue?.winningAlliance?.name || '?'} vs. ${match.fixtureData?.gold?.winningAlliance?.name || '?'}`
+                : PLACEHOLDER
+            )}
+          </td>
           {props.edit && (
-            <>
-              <td>
-                <FixtureSelect
-                  id={match.fixture}
-                  onSelect={({ id: fixture }) =>
-                    dispatch(matchesSlice.actions.upsert({ ...match, fixture }))
-                  }
-                />
-              </td>
-              <td>
-                <DeleteButton
-                  onClick={() => dispatch(matchesSlice.actions.remove(match.id))}
-                />
-              </td>
-            </>
+            <td>
+              <DeleteButton
+                onClick={() => dispatch(matchesSlice.actions.remove(match.id))}
+              />
+            </td>
           )}
         </tr>
       )}

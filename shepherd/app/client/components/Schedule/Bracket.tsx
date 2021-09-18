@@ -1,172 +1,242 @@
 import * as React from 'react';
-import { EntityState } from '@reduxjs/toolkit';
 import { Callout, Colors, Intent } from '@blueprintjs/core';
-import { useAppDispatch, useAppSelector } from '../../hooks';
+import { Container, Pattern, SVG } from '@svgdotjs/svg.js';
+import {
+  useAppDispatch,
+  useAppSelector,
+  useBracket,
+  useCurrentMatch,
+} from '../../hooks';
 import type { AppDispatch } from '../../store';
-import { selectors as allianceSelectors } from '../../store/alliances';
 import { updateWinner } from '../../store/bracket';
 import { Alliance, Fixture } from '../../../types';
 
-import { Container, SVG } from '@svgdotjs/svg.js';
+interface BracketColors {
+  text: string;
+  inactive: string;
+  activeLabel: string;
+  activeLabelStripe: string;
+  activePath: {
+    blue: string;
+    gold: string;
+  };
+  selectedPath: {
+    blue: string;
+    gold: string;
+  };
+}
 
-const LIGHT_BLUE = '#bbdef5';
-const LIGHT_GOLD = '#fce7b3';
+const LIGHT_THEME: BracketColors = {
+  text: Colors.BLACK,
+  inactive: Colors.LIGHT_GRAY3,
+  activeLabel: Colors.GREEN5,
+  activeLabelStripe: Colors.GREEN4,
+  activePath: {
+    blue: '#bbdef5',
+    gold: '#fce7b3',
+  },
+  selectedPath: {
+    blue: Colors.BLUE4,
+    gold: Colors.GOLD4,
+  },
+};
 
-interface LabelOptions {
+const DARK_THEME: BracketColors = {
+  text: Colors.WHITE,
+  inactive: '#31424f',
+  activeLabel: Colors.GREEN3,
+  activeLabelStripe: Colors.GREEN2,
+  activePath: {
+    blue: 'rgba(16, 35, 79, 0.3)',
+    gold: 'rgba(128, 116, 13, 0.3)',
+  },
+  selectedPath: {
+    blue: Colors.BLUE3,
+    gold: Colors.GOLD3,
+  },
+};
+
+interface BracketRenderOptions {
   width: number;
   height: number;
   horizontalOffset: number;
   verticalOffset: number;
   strokeWidth: number;
+  stripeWidth: number;
   dispatch: AppDispatch;
   edit: boolean;
-  alliancesState: EntityState<Alliance>;
+  colors: BracketColors;
+  current: number | null;
 }
 
-const sign = (x: number) => x < 0 ? -1 : (x > 0 ? 1 : 0);
+const SIZE_OPTIONS = {
+  width: 120,
+  height: 30,
+  verticalOffset: 80,
+  strokeWidth: 6,
+  horizontalOffset: 0,
+  stripeWidth: 13,
+};
 
-interface Node {
+interface BracketNode {
   fixture: Fixture | null;
   x: number;
   y: number;
 }
 
-function getBracketPath(current: Node, prev: Node, options: LabelOptions) {
+const sign = (x: number) => x < 0 ? -1 : (x > 0 ? 1 : 0);
+
+function getBracketPath(
+  current: BracketNode,
+  prev: BracketNode,
+  options: BracketRenderOptions,
+) {
   const xDelta = sign(options.horizontalOffset) * options.width / 2;
   const xNear = current.x - xDelta;
   const xFar = current.x + xDelta;
   const xMid = (prev.x + xNear) / 2;
   const yMid = (prev.y + current.y) / 2;
   const xControl = (prev.x + xMid) / 2;
-  return {
-    path: `M ${prev.x} ${prev.y} Q ${xControl} ${prev.y} ${xMid} ${yMid} T ${xNear} ${current.y}`,
-    xNear,
-    xFar,
-    xMid,
-    yMid,
-  };
+  const path = `M ${prev.x} ${prev.y} Q ${xControl} ${prev.y} ${xMid} ${yMid} T ${xNear} ${current.y}`;
+  return { path, xNear, xFar, xMid, yMid };
 }
 
-function drawBracket(
+function drawNextRound(
   draw: Container,
-  current: Node,
-  prev: Node,
-  branch: 'blue' | 'gold',
-  options: LabelOptions,
+  current: BracketNode,
+  xFar: number,
+  options: BracketRenderOptions,
 ) {
-  if (!current.fixture || !prev.fixture) {
-    return;
+  if (current.fixture) {
+    const x = current.x + options.horizontalOffset;
+    const { verticalOffset } = options;
+    const nextPrev = { fixture: current.fixture, x: xFar, y: current.y };
+    options = { ...options, verticalOffset: 0.5 * verticalOffset };
+    const blue = { fixture: current.fixture.blue, x, y: current.y - verticalOffset };
+    const gold = { fixture: current.fixture.gold, x, y: current.y + verticalOffset };
+    drawBracket(draw, blue, nextPrev, 'blue', options);
+    drawBracket(draw, gold, nextPrev, 'gold', options);
   }
-  const winner = current.fixture.winner;
+}
 
-  const alliance = winner ? allianceSelectors.selectById(options.alliancesState, winner) : undefined;
-  const labelBox = draw
+function drawNode(draw: Container, current: BracketNode, options: BracketRenderOptions) {
+  const winner = current.fixture?.winner;
+  const label = draw
     .rect(options.width, options.height)
     .center(current.x, current.y)
-    .fill(winner === null ? Colors.LIGHT_GRAY3 : Colors.GREEN5);
-
-  if (current.fixture.blue && current.fixture.gold) {
-    // TODO: use gray when there is no winner
-    // TODO: shade current match
-    // labelBox
-    //   .on('mouseover', () => labelBox.fill(Colors.GREEN4))
-    //   .on('mouseout', () => labelBox.fill(Colors.GREEN5))
-    //   .on('click', () => {
-    //   });
+  if (options.current === current.fixture?.id) {
+    const pattern = draw
+      .pattern(2 * options.stripeWidth, options.height, (add) => {
+        add
+          .rect(options.stripeWidth, options.height)
+          .fill(options.colors.activeLabel);
+        add
+          .rect(options.stripeWidth, options.height)
+          .move(options.stripeWidth, 0)
+          .fill(options.colors.activeLabelStripe);
+      })
+      .attr({ patternTransform: 'rotate(45 0 0)' });
+    label.fill(pattern);
+  } else {
+    label.fill(winner ? options.colors.activeLabel : options.colors.inactive);
   }
   draw
-    .text(alliance?.name ?? '?')
+    .fill(options.colors.text)
+    .text(current.fixture?.winningAlliance?.name ?? '?')
     .center(current.x, current.y);
+}
 
-  const { xFar, path: pathSpec } = getBracketPath(current, prev, options);
-  const inactiveColor = branch === 'blue' ? LIGHT_BLUE : LIGHT_GOLD;
-  const activeColor = branch === 'blue' ? Colors.BLUE3 : Colors.GOLD3;
+function drawPath(
+  draw: Container,
+  current: Fixture,
+  prev: Fixture,
+  branch: 'blue' | 'gold',
+  pathSpec: string,
+  options: BracketRenderOptions,
+) {
+  const winner = current.winner;
+  const activeColor = options.colors.activePath[branch];
+  const selectedColor = options.colors.selectedPath[branch];
   let color: string;
-  if (winner === null) {
-    color = Colors.LIGHT_GRAY4;
+  if (winner) {
+    color = prev.winner === current.winner ? selectedColor : activeColor;
   } else {
-    color = prev.fixture.winner === current.fixture.winner ? activeColor : inactiveColor;
+    color = options.colors.inactive;
   }
   const path = draw
     .path(pathSpec)
     .fill('none')
     .stroke({ width: options.strokeWidth, color });
-
-  // TODO: center the entire thing
-
-  if (options.edit && winner !== null) {
+  if (options.edit && winner) {
     path
-      .on('mouseover', () => path.stroke({ width: options.strokeWidth, color: activeColor }))
+      .on('mouseover', () => path.stroke({ width: options.strokeWidth, color: selectedColor }))
       .on('mouseout', () => path.stroke({ width: options.strokeWidth, color }))
       .on('click', () => {
-        if (prev.fixture) {
-          if (prev.fixture.winner === winner) {
-            options.dispatch(updateWinner({ id: prev.fixture.id, winner: null }));
+        if (prev) {
+          if (prev.winner === winner) {
+            options.dispatch(updateWinner({ id: prev.id, winner: null }));
           } else {
-            options.dispatch(updateWinner({ id: prev.fixture.id, winner }));
+            options.dispatch(updateWinner({ id: prev.id, winner }));
           }
         }
       });
   }
-
-  const x = current.x + options.horizontalOffset;
-  const { verticalOffset } = options;
-  const nextPrev = { fixture: current.fixture, x: xFar, y: current.y };
-  options = { ...options, verticalOffset: 0.5 * verticalOffset };
-  const blue = { fixture: current.fixture.blue, x, y: current.y - verticalOffset };
-  const gold = { fixture: current.fixture.gold, x, y: current.y + verticalOffset };
-  drawBracket(draw, blue, nextPrev, 'blue', options);
-  drawBracket(draw, gold, nextPrev, 'gold', options);
 }
 
-export default function Tournament(props: { edit: boolean }) {
+function drawBracket(
+  draw: Container,
+  current: BracketNode,
+  prev: BracketNode,
+  branch: 'blue' | 'gold',
+  options: BracketRenderOptions,
+) {
+  if (current.fixture && prev.fixture) {
+    const { xFar, path } = getBracketPath(current, prev, options);
+    drawNode(draw, current, options);
+    drawPath(draw, current.fixture, prev.fixture, branch, path, options);
+    drawNextRound(draw, current, xFar, options);
+  }
+}
+
+export default function Bracket(props: { edit: boolean }) {
   const dispatch = useAppDispatch();
-  const alliancesState = useAppSelector((state) => state.alliances);
-  const bracket = useAppSelector((state) => state.bracket);
-  const visRef = React.useRef<SVGSVGElement | null>(null);
+  const match = useCurrentMatch();
+  const [bracket] = useBracket();
+  const darkTheme = useAppSelector((state) => state.user.darkTheme);
+  const diagramRef = React.useRef<SVGSVGElement | null>(null);
   React.useEffect(() => {
-    const svg = visRef.current;
-    if (!svg || !bracket) {
+    if (!diagramRef.current || !bracket) {
       return;
     }
-    const draw = SVG(svg);
+    const draw = SVG(diagramRef.current);
     draw.clear();
     draw.viewbox(-200, -200, 400, 400);
-    const width = 120;
-    const height = 30;
     const options = {
-      width: 120,
-      height: 30,
-      verticalOffset: 80,
-      strokeWidth: 6,
+      ...SIZE_OPTIONS,
       dispatch,
       edit: props.edit,
-      alliancesState,
+      colors: darkTheme ? DARK_THEME : LIGHT_THEME,
+      current: match?.fixture ?? null,
     };
     drawBracket(
       draw,
       { fixture: bracket.blue, x: -80, y: -60 },
-      { fixture: bracket, x: 0, y: -height / 2 },
+      { fixture: bracket, x: 0, y: -options.height / 2 },
       'blue',
       { ...options, horizontalOffset: -150 },
     );
     drawBracket(
       draw,
       { fixture: bracket.gold, x: 80, y: 60 },
-      { fixture: bracket, x: 0, y: height / 2 },
+      { fixture: bracket, x: 0, y: options.height / 2 },
       'gold',
       { ...options, horizontalOffset: 150 },
     );
-    draw
-      .rect(width, height)
-      .center(0, 0)
-      .fill(bracket.winner === null ? Colors.LIGHT_GRAY3 : Colors.GREEN5);
-    const winner = bracket.winner ? allianceSelectors.selectById(alliancesState, bracket.winner) : undefined;
-    draw.text(winner?.name ?? '?').center(0, 0);
-  }, [props.edit, dispatch, visRef, alliancesState, bracket]);
+    drawNode(draw, { fixture: bracket, x: 0, y: 0 }, options);
+  }, [props.edit, darkTheme, dispatch, diagramRef, bracket]);
   return bracket && (
     <>
-      <svg width="100%" height="400px" ref={visRef} />
+      <svg width="100%" height="400px" ref={diagramRef} />
       {props.edit && (
         <Callout className="spacer" intent={Intent.PRIMARY}>
           You can edit which alliances advance in each round by clicking the blue and gold paths.

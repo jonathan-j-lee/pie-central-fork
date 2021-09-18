@@ -12,7 +12,7 @@ import {
   MatchPhase,
   displayPhase,
 } from '../../../types';
-import { AlertButton } from '../Util';
+import { AlertButton } from '../Notification';
 import { useAppDispatch } from '../../hooks';
 import { changeMode, Robot } from '../../store/control';
 import MatchConnector from './MatchConnector';
@@ -30,7 +30,7 @@ export default function TimerControl(props: { robots: Robot[] }) {
         'Are you sure you want to change the running state of only some robots? ' +
           'Robots are normally started or stopped all together.',
       ];
-  const disabled = props.robots.length === 0;
+  const disabled = props.robots.filter((robot) => robot.selected).length === 0;
   return (
     <>
       <MatchConnector phase={phase} totalTime={totalTime} />
@@ -66,8 +66,8 @@ export default function TimerControl(props: { robots: Robot[] }) {
             text="Start"
             intent={Intent.PRIMARY}
             icon={IconNames.PLAY}
-            onClick={() =>
-              dispatch(
+            onClick={async () => {
+              await dispatch(
                 changeMode({
                   mode: phase === MatchPhase.AUTO
                     ? MatchEventType.AUTO
@@ -75,8 +75,10 @@ export default function TimerControl(props: { robots: Robot[] }) {
                   totalTime,
                   robots: props.robots,
                 })
-              )
-            }
+              ).unwrap();
+            }}
+            success="Started robots."
+            failure="Failed to start robots."
           />
           <AlertButton
             getWarnings={() => [
@@ -88,9 +90,13 @@ export default function TimerControl(props: { robots: Robot[] }) {
             text="Stop"
             intent={Intent.WARNING}
             icon={IconNames.STOP}
-            onClick={() =>
-              dispatch(changeMode({ mode: MatchEventType.IDLE, robots: props.robots }))
-            }
+            onClick={async () => {
+              await dispatch(
+                changeMode({ mode: MatchEventType.IDLE, robots: props.robots })
+              ).unwrap();
+            }}
+            success="Stopped robots."
+            failure="Failed to stop robots."
           />
           <AlertButton
             getWarnings={() => [
@@ -102,9 +108,13 @@ export default function TimerControl(props: { robots: Robot[] }) {
             text="E-Stop"
             intent={Intent.DANGER}
             icon={IconNames.FLAME}
-            onClick={() =>
-              dispatch(changeMode({ mode: MatchEventType.ESTOP, robots: props.robots }))
-            }
+            onClick={async () => {
+              await dispatch(
+                changeMode({ mode: MatchEventType.ESTOP, robots: props.robots })
+              ).unwrap();
+            }}
+            success="E-stopped robots."
+            failure="Failed to e-stop robots."
           />
         </ControlGroup>
       </FormGroup>

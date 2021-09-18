@@ -47,11 +47,17 @@ export function getLogLevels(level: LogLevel) {
     .map(([level]) => level));
 }
 
+interface RankStatistics {
+  wins: number;
+  losses: number;
+  ties: number;
+  totalScore: number;
+}
+
 export interface Alliance {
   id: number;
   name: string;
-  wins?: number;
-  losses?: number;
+  stats?: RankStatistics;
 }
 
 export interface Team {
@@ -64,8 +70,7 @@ export interface Team {
   logPort: number;
   updatePort: number;
   multicastGroup: string;
-  wins?: number;
-  losses?: number;
+  stats?: RankStatistics;
 }
 
 export interface MatchEvent {
@@ -86,6 +91,7 @@ export interface Fixture {
   blue: Fixture | null;
   gold: Fixture | null;
   matches: number[];
+  winningAlliance?: Alliance;
 }
 
 export interface FixtureUpdate {
@@ -157,7 +163,8 @@ export interface RobotStatus {
 
 export interface ControlState {
   matchId: number | null;
-  edit: boolean;
+  editing: boolean;
+  loading: boolean;
   clientTimestamp: number;
   timer: TimerState;
   robots: RobotStatus[];
@@ -215,13 +222,14 @@ export function isRunning(phase: MatchPhase) {
 export function displaySummary(event: MatchEvent, team?: Team) {
   const alliance = displayAllianceColor(event.alliance);
   const value = event.value ?? 0;
+  const duration = displayTime(value / 1000, 0);
   switch (event.type) {
     case MatchEventType.JOIN:
       return `${displayTeam(team)} joined the ${alliance} alliance.`;
     case MatchEventType.AUTO:
-      return `Started the autonomous phase for ${displayTeam(team)}.`;
+      return `Started the autonomous phase for ${displayTeam(team)} for ${duration}.`;
     case MatchEventType.TELEOP:
-      return `Started the tele-op phase for ${displayTeam(team)}.`;
+      return `Started the tele-op phase for ${displayTeam(team)} for ${duration}.`;
     case MatchEventType.IDLE:
       return `Stopped ${displayTeam(team)}.`;
     case MatchEventType.ESTOP:
@@ -235,8 +243,7 @@ export function displaySummary(event: MatchEvent, team?: Team) {
     case MatchEventType.MULTIPLY:
       return `The ${alliance} alliance got a ${value}x score multiplier.`;
     case MatchEventType.EXTEND:
-      const duration = displayTime(value / 1000, 0);
-      return `${displayTeam(team)} extended the current phase by ${duration}.`;
+      return `${displayTeam(team)} received ${duration} of extra time.`;
     default:
       return `An event occurred for the ${alliance} alliance.`;
   }
@@ -257,13 +264,50 @@ export function parseLogFilter(filter: string): LogEventFilter | null {
   return null;
 }
 
+export function getAllianceAllegiance(alliance: Alliance, fixture?: Fixture) {
+  if (alliance.id === fixture?.blue?.winner) {
+    return AllianceColor.BLUE;
+  } else if (alliance.id === fixture?.gold?.winner) {
+    return AllianceColor.GOLD;
+  }
+  return AllianceColor.NONE;
+}
+
+export function getQualScore(stats: RankStatistics) {
+  return 2000 * stats.wins + 1000 * stats.ties + stats.totalScore;
+}
+
+export function countMatchStatistics<M extends Match>(
+  matches: M[],
+  getAllegiance: (match: M) => AllianceColor,
+  getGame: (match: M) => GameState = (match) => GameState.fromEvents(match.events),
+) {
+  const stats: RankStatistics = { wins: 0, losses: 0, ties: 0, totalScore: 0 };
+  for (const match of matches) {
+    const allegiance = getAllegiance(match);
+    const game = getGame(match);
+    const winner = game.winner;
+    if (allegiance !== AllianceColor.NONE) {
+      if (winner === AllianceColor.NONE) {
+        stats.ties += 1;
+      } else if (allegiance === winner) {
+        stats.wins += 1;
+      } else {
+        stats.losses += 1;
+      }
+      stats.totalScore += game[allegiance].score;
+    }
+  }
+  return stats;
+}
+
 interface MatchInterval {
   phase: MatchPhase;
   start: number;
   stop: number;
 }
 
-export class AllianceState {
+class AllianceState {
   score: number = 0;
   multiplier: number = 1;
   intervals: Map<number, MatchInterval>;
@@ -281,21 +325,21 @@ export class AllianceState {
     phase: MatchPhase,
     defaultDuration: number = 0
   ) {
-    const team = event.team ?? null;
-    if (team !== null && this.intervals.has(team) && event.timestamp) {
-      const start = Number(event.timestamp);
-      const timer = { phase, start, stop: start + (event.value ?? defaultDuration) };
-      this.intervals.set(team, timer);
+    if (event.team && this.intervals.has(event.team) && event.timestamp) {
+      this.intervals.set(event.team, {
+        phase,
+        start: event.timestamp,
+        stop: event.timestamp + (event.value ?? defaultDuration),
+      });
     }
   }
 
   apply(event: Partial<MatchEvent>) {
-    const team = event.team ?? null;
     let value;
     switch (event.type) {
       case MatchEventType.JOIN:
-        if (team !== null) {
-          this.intervals.set(team, { phase: MatchPhase.IDLE, start: 0, stop: 0 });
+        if (event.team) {
+          this.intervals.set(event.team, { phase: MatchPhase.IDLE, start: 0, stop: 0 });
         }
         break;
       case MatchEventType.AUTO:
@@ -305,10 +349,10 @@ export class AllianceState {
         this.setTimer(event, MatchPhase.TELEOP, 180 * 1000);
         break;
       case MatchEventType.IDLE:
-        this.setTimer(event, MatchPhase.IDLE, 0);
+        this.setTimer(event, MatchPhase.IDLE);
         break;
       case MatchEventType.ESTOP:
-        this.setTimer(event, MatchPhase.ESTOP, 0);
+        this.setTimer(event, MatchPhase.ESTOP);
         break;
       case MatchEventType.ADD:
         value = event.value ?? 0;
@@ -316,17 +360,17 @@ export class AllianceState {
         break;
       case MatchEventType.MULTIPLY:
         value = event.value ?? 1;
-        if (value > 0) {
+        if (value >= 0) {
           this.multiplier = value;
         }
         break;
       case MatchEventType.EXTEND:
-        if (team !== null) {
-          const timer = this.intervals.get(team);
-          if (timer) {
-            this.intervals.set(team, {
-              ...timer,
-              stop: timer.stop + (event.value ?? 0),
+        if (event.team) {
+          const interval = this.intervals.get(event.team);
+          if (interval) {
+            this.intervals.set(event.team, {
+              ...interval,
+              stop: interval.stop + (event.value ?? 0),
             });
           }
         }
@@ -335,13 +379,20 @@ export class AllianceState {
   }
 }
 
+interface PhaseTransition {
+  phase: MatchPhase;
+  timestamp: number;
+}
+
 export class GameState {
   blue: AllianceState;
   gold: AllianceState;
+  transitions: PhaseTransition[];
 
   constructor() {
     this.blue = new AllianceState();
     this.gold = new AllianceState();
+    this.transitions = [{ phase: MatchPhase.IDLE, timestamp: 0 }];
   }
 
   static fromEvents(events: Partial<MatchEvent>[]) {
@@ -363,9 +414,9 @@ export class GameState {
 
   getTimer(now?: number): Partial<TimerState> {
     const timestamp = now ?? Date.now();
-    const intervals = Array.from(this.blue.intervals.values())
-      .concat(Array.from(this.gold.intervals.values()))
-      .filter((interval) => isRunning(interval.phase) && timestamp < interval.stop);
+    const intervals = this.intervals
+      .filter(([, interval]) => isRunning(interval.phase) && timestamp < interval.stop)
+      .map(([, interval]) => interval);
     if (intervals.length === 0) {
       return { stage: 'done', timeRemaining: 0 };
     }
@@ -375,9 +426,9 @@ export class GameState {
   }
 
   get intervals(): [number, MatchInterval][] {
-    return Array.from(this.blue.intervals.entries()).concat(
-      Array.from(this.gold.intervals.entries())
-    );
+    return Array
+      .from(this.blue.intervals.entries())
+      .concat(Array.from(this.gold.intervals.entries()));
   }
 
   get winner(): AllianceColor {
@@ -395,5 +446,20 @@ export class GameState {
     } else if (event.alliance === AllianceColor.GOLD) {
       this.gold.apply(event);
     }
+    const phases = new Set(this.intervals.map(([, interval]) => interval.phase));
+    if (phases.size === 1) {
+      const [phase] = phases;
+      const lastTransition = this.transitions[this.transitions.length - 1];
+      if (phase !== lastTransition.phase) {
+        const timestamp = event.timestamp ?? lastTransition.timestamp;
+        this.transitions.push({ phase, timestamp });
+      }
+    }
+  }
+
+  get started() {
+    return this.transitions.some(({ phase }) =>
+      phase === MatchPhase.AUTO || phase === MatchPhase.TELEOP
+    );
   }
 }

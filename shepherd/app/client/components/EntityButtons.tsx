@@ -1,14 +1,20 @@
 import * as React from 'react';
 import { Button, IButtonProps, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { OutcomeButton, OutcomeButtonProps } from './Notification';
 
 export function AddButton(props: IButtonProps) {
   return <Button intent={Intent.PRIMARY} icon={IconNames.ADD} {...props} />;
 }
 
-export function ConfirmButton(props: IButtonProps) {
+export function ConfirmButton(props: OutcomeButtonProps) {
   return (
-    <Button text="Confirm" intent={Intent.SUCCESS} icon={IconNames.TICK} {...props} />
+    <OutcomeButton
+      text="Confirm"
+      intent={Intent.SUCCESS}
+      icon={IconNames.TICK}
+      {...props}
+    />
   );
 }
 

@@ -5,7 +5,7 @@ import { InputGroup } from '@blueprintjs/core';
 import { DeleteButton } from '../EntityButtons';
 import EntityTable from '../EntityTable';
 import { PLACEHOLDER, TeamMembers } from '../Util';
-import { useAppDispatch, useTeams, useAlliances } from '../../hooks';
+import { useAppDispatch, useAlliances } from '../../hooks';
 import alliancesSlice from '../../store/alliances';
 
 export default function AllianceList(props: { edit: boolean }) {
@@ -17,12 +17,10 @@ export default function AllianceList(props: { edit: boolean }) {
       columns={[
         { field: 'name', heading: 'Name' },
         { field: 'teams', heading: 'Teams' },
-        ...(props.edit
-          ? []
-          : [
-              { field: 'wins', heading: 'Wins' },
-              { field: 'losses', heading: 'Losses' },
-            ]),
+        { field: 'stats.wins', heading: 'Wins' },
+        { field: 'stats.losses', heading: 'Losses' },
+        { field: 'stats.ties', heading: 'Ties' },
+        { field: 'stats.totalScore', heading: 'Total Score' },
       ]}
       entities={alliances}
       emptyMessage="No alliances"
@@ -42,8 +40,10 @@ export default function AllianceList(props: { edit: boolean }) {
             )}
           </td>
           <td><TeamMembers teams={alliance.teams} /></td>
-          {!props.edit && <td>{alliance.wins ?? '0'}</td>}
-          {!props.edit && <td>{alliance.losses ?? '0'}</td>}
+          <td>{alliance.stats?.wins ?? '0'}</td>
+          <td>{alliance.stats?.losses ?? '0'}</td>
+          <td>{alliance.stats?.ties ?? '0'}</td>
+          <td>{alliance.stats?.totalScore ?? '0'}</td>
           {props.edit && (
             <td>
               <DeleteButton

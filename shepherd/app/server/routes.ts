@@ -183,12 +183,15 @@ export default async function (options) {
       req.user.darkTheme = req.session.user?.darkTheme ?? req.user.darkTheme;
       await users.persistAndFlush(req.user);
     }
+    // TODO: set log verbosity
     res.sendStatus(200);
   });
 
   crud(app, users, '/users', 'username', { noRetrieve: true });
   crud(app, orm.em.getRepository(Team), '/teams', 'id');
-  crud(app, orm.em.getRepository(Alliance), '/alliances', 'id');
+  crud(app, orm.em.getRepository(Alliance), '/alliances', 'id', {
+    mapUpdate: (alliance) => _.omit(alliance, ['teams']),
+  });
   crud(app, orm.em.getRepository(Match), '/matches', 'id', {
     mapUpdate: (match) => ({ ...match, events: Match.mapEvents(match.events) }),
     async update(match, data) {
@@ -236,11 +239,6 @@ export default async function (options) {
     }
   });
 
-  async function getRanking() {
-    const alliances = await allianceRepo.findAll();
-    return alliances.map((alliance) => alliance.id);
-  }
-
   function lastBinaryPower(x: number) {
     return Math.pow(2, Math.floor(Math.log2(x)));
   }
@@ -268,7 +266,9 @@ export default async function (options) {
     await deleteBracket();
     let fixtures = await fixtureRepo.findAll();
     await fixtureRepo.removeAndFlush(fixtures);
-    const alliances = req.body instanceof Array ? req.body : await getRanking();
+    const alliances = _.isArray(req.body)
+      ? req.body
+      : (await allianceRepo.findAll()).map((alliance) => alliance.id);
     if (alliances.length === 0) {
       return res.sendStatus(400);
     }
