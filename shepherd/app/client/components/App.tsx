@@ -1,6 +1,8 @@
 import * as React from 'react';
 import { BrowserRouter as Router, Switch, Route, Redirect } from 'react-router-dom';
 import { FocusStyleManager } from '@blueprintjs/core';
+import { Chart, defaults } from 'react-chartjs-2';
+import annotationPlugin from 'chartjs-plugin-annotation';
 
 import Navigation from './Navigation';
 import Scoreboard from './Scoreboard';
@@ -15,6 +17,9 @@ import lightStyle from '../../../node_modules/highlight.js/styles/atom-one-light
 import darkStyle from '../../../node_modules/highlight.js/styles/atom-one-dark.css';
 
 FocusStyleManager.onlyShowFocusOnTabs();
+Chart.register(annotationPlugin);
+defaults.font.size = 14;
+defaults.font.family = 'monospace';
 
 function useHighlightStylesheet() {
   const darkTheme = useAppSelector((state) => state.user.darkTheme);

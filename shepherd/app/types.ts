@@ -118,7 +118,6 @@ export interface ControlRequest {
   activations?: number[];
   reconnect?: boolean;
   timer?: TimerState | null;
-  logLevel?: LogLevel;
 }
 
 export interface LogEvent {
@@ -219,6 +218,10 @@ export function isRunning(phase: MatchPhase) {
   return phase === MatchPhase.AUTO || phase === MatchPhase.TELEOP;
 }
 
+export function getDefaultDuration(phase: MatchPhase) {
+  return phase === MatchPhase.AUTO ? 30 : 180;
+}
+
 export function displaySummary(event: MatchEvent, team?: Team) {
   const alliance = displayAllianceColor(event.alliance);
   const value = event.value ?? 0;
@@ -301,7 +304,7 @@ export function countMatchStatistics<M extends Match>(
   return stats;
 }
 
-interface MatchInterval {
+export interface MatchInterval {
   phase: MatchPhase;
   start: number;
   stop: number;
@@ -379,20 +382,17 @@ class AllianceState {
   }
 }
 
-interface PhaseTransition {
-  phase: MatchPhase;
-  timestamp: number;
-}
-
 export class GameState {
   blue: AllianceState;
   gold: AllianceState;
-  transitions: PhaseTransition[];
+  transitions: MatchInterval[];
+  private phase: MatchPhase = MatchPhase.IDLE;
+  private start: number = 0;
 
   constructor() {
     this.blue = new AllianceState();
     this.gold = new AllianceState();
-    this.transitions = [{ phase: MatchPhase.IDLE, timestamp: 0 }];
+    this.transitions = [];
   }
 
   static fromEvents(events: Partial<MatchEvent>[]) {
@@ -447,12 +447,16 @@ export class GameState {
       this.gold.apply(event);
     }
     const phases = new Set(this.intervals.map(([, interval]) => interval.phase));
-    if (phases.size === 1) {
+    if (phases.size === 1 && event.timestamp) {
       const [phase] = phases;
-      const lastTransition = this.transitions[this.transitions.length - 1];
-      if (phase !== lastTransition.phase) {
-        const timestamp = event.timestamp ?? lastTransition.timestamp;
-        this.transitions.push({ phase, timestamp });
+      if (phase !== this.phase) {
+        this.transitions.push({
+          phase: this.phase,
+          start: this.start,
+          stop: event.timestamp,
+        });
+        this.phase = phase;
+        this.start = event.timestamp;
       }
     }
   }

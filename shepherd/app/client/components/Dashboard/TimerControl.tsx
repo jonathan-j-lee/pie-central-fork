@@ -8,22 +8,31 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import {
+  GameState,
   MatchEventType,
   MatchPhase,
   displayPhase,
+  getDefaultDuration,
 } from '../../../types';
 import { AlertButton } from '../Notification';
-import { useAppDispatch } from '../../hooks';
+import { useAppDispatch, useCurrentMatch } from '../../hooks';
 import { changeMode, Robot } from '../../store/control';
 import MatchConnector from './MatchConnector';
 
 export default function TimerControl(props: { robots: Robot[] }) {
   const dispatch = useAppDispatch();
   const [phase, setPhase] = React.useState(MatchPhase.AUTO);
-  // TODO: infer match defaults
-  const [totalTime, setTotalTime] = React.useState(
-    phase === MatchPhase.AUTO ? 30 : 180
-  );
+  const [totalTime, setTotalTime] = React.useState(getDefaultDuration(phase));
+  const match = useCurrentMatch();
+  const game = GameState.fromEvents(match?.events ?? []);
+  const autoComplete = game.transitions.some(({ phase }) => phase === MatchPhase.AUTO);
+  React.useEffect(() => {
+    const targetPhase = autoComplete ? MatchPhase.TELEOP : MatchPhase.AUTO;
+    if (targetPhase !== phase) {
+      setPhase(targetPhase);
+      setTotalTime(getDefaultDuration(targetPhase));
+    }
+  }, [autoComplete, setPhase, setTotalTime]);
   const warnings = props.robots.every((robot) => robot.selected)
     ? []
     : [
@@ -57,7 +66,7 @@ export default function TimerControl(props: { robots: Robot[] }) {
             placeholder="Number of seconds"
             disabled={disabled}
             min={0}
-            defaultValue={totalTime}
+            value={totalTime}
             onValueChange={(totalTime) => setTotalTime(totalTime)}
           />
           <AlertButton

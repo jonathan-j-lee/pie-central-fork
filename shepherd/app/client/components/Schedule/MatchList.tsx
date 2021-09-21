@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
+import * as _ from 'lodash';
 
 import { DeleteButton } from '../EntityButtons';
 import { FixtureSelect } from '../EntitySelects';
@@ -79,7 +80,7 @@ export default function MatchList(props: { edit: boolean }) {
             allyScore={match.blueScore}
             opponentScore={match.goldScore}
             current={match.id === currentMatch}
-            started={match.started}
+            started={match.game.started}
             className="blue"
           />
           <td>{match.fixtureData?.gold?.winningAlliance?.name ?? PLACEHOLDER}</td>
@@ -88,7 +89,7 @@ export default function MatchList(props: { edit: boolean }) {
             allyScore={match.goldScore}
             opponentScore={match.blueScore}
             current={match.id === currentMatch}
-            started={match.started}
+            started={match.game.started}
             className="gold"
           />
           <td>
@@ -96,7 +97,9 @@ export default function MatchList(props: { edit: boolean }) {
               <FixtureSelect
                 id={match.fixture}
                 onSelect={(fixture) =>
-                  dispatch(matchesSlice.actions.upsert({ ...match, fixture }))
+                  dispatch(
+                    matchesSlice.actions.upsert({ ..._.omit(match, 'game'), fixture })
+                  )
                 }
               />
             ) : (

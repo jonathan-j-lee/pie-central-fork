@@ -2,11 +2,10 @@ import * as React from 'react';
 import { Card, Colors } from '@blueprintjs/core';
 import * as _ from 'lodash';
 import Chart from 'chart.js/auto';
-import { Scatter, defaults } from 'react-chartjs-2';
+import { Scatter } from 'react-chartjs-2';
+import { PLACEHOLDER } from '../Util';
 import { useAppSelector, useMatches } from '../../hooks';
 import { displayTime } from '../../../types';
-
-defaults.font.family = 'monospace';
 
 function cumulativeSum(xs: number[], initial = 0) {
   const seq = [initial];
@@ -19,8 +18,14 @@ function cumulativeSum(xs: number[], initial = 0) {
 function useMatchProjection() {
   const matches = useMatches();
   const durations = matches
-    .filter((match) => match.earliestTimestamp < Infinity && match.latestTimestamp > 0)
-    .map((match) => (match.latestTimestamp - match.earliestTimestamp) / 1000);
+    .map((match) => {
+      const timestamps = match
+        .events
+        .map((event) => event.timestamp)
+        .filter((timestamp) => timestamp);
+      return (Math.max(...timestamps) - Math.min(...timestamps)) / 1000;
+    })
+    .filter((duration) => 0 < duration && duration < Infinity);
   const history = cumulativeSum(durations);
   const meanMatchDuration = history[history.length - 1] / durations.length;
   const projected = cumulativeSum(
@@ -56,11 +61,13 @@ export default function MatchProjection() {
   }, [chart, projection]);
   return (
     <Card>
-      {projection.stop && (
+      {projection.matchesRemaining === 0 ? (
+        <p>You have completed all matches.</p>
+      ) : (
         <p>
-          With no downtime, we estimate you will finish
-          the {projection.matchesRemaining} remaining scheduled matches
-          by {projection.stop.toLocaleTimeString()}.
+          With no downtime, we estimate you will
+          finish {projection.matchesRemaining} remaining scheduled matches
+          by {projection.stop?.toLocaleTimeString() ?? PLACEHOLDER}.
         </p>
       )}
       <Scatter
@@ -72,7 +79,6 @@ export default function MatchProjection() {
               label: 'Cumulative Time',
               data: [],
               showLine: true,
-              color,
               borderColor: color,
             },
             {
@@ -81,7 +87,6 @@ export default function MatchProjection() {
               data: [],
               showLine: true,
               borderDash: [10, 5],
-              color,
               borderColor: color,
             },
             {
@@ -102,7 +107,10 @@ export default function MatchProjection() {
             },
             y: {
               min: 0,
-              ticks: { callback: (duration: number) => displayTime(duration), color },
+              ticks: {
+                callback: (duration: number) => displayTime(duration, 0),
+                color,
+              },
             },
           },
           animation: { duration: 0 },

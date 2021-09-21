@@ -97,23 +97,10 @@ export function useMatches() {
     .selectAll(matches)
     .map((match) => {
       const game = GameState.fromEvents(match.events);
-      const fixture = match.fixture ? fixtureMap.get(match.fixture) : undefined;
-      // FIXME: make a part of the transition API
-      let earliestTimestamp = Infinity;
-      let latestTimestamp = 0;
-      for (const event of match.events) {
-        if (event.timestamp) {
-          earliestTimestamp = Math.min(earliestTimestamp, event.timestamp);
-          latestTimestamp = Math.max(latestTimestamp, event.timestamp);
-        }
-      }
       return {
         ...match,
-        earliestTimestamp,
-        latestTimestamp,
-        fixtureData: fixture,
+        fixtureData: match.fixture ? fixtureMap.get(match.fixture) : undefined,
         game,
-        started: game.started,
         blueScore: game.blue.score,
         goldScore: game.gold.score,
         blueTeams: getTeams(game.blue.teams),

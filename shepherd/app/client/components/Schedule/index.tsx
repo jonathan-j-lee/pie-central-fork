@@ -9,6 +9,7 @@ import Bracket from './Bracket';
 import Help from '../Help';
 import MatchList from './MatchList';
 import MatchEventList from './MatchEventList';
+import ScorePlot from './ScorePlot';
 import { AlertButton } from '../Notification';
 import { DEV_ENV, PLACEHOLDER } from '../Util';
 import { useAppDispatch, useAppSelector, useTeams, useQuery } from '../../hooks';
@@ -65,6 +66,9 @@ function ScheduleHelp() {
       <p>
         As the formula suggests, winning matches is the best way to place strongly.
       </p>
+      <p>
+        A striped background indicates an ongoing match.
+      </p>
     </Help>
   );
 }
@@ -75,7 +79,6 @@ export default function Schedule() {
   const bracket = useAppSelector((state) => state.bracket);
   const edit = useAppSelector((state) => state.control.editing);
   const setEdit = (editing: boolean) => dispatch(controlSlice.actions.update({ editing }));
-  // TODO: add visualization (cumulative score, timeline)
   const match = useQueriedMatch();
   const teams = useTeams();
   return (
@@ -86,6 +89,7 @@ export default function Schedule() {
       {match && (
         <>
           <H2 className="spacer">Events for Match {match?.id ?? PLACEHOLDER}</H2>
+          <ScorePlot match={match} />
           <MatchEventList match={match} edit={edit} />
         </>
       )}
@@ -96,20 +100,22 @@ export default function Schedule() {
             <>
               <EditButton edit={edit} setEdit={setEdit} />
               {edit && (
-                <AddButton text="Add match" onClick={() => dispatch(addMatch())} />
-              )}
-              {edit && match && (
-                <AddButton text="Add event" onClick={() => dispatch(addEvent(match))} />
-              )}
-              {edit && (
-                <ConfirmButton
-                  success="Saved match schedule."
-                  failure="Failed to save match schedule."
-                  onClick={async () => {
-                    await dispatch(saveMatches()).unwrap();
-                    setEdit(false);
-                  }}
-                />
+                <>
+                  <AddButton text="Add match" onClick={() => dispatch(addMatch())} />
+                  <AddButton
+                    disabled={!match}
+                    text="Add event"
+                    onClick={() => match && dispatch(addEvent(match))}
+                  />
+                  <ConfirmButton
+                    success="Saved match schedule."
+                    failure="Failed to save match schedule."
+                    onClick={async () => {
+                      await dispatch(saveMatches()).unwrap();
+                      setEdit(false);
+                    }}
+                  />
+                </>
               )}
             </>
           )}

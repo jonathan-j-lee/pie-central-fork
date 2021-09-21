@@ -7,6 +7,8 @@ export default function Help(props: { children: React.ReactNode }) {
   return (
     <>
       <Alert
+        canEscapeKeyCancel
+        canOutsideClickCancel
         intent={Intent.PRIMARY}
         icon={IconNames.INFO_SIGN}
         isOpen={show}

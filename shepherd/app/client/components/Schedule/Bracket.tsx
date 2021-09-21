@@ -218,6 +218,13 @@ export default function Bracket(props: { edit: boolean }) {
       colors: darkTheme ? DARK_THEME : LIGHT_THEME,
       current: match?.fixture ?? null,
     };
+    draw
+      .text('Champion')
+      .center(80, -60);
+    draw
+      .polyline('120,-45 40,-45 20,-15')
+      .fill('none')
+      .stroke({ width: 2, color: options.colors.text, dasharray: [10, 5] });
     drawBracket(
       draw,
       { fixture: bracket.blue, x: -80, y: -60 },
