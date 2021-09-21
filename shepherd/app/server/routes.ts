@@ -96,7 +96,14 @@ function crud<T extends BaseEntity<T, any>>(
   });
 }
 
-export default async function (options) {
+interface RoutingOptions {
+  port: number;
+  dbFilename: string;
+  sessionSecret: string;
+  game?: string;
+}
+
+export default async function (options: RoutingOptions, controller?: AbortController) {
   const app = express();
   const orm = await db.init(options.dbFilename);
   const users = orm.em.getRepository(UserModel);
@@ -341,12 +348,22 @@ export default async function (options) {
     await fc.broadcast({ clients: [ws] });
   });
 
-  setInterval(async () => {
+  const intervalId = setInterval(async () => {
     await fc.broadcast();
   }, 4000);
 
-  server.listen(options.port, () => {
+  server.listen({
+    port: options.port,
+    signal: controller?.signal,
+  }, () => {
     // TODO: add hostname
     logger.info(`Serving on ${options.port}`);
   });
+
+  controller?.signal.addEventListener('abort', () => {
+    clearInterval(intervalId);
+    orm.close();
+  });
+
+  return { app };
 }

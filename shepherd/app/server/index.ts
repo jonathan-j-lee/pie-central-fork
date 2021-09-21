@@ -16,11 +16,13 @@ yargs(hideBin(process.argv))
         default: 4040,
         type: 'number',
       },
-      'db-filename': {
+      dbFilename: {
+        alias: 'db-filename',
         default: 'shepherd.sqlite',
         type: 'string',
       },
-      'session-secret': {
+      sessionSecret: {
+        alias: 'session-secret',
         default: '',
         type: 'string',
       },
@@ -28,5 +30,6 @@ yargs(hideBin(process.argv))
         choices: _.keys(games),
       },
     },
-    serve
-  ).argv;
+    serve,
+  )
+  .parse();

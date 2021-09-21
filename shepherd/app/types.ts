@@ -222,7 +222,7 @@ export function getDefaultDuration(phase: MatchPhase) {
   return phase === MatchPhase.AUTO ? 30 : 180;
 }
 
-export function displaySummary(event: MatchEvent, team?: Team) {
+export function displaySummary(event: MatchEvent, team?: Partial<Team>) {
   const alliance = displayAllianceColor(event.alliance);
   const value = event.value ?? 0;
   const duration = displayTime(value / 1000, 0);
@@ -241,12 +241,12 @@ export function displaySummary(event: MatchEvent, team?: Team) {
       if (value >= 0) {
         return `The ${alliance} alliance scored ${value} points (without multipliers).`;
       } else {
-        return `The ${alliance} alliance lost ${-value} points`;
+        return `The ${alliance} alliance lost ${-value} points.`;
       }
     case MatchEventType.MULTIPLY:
-      return `The ${alliance} alliance got a ${value}x score multiplier.`;
+      return `The ${alliance} alliance got a ${value.toFixed(1)}x score multiplier.`;
     case MatchEventType.EXTEND:
-      return `${displayTeam(team)} received ${duration} of extra time.`;
+      return `The current phase was extended for ${displayTeam(team)} by ${duration}.`;
     default:
       return `An event occurred for the ${alliance} alliance.`;
   }
@@ -328,12 +328,15 @@ class AllianceState {
     phase: MatchPhase,
     defaultDuration: number = 0
   ) {
-    if (event.team && this.intervals.has(event.team) && event.timestamp) {
-      this.intervals.set(event.team, {
-        phase,
-        start: event.timestamp,
-        stop: event.timestamp + (event.value ?? defaultDuration),
-      });
+    if (event.team && event.timestamp) {
+      const interval = this.intervals.get(event.team);
+      if (interval && interval.phase !== MatchPhase.ESTOP) {
+        this.intervals.set(event.team, {
+          phase,
+          start: event.timestamp,
+          stop: event.timestamp + (event.value ?? defaultDuration),
+        });
+      }
     }
   }
 
@@ -370,7 +373,7 @@ class AllianceState {
       case MatchEventType.EXTEND:
         if (event.team) {
           const interval = this.intervals.get(event.team);
-          if (interval) {
+          if (interval && isRunning(interval.phase)) {
             this.intervals.set(event.team, {
               ...interval,
               stop: interval.stop + (event.value ?? 0),
@@ -415,12 +418,16 @@ export class GameState {
   getTimer(now?: number): Partial<TimerState> {
     const timestamp = now ?? Date.now();
     const intervals = this.intervals
-      .filter(([, interval]) => isRunning(interval.phase) && timestamp < interval.stop)
+      .filter(([, interval]) =>
+        isRunning(interval.phase)
+        && interval.start <= timestamp
+        && timestamp < interval.stop
+      )
       .map(([, interval]) => interval);
     if (intervals.length === 0) {
       return { stage: 'done', timeRemaining: 0 };
     }
-    const totalTime = Math.max(...intervals.map((timer) => timer.stop - timer.start));
+    const totalTime = Math.min(...intervals.map((timer) => timer.stop - timer.start));
     const timeRemaining = Math.min(...intervals.map((timer) => timer.stop - timestamp));
     return { stage: 'running', totalTime, timeRemaining };
   }
@@ -462,8 +469,8 @@ export class GameState {
   }
 
   get started() {
-    return this.transitions.some(({ phase }) =>
-      phase === MatchPhase.AUTO || phase === MatchPhase.TELEOP
+    return isRunning(this.phase) || this.transitions.some(({ phase }) =>
+      isRunning(phase)
     );
   }
 }
