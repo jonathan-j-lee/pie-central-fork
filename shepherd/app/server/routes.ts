@@ -53,10 +53,12 @@ function crud<T extends BaseEntity<T, any>>(
     noRetrieve?: boolean;
     mapUpdate?: (data: any) => any;
     update?: (entity: T, data: any) => Promise<T>;
+    mapDelete?: (entity: T) => Promise<T>;
   } = {}
 ) {
   const mapUpdate = options.mapUpdate ?? ((data) => data);
   const update = options.update ?? (async (entity) => entity);
+  const mapDelete = options.mapDelete ?? (async (entity) => entity);
   // TODO: log requests/errors
 
   if (!options.noRetrieve) {
@@ -87,7 +89,14 @@ function crud<T extends BaseEntity<T, any>>(
 
   app.delete(baseRoute, ensureAuthenticated, async (req, res) => {
     try {
-      const entities = await repository.find({ [pkName]: { $in: req.body } });
+      const entities = [];
+      for (const entity of await repository.find({ [pkName]: { $in: req.body } })) {
+        try {
+          entities.push(await mapDelete(entity));
+        } catch (err) {
+          logger.debug('Skipping deletion', { entity: entity.toJSON() });
+        }
+      }
       await repository.removeAndFlush(entities);
       res.json(entities.map((entity) => entity.toJSON()));
     } catch (err) {
@@ -113,8 +122,9 @@ export default async function (options: RoutingOptions, controller?: AbortContro
   const wsServer = new WebSocketServer({ server });
   const fc = new FieldControl(orm, wsServer);
   const dirname = path.dirname(__filename);
+  const auth = new passport.Passport();
 
-  passport.use(
+  auth.use(
     new LocalStrategy(async (username, password, done) => {
       try {
         const user = await UserModel.authenticate(users, username, password);
@@ -125,11 +135,11 @@ export default async function (options: RoutingOptions, controller?: AbortContro
     })
   );
 
-  passport.serializeUser<string>((user, done) => {
+  auth.serializeUser<string>((user, done) => {
     done(null, user.username);
   });
 
-  passport.deserializeUser<string>(async (username, done) => {
+  auth.deserializeUser<string>(async (username, done) => {
     try {
       done(null, await users.findOneOrFail({ username }, { refresh: true }));
     } catch (err) {
@@ -149,11 +159,11 @@ export default async function (options: RoutingOptions, controller?: AbortContro
       saveUninitialized: false,
     })
   );
-  app.use(passport.initialize());
-  app.use(passport.session());
+  app.use(auth.initialize());
+  app.use(auth.session());
   app.use((req, res, next) => RequestContext.create(orm.em, next));
 
-  app.post('/login', passport.authenticate('local'), (req, res) => {
+  app.post('/login', auth.authenticate('local'), (req, res) => {
     const username = req.user?.username;
     logger.info('Logged in', { username });
     res.sendStatus(200);
@@ -195,9 +205,24 @@ export default async function (options: RoutingOptions, controller?: AbortContro
   });
 
   crud(app, users, '/users', 'username', { noRetrieve: true });
-  crud(app, orm.em.getRepository(Team), '/teams', 'id');
+  crud(app, orm.em.getRepository(Team), '/teams', 'id', {
+    async mapDelete(team) {
+      const events = await orm.em.find(MatchEvent, { team: team.id });
+      await orm.em.removeAndFlush(events);
+      return team;
+    },
+  });
   crud(app, orm.em.getRepository(Alliance), '/alliances', 'id', {
     mapUpdate: (alliance) => _.omit(alliance, ['teams']),
+    async mapDelete(alliance) {
+      const fixture = await orm.em.findOne(Fixture, { winner: alliance.id });
+      if (fixture) {
+        throw new Error('alliance is in use (delete the bracket)');
+      }
+      await alliance.teams.loadItems();
+      alliance.teams.removeAll();
+      return alliance;
+    },
   });
   crud(app, orm.em.getRepository(Match), '/matches', 'id', {
     mapUpdate: (match) => ({ ...match, events: Match.mapEvents(match.events) }),
@@ -265,7 +290,11 @@ export default async function (options: RoutingOptions, controller?: AbortContro
   }
 
   async function deleteBracket() {
-    let fixtures = await fixtureRepo.findAll();
+    const fixtures = await fixtureRepo.findAll();
+    for (const fixture of fixtures) {
+      await fixture.matches.loadItems();
+      fixture.matches.removeAll();
+    }
     await fixtureRepo.removeAndFlush(fixtures);
   }
 
@@ -301,6 +330,7 @@ export default async function (options: RoutingOptions, controller?: AbortContro
   app.put('/bracket', ensureAuthenticated, async (req, res) => {
     const update = req.body as FixtureUpdate;
     const fixture = await fixtureRepo.findOneOrFail({ id: update.id });
+    // TODO: validate winner is one or blue or gold
     if (fixture.winner !== null) {
       const chain = [];
       let current: Fixture | null = fixture;
@@ -360,9 +390,10 @@ export default async function (options: RoutingOptions, controller?: AbortContro
     logger.info(`Serving on ${options.port}`);
   });
 
-  controller?.signal.addEventListener('abort', () => {
+  controller?.signal.addEventListener('abort', async () => {
+    wsServer.close();
     clearInterval(intervalId);
-    orm.close();
+    await orm.close(true);
   });
 
   return { app };

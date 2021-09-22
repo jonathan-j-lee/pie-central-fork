@@ -450,8 +450,10 @@ export class GameState {
   apply(event: Partial<MatchEvent>) {
     if (event.alliance === AllianceColor.BLUE) {
       this.blue.apply(event);
+      this.gold.intervals.delete(event.team ?? 0);
     } else if (event.alliance === AllianceColor.GOLD) {
       this.gold.apply(event);
+      this.blue.intervals.delete(event.team ?? 0);
     }
     const phases = new Set(this.intervals.map(([, interval]) => interval.phase));
     if (phases.size === 1 && event.timestamp) {

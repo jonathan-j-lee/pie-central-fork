@@ -160,7 +160,7 @@ export class Match extends BaseEntity<Match, 'id'> {
     for (const event of events) {
       if (event.type === MatchEventType.JOIN) {
         event.timestamp = 0;
-        if (event.team === null || event.team === undefined) {
+        if (!event.team) {
           continue;
         }
         const index = _.findIndex(
@@ -170,10 +170,11 @@ export class Match extends BaseEntity<Match, 'id'> {
         );
         if (index >= 0) {
           processed[index] = { ...processed[index], ...event };
+          gameState.apply(event);
           continue;
         }
       }
-      if (event.team !== null && event.team !== undefined && !event.alliance) {
+      if (event.team && !event.alliance) {
         event.alliance = gameState.getAlliance(event.team);
       }
       processed.push(event);
