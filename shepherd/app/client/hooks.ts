@@ -120,7 +120,7 @@ export function useCurrentMatch() {
 }
 
 export function useRobots(): [Robot[], (changes: RobotSelection) => void] {
-  const robots = useAppSelector((state) => state.control.robots);
+  const robots = useAppSelector((state) => state.control.robots) as RobotStatus[];
   const teams = useAppSelector((state) => state.teams);
   const [selection, setSelection] = React.useState<RobotSelection>({});
   React.useEffect(() => {

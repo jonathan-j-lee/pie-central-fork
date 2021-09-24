@@ -5,11 +5,9 @@ import { displayTime, displayPhase, isRunning } from '../../types';
 
 export default function Timer() {
   const timer = useTimer();
-  const timeRemaining = Math.max(timer.timeRemaining, 0);
-  const fraction =
-    !isRunning(timer.phase) || timer.totalTime === 0
-      ? undefined
-      : timeRemaining / timer.totalTime;
+  const running = isRunning(timer.phase) && timer.totalTime > 0;
+  const timeRemaining = running ? Math.max(timer.timeRemaining, 0) : -1;
+  const fraction = running ? timeRemaining / timer.totalTime : undefined;
   let intent: Intent | undefined = undefined;
   if (fraction) {
     intent = Intent.SUCCESS;

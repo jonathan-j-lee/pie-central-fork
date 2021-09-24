@@ -90,7 +90,6 @@ export interface Fixture {
   winner: number | null;
   blue: Fixture | null;
   gold: Fixture | null;
-  matches: number[];
   winningAlliance?: Alliance;
 }
 

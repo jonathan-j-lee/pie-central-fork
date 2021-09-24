@@ -96,7 +96,24 @@ module.exports = {
   // preset: undefined,
 
   // Run tests from one or more projects
-  // projects: undefined,
+  projects: [
+    {
+      displayName: 'test-server',
+      testEnvironment: 'node',
+      testMatch: ['<rootDir>/tests/server/**/*.test.ts'],
+      transform: {
+        '\\.ts$': 'ts-jest',
+      },
+    },
+    {
+      displayName: 'test-client',
+      testEnvironment: 'jsdom',
+      testMatch: ['<rootDir>/tests/client/**/*.test.ts(x)?'],
+      transform: {
+        '\\.tsx?$': 'ts-jest',
+      },
+    },
+  ],
 
   // Use this configuration option to add custom reporters to Jest
   // reporters: undefined,
