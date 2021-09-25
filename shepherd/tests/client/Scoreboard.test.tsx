@@ -1,14 +1,13 @@
 import * as React from 'react';
+import { act, init, refresh, render, recvControl, screen } from './test-utils';
 import Scoreboard from '../../app/client/components/Scoreboard';
 import { MatchPhase } from '../../app/types';
-import { act, render, recvControl, screen } from './test-utils';
-import { init, refresh } from '../../app/client/store/control';
 
 beforeEach(async () => {
   jest.useFakeTimers();
   render(<Scoreboard />);
-  window.store.dispatch(init());
-  await window.store.dispatch(refresh()).unwrap();
+  init();
+  await refresh();
 });
 
 afterEach(() => {
@@ -94,8 +93,8 @@ it('displays alliances, teams, and scores', async () => {
   expect(screen.getByText(/blue: 0/i)).toBeInTheDocument();
   expect(screen.getByText(/gold: 0/i)).toBeInTheDocument();
   recvControl({ control: { matchId: 1 } });
-  expect(screen.getByText(/blue: 0.5/i)).toBeInTheDocument();
-  expect(screen.getByText(/gold: 0/i)).toBeInTheDocument();
+  expect(screen.getByText(/blue: -5/i)).toBeInTheDocument();
+  expect(screen.getByText(/gold: 5/i)).toBeInTheDocument();
   expect(screen.getByText(/alameda/i)).toBeInTheDocument();
   expect(screen.getByText(/santa clara/i)).toBeInTheDocument();
   expect(screen.getByText(/berkeley \(#0\)/i)).toBeInTheDocument();

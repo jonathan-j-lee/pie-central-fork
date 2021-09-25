@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Callout, Colors, Intent } from '@blueprintjs/core';
-import { Container, Pattern, SVG } from '@svgdotjs/svg.js';
+import { Container, SVG } from '@svgdotjs/svg.js';
 import {
   useAppDispatch,
   useAppSelector,
@@ -224,7 +224,7 @@ export default function Bracket(props: { edit: boolean }) {
     draw
       .polyline('120,-45 40,-45 20,-15')
       .fill('none')
-      .stroke({ width: 2, color: options.colors.text, dasharray: [10, 5] });
+      .stroke({ width: 2, color: options.colors.text, dasharray: '10 5' });
     drawBracket(
       draw,
       { fixture: bracket.blue, x: -80, y: -60 },

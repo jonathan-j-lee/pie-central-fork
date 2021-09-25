@@ -49,7 +49,7 @@ export default function MatchList(props: { edit: boolean }) {
       columns={[
         { field: 'id', heading: 'Number' },
         { field: 'fixtureData.blue.winningAlliance.name', heading: 'Alliance' },
-        { field: 'blueTeams', heading: 'Teams' }, // TODO: fix sorting
+        { field: 'blueTeams', heading: 'Teams' }, // TODO: fix sorting (or make not-sortable)
         { field: 'blueScore', heading: 'Score' },
         { field: 'fixtureData.gold.winningAlliance.name', heading: 'Alliance' },
         { field: 'goldTeams', heading: 'Teams' },

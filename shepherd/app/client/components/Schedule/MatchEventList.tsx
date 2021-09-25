@@ -31,6 +31,14 @@ const TYPES_WITH_VALUE = [
   MatchEventType.EXTEND,
 ];
 
+function Timestamp(props: { timestamp: number; earliestTimestamp: number }) {
+  if (!props.timestamp) {
+    return PLACEHOLDER;
+  }
+  const secondsElapsed = (props.timestamp - props.earliestTimestamp) / 1000;
+  return <code>{`+${displayTime(secondsElapsed)}`}</code>;
+}
+
 export default function MatchEventList(props: { match: Match; edit: boolean }) {
   const dispatch = useAppDispatch();
   const teams = useAppSelector((state) => state.teams);
@@ -77,11 +85,10 @@ export default function MatchEventList(props: { match: Match; edit: boolean }) {
                 }
               />
             ) : (
-              <code>
-                {!event.timestamp
-                  ? PLACEHOLDER
-                  : `+${displayTime((event.timestamp - earliestTimestamp) / 1000)}`}
-              </code>
+              <Timestamp
+                timestamp={event.timestamp}
+                earliestTimestamp={earliestTimestamp}
+              />
             )}
           </td>
           <td className={`${event.alliance} ${props.edit ? '' : 'bg'}`}>

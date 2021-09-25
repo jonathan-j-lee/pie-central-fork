@@ -42,9 +42,9 @@ function useQueriedMatch() {
   }
 }
 
-function ScheduleHelp() {
+function ScheduleHelp(props: { transitionDuration?: number }) {
   return (
-    <Help>
+    <Help transitionDuration={props.transitionDuration}>
       <p>
         The final tournament is a best-of-three playoff where ties are ignored.
         To place alliances, every team is first assigned
@@ -73,7 +73,7 @@ function ScheduleHelp() {
   );
 }
 
-export default function Schedule() {
+export default function Schedule(props: { transitionDuration?: number }) {
   const dispatch = useAppDispatch();
   const username = useAppSelector((state) => state.user.username);
   const bracket = useAppSelector((state) => state.bracket);
@@ -95,7 +95,7 @@ export default function Schedule() {
       )}
       <div className="control-bar spacer">
         <ButtonGroup>
-          <ScheduleHelp />
+          <ScheduleHelp transitionDuration={props.transitionDuration} />
           {(username || DEV_ENV) && (
             <>
               <EditButton edit={edit} setEdit={setEdit} />
@@ -110,10 +110,8 @@ export default function Schedule() {
                   <ConfirmButton
                     success="Saved match schedule."
                     failure="Failed to save match schedule."
-                    onClick={async () => {
-                      await dispatch(saveMatches()).unwrap();
-                      setEdit(false);
-                    }}
+                    onClick={() => dispatch(saveMatches()).unwrap()}
+                    finalize={() => setEdit(false)}
                   />
                 </>
               )}
@@ -123,7 +121,7 @@ export default function Schedule() {
         {edit && (
           <ButtonGroup>
             <AlertButton
-              getWarnings={() => bracket ? [
+              warnings={bracket ? [
                 'Generating a bracket will remove an existing one. ' +
                 'Are you sure you want to continue?'
               ] : []}
@@ -145,9 +143,10 @@ export default function Schedule() {
               }}
               success="Generated bracket."
               failure="Failed to generate bracket."
+              transitionDuration={props.transitionDuration}
             />
             <AlertButton
-              getWarnings={() => ['Are you sure you want to remove the current bracket?']}
+              warnings={['Are you sure you want to remove the current bracket?']}
               disabled={!bracket}
               text="Remove bracket"
               intent={Intent.DANGER}
@@ -157,6 +156,7 @@ export default function Schedule() {
               }}
               success="Removed bracket."
               failure="Failed to remove bracket."
+              transitionDuration={props.transitionDuration}
             />
           </ButtonGroup>
         )}

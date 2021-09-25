@@ -70,7 +70,7 @@ export default function TimerControl(props: { robots: Robot[] }) {
             onValueChange={(totalTime) => setTotalTime(totalTime)}
           />
           <AlertButton
-            getWarnings={() => warnings}
+            warnings={warnings}
             disabled={disabled}
             text="Start"
             intent={Intent.PRIMARY}
@@ -90,7 +90,7 @@ export default function TimerControl(props: { robots: Robot[] }) {
             failure="Failed to start robots."
           />
           <AlertButton
-            getWarnings={() => [
+            warnings={[
               ...warnings,
               'Are you sure you want to preemptively stop the match? ' +
                 'Shepherd normally stops robots automatically.',
@@ -108,7 +108,7 @@ export default function TimerControl(props: { robots: Robot[] }) {
             failure="Failed to stop robots."
           />
           <AlertButton
-            getWarnings={() => [
+            warnings={[
               ...warnings,
               'Are you sure you want to e-stop one or more robots? ' +
                 'E-stopped robots cannot be restarted.',

@@ -3,19 +3,25 @@ import { Action, Dispatch, Middleware, MiddlewareAPI } from 'redux';
 import { Provider } from 'react-redux';
 import * as _ from 'lodash';
 import { AppStore, makeStore } from '../../app/client/store';
-import controlSlice from '../../app/client/store/control';
+import controlSlice, {
+  init as initControl,
+  refresh as refreshData,
+} from '../../app/client/store/control';
 import logSlice from '../../app/client/store/log';
 import matchesSlice from '../../app/client/store/matches';
+import { logIn as logInUser } from '../../app/client/store/user';
 import {
   AllianceColor,
   ControlRequest,
   ControlResponse,
+  Match,
   MatchEventType,
 } from '../../app/types';
 import { render as rtlRender, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { rest } from 'msw';
 import { setupServer } from 'msw/node';
+import 'jest-canvas-mock';
 
 declare global {
   interface Window {
@@ -25,6 +31,118 @@ declare global {
 }
 
 const ORIGIN = 'http://localhost';
+
+let matchId = 1;
+let eventId = 1;
+
+interface MatchGenerationOptions {
+  blueScore?: number;
+  goldScore?: number;
+  fixture?: number;
+}
+
+function makeMatch({
+  blueScore,
+  goldScore,
+  fixture,
+}: MatchGenerationOptions = {}): Match {
+  const match = matchId++;
+  return {
+    id: match,
+    fixture: fixture ?? null,
+    events: [
+      {
+        id: eventId++,
+        match,
+        type: MatchEventType.JOIN,
+        timestamp: 0,
+        alliance: AllianceColor.BLUE,
+        team: 1,
+        value: null,
+        description: null,
+      },
+      {
+        id: eventId++,
+        match,
+        type: MatchEventType.JOIN,
+        timestamp: 0,
+        alliance: AllianceColor.GOLD,
+        team: 2,
+        value: null,
+        description: null,
+      },
+      {
+        id: eventId++,
+        match,
+        type: MatchEventType.AUTO,
+        timestamp: 10000,
+        alliance: AllianceColor.BLUE,
+        team: 1,
+        value: 30000,
+        description: null,
+      },
+      {
+        id: eventId++,
+        match,
+        type: MatchEventType.AUTO,
+        timestamp: 10000,
+        alliance: AllianceColor.GOLD,
+        team: 2,
+        value: 30000,
+        description: null,
+      },
+      {
+        id: eventId++,
+        match,
+        type: MatchEventType.IDLE,
+        timestamp: 30000,
+        alliance: AllianceColor.BLUE,
+        team: 1,
+        value: null,
+        description: null,
+      },
+      {
+        id: eventId++,
+        match,
+        type: MatchEventType.IDLE,
+        timestamp: 30000,
+        alliance: AllianceColor.GOLD,
+        team: 2,
+        value: null,
+        description: null,
+      },
+      {
+        id: eventId++,
+        match,
+        type: MatchEventType.ADD,
+        timestamp: 40000,
+        alliance: AllianceColor.BLUE,
+        team: null,
+        value: blueScore ?? 0,
+        description: null,
+      },
+      {
+        id: eventId++,
+        match,
+        type: MatchEventType.ADD,
+        timestamp: 40000,
+        alliance: AllianceColor.GOLD,
+        team: null,
+        value: goldScore ?? 0,
+        description: null,
+      },
+    ],
+  };
+}
+
+const matches = [
+  makeMatch({ blueScore: -5, goldScore: 5, fixture: 1 }),
+  makeMatch({ blueScore: 4, goldScore: -4 }),
+  makeMatch({ blueScore: 0, goldScore: 0 }),
+];
+
+export const upsertEntities = jest.fn();
+export const deleteEntities = jest.fn();
 
 const server = setupServer(
   rest.get(new URL('session', ORIGIN).href, (req, res, ctx) => {
@@ -99,49 +217,24 @@ const server = setupServer(
       }),
     );
   }),
+  rest.post(new URL('bracket', ORIGIN).href, (req, res, ctx) => {
+    upsertEntities('bracket', req.body);
+    return res(ctx.status(200));
+  }),
+  rest.delete(new URL('bracket', ORIGIN).href, (req, res, ctx) => {
+    deleteEntities('bracket');
+    return res(ctx.status(200));
+  }),
   rest.get(new URL('matches', ORIGIN).href, (req, res, ctx) => {
-    return res(
-      ctx.json([
-        {
-          id: 1,
-          fixture: 1,
-          events: [
-            {
-              id: 1,
-              match: 1,
-              type: MatchEventType.JOIN,
-              timestamp: 0,
-              alliance: AllianceColor.BLUE,
-              team: 1,
-            },
-            {
-              id: 2,
-              match: 1,
-              type: MatchEventType.JOIN,
-              timestamp: 0,
-              alliance: AllianceColor.GOLD,
-              team: 2,
-            },
-            {
-              id: 3,
-              match: 1,
-              type: MatchEventType.MULTIPLY,
-              timestamp: 1000,
-              alliance: AllianceColor.BLUE,
-              value: 0.25,
-            },
-            {
-              id: 4,
-              match: 1,
-              type: MatchEventType.ADD,
-              timestamp: 2000,
-              alliance: AllianceColor.BLUE,
-              value: 2,
-            },
-          ],
-        },
-      ]),
-    );
+    return res(ctx.json(matches));
+  }),
+  rest.put(new URL('matches', ORIGIN).href, (req, res, ctx) => {
+    upsertEntities('matches', req.body);
+    return res(ctx.json(req.body));
+  }),
+  rest.delete(new URL('matches', ORIGIN).href, (req, res, ctx) => {
+    deleteEntities('matches', req.body);
+    return res(ctx.json(req.body));
   }),
   rest.get(new URL('alliances', ORIGIN).href, (req, res, ctx) => {
     return res(ctx.json([{ id: 1, name: 'Alameda' }, { id: 2, name: 'Santa Clara' }]));
@@ -150,7 +243,10 @@ const server = setupServer(
 
 beforeAll(() => server.listen());
 afterAll(() => server.close());
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  jest.clearAllMocks();
+});
 
 export function render(ui: React.ReactElement<any>) {
   // https://html.spec.whatwg.org/multipage/web-sockets.html#the-websocket-interface
@@ -180,6 +276,15 @@ export function render(ui: React.ReactElement<any>) {
       } as WebSocket;
       return window.ws;
     });
+  window.ResizeObserver =
+    window.ResizeObserver ??
+    jest.fn(() => {
+      return {
+        disconnect: jest.fn(),
+        observe: jest.fn(),
+        unobserve: jest.fn(),
+      };
+    });
   window.store = makeStore();
   function Wrapper({ children }: { children?: React.ReactNode }) {
     return <Provider store={window.store}>{children}</Provider>;
@@ -204,6 +309,28 @@ export function recvControl(res: ControlResponse) {
 
 export function delay(duration: number) {
   return new Promise((resolve) => setTimeout(resolve, duration));
+}
+
+export function init() {
+  window.store.dispatch(initControl());
+}
+
+export async function refresh() {
+  await window.store.dispatch(refreshData()).unwrap();
+}
+
+export async function logIn() {
+  await window.store.dispatch(logInUser({ username: 'admin', password: 'test' })).unwrap();
+}
+
+export function getRows(table: HTMLTableElement) {
+  const [tableBody] = table.getElementsByTagName('tbody') ?? [];
+  return [...tableBody.getElementsByTagName('tr')] as HTMLTableRowElement[];
+}
+
+export function getColumn(table: HTMLTableElement, index: number): HTMLTableCellElement[] {
+  const rows = getRows(table);
+  return rows.map((row) => row.getElementsByTagName('td')[index]);
 }
 
 export * from '@testing-library/react';

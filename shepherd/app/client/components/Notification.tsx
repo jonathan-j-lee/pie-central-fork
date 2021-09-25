@@ -8,6 +8,7 @@ import {
   Toaster,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import * as _ from 'lodash';
 
 const toaster = Toaster.create({ position: Position.TOP });
 
@@ -46,6 +47,7 @@ function useAsyncCallback(
   callback: () => Promise<void>,
   success?: string,
   failure?: string,
+  finalize?: () => void,
 ): [boolean, () => Promise<void>] {
   const [loading, setLoading] = React.useState(false);
   const execute = React.useCallback(async () => {
@@ -61,6 +63,9 @@ function useAsyncCallback(
       }
     } finally {
       setLoading(false);
+      if (finalize) {
+        finalize();
+      }
     }
   }, [callback, success, failure, setLoading]);
   return [loading, execute];
@@ -68,6 +73,7 @@ function useAsyncCallback(
 
 export interface OutcomeButtonProps extends IButtonProps {
   onClick: () => Promise<void>;
+  finalize?: () => void;
   success?: string;
   failure?: string;
 }
@@ -77,34 +83,42 @@ export function OutcomeButton(props: OutcomeButtonProps) {
     props.onClick,
     props.success,
     props.failure,
+    props.finalize,
   );
-  return <Button {...props} loading={loading} onClick={onClick} />;
+  return <Button {..._.omit(props, 'finalize')} loading={loading} onClick={onClick} />;
 }
 
 export interface AlertButtonProps extends OutcomeButtonProps {
-  getWarnings: () => string[];
+  warnings: string[];
+  transitionDuration?: number;
 }
 
-export function AlertButton({ getWarnings, ...props }: AlertButtonProps) {
+export function AlertButton({
+  warnings,
+  transitionDuration,
+  ...props
+}: AlertButtonProps) {
   const [loading, onClick] = useAsyncCallback(
     props.onClick,
     props.success,
     props.failure,
+    props.finalize,
   );
-  const [warnings, setWarnings] = React.useState<string[]>([]);
+  const [show, setShow] = React.useState(false);
   return (
     <>
       <Alert
         canEscapeKeyCancel
         canOutsideClickCancel
-        isOpen={warnings.length > 0}
+        isOpen={show}
         icon={IconNames.WARNING_SIGN}
         intent={Intent.DANGER}
         cancelButtonText="Cancel"
         confirmButtonText="Confirm"
         loading={loading}
         onConfirm={onClick}
-        onClose={() => setWarnings([])}
+        onClose={() => setShow(false)}
+        transitionDuration={transitionDuration}
       >
         {warnings.map((warning, index) => <p key={index}>{warning}</p>)}
       </Alert>
@@ -112,9 +126,8 @@ export function AlertButton({ getWarnings, ...props }: AlertButtonProps) {
         {...props}
         loading={loading}
         onClick={async () => {
-          const warnings = getWarnings();
           if (warnings.length > 0) {
-            setWarnings(warnings);
+            setShow(true);
           } else {
             await onClick();
           }

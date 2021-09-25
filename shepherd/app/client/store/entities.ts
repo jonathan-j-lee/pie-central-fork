@@ -42,11 +42,16 @@ export function makeEndpointClient<T, ID extends number | string>(
     reducers: {
       upsert(state: State, action: PayloadAction<T>) {
         adapter.upsertOne(state, action);
-        state.modified.push(selectId(action.payload));
+        const id = selectId(action.payload);
+        if (!state.modified.includes(id)) {
+          state.modified.push(id);
+        }
       },
       remove(state: State, action: PayloadAction<ID>) {
         adapter.removeOne(state, action);
-        state.deleted.push(action.payload);
+        if (!state.deleted.includes(action.payload)) {
+          state.deleted.push(action.payload);
+        }
       },
     },
   };
