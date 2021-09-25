@@ -48,24 +48,22 @@ function useAsyncCallback(
   failure?: string,
 ): [boolean, () => Promise<void>] {
   const [loading, setLoading] = React.useState(false);
-  return [
-    loading,
-    async () => {
-      setLoading(true);
-      try {
-        await callback();
-        if (success) {
-          notifySuccess(success);
-        }
-      } catch {
-        if (failure) {
-          notifyFailure(failure);
-        }
-      } finally {
-        setLoading(false);
+  const execute = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      await callback();
+      if (success) {
+        notifySuccess(success);
       }
-    },
-  ];
+    } catch {
+      if (failure) {
+        notifyFailure(failure);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [callback, success, failure, setLoading]);
+  return [loading, execute];
 }
 
 export interface OutcomeButtonProps extends IButtonProps {
@@ -74,14 +72,14 @@ export interface OutcomeButtonProps extends IButtonProps {
   failure?: string;
 }
 
-export const OutcomeButton = (props: OutcomeButtonProps) => {
+export function OutcomeButton(props: OutcomeButtonProps) {
   const [loading, onClick] = useAsyncCallback(
     props.onClick,
     props.success,
     props.failure,
   );
   return <Button {...props} loading={loading} onClick={onClick} />;
-};
+}
 
 export interface AlertButtonProps extends OutcomeButtonProps {
   getWarnings: () => string[];

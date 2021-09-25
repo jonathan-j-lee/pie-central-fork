@@ -27,6 +27,28 @@ declare global {
 const ORIGIN = 'http://localhost';
 
 const server = setupServer(
+  rest.get(new URL('session', ORIGIN).href, (req, res, ctx) => {
+    const username = sessionStorage.getItem('username');
+    return res(
+      ctx.json({
+        user: { username, darkTheme: false, game: null },
+        log: {
+        },
+      })
+    );
+  }),
+  rest.post(new URL('login', ORIGIN).href, (req, res, ctx) => {
+    const { username, password } = req.body as Record<string, any>;
+    const authenticated = username === 'admin' && password === 'test';
+    if (authenticated) {
+      sessionStorage.setItem('username', username);
+    }
+    return res(ctx.status(authenticated ? 200 : 500));
+  }),
+  rest.post(new URL('logout', ORIGIN).href, (req, res, ctx) => {
+    sessionStorage.removeItem('username');
+    return res(ctx.status(200));
+  }),
   rest.get(new URL('teams', ORIGIN).href, (req, res, ctx) => {
     const robotOptions = {
       hostname: 'localhost',
@@ -130,7 +152,7 @@ beforeAll(() => server.listen());
 afterAll(() => server.close());
 afterEach(() => server.resetHandlers());
 
-function render(ui: React.ReactElement<any>) {
+export function render(ui: React.ReactElement<any>) {
   // https://html.spec.whatwg.org/multipage/web-sockets.html#the-websocket-interface
   jest
     .spyOn(window, 'WebSocket')
@@ -165,7 +187,7 @@ function render(ui: React.ReactElement<any>) {
   return rtlRender(ui, { wrapper: Wrapper });
 }
 
-function recvControl(res: ControlResponse) {
+export function recvControl(res: ControlResponse) {
   const calls = (window.ws.addEventListener as jest.Mock).mock.calls as [
     string,
     (event: { data: string }) => void
@@ -180,5 +202,8 @@ function recvControl(res: ControlResponse) {
   }
 }
 
+export function delay(duration: number) {
+  return new Promise((resolve) => setTimeout(resolve, duration));
+}
+
 export * from '@testing-library/react';
-export { render, recvControl };

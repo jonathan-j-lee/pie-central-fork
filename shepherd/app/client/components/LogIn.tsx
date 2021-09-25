@@ -9,19 +9,13 @@ import {
   InputGroup,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import request from 'superagent';
-import { notifySuccess, OutcomeButton } from './Notification';
+import { notifySuccess, notifyFailure, OutcomeButton } from './Notification';
 import { useAppDispatch, useAppSelector } from '../hooks';
 import { logIn, logOut } from '../store/user';
 
-export default function LogIn() {
+function LogInButton(props: { show: () => void }) {
   const dispatch = useAppDispatch();
   const username = useAppSelector((state) => state.user.username);
-  const [show, setShow] = React.useState(false);
-  const [error, setError] = React.useState<Error | null>(null);
-  React.useEffect(() => {
-    dispatch(logIn());
-  }, [dispatch]);
   return (
     <>
       {username && <code id="username-label">{username}</code>}
@@ -31,23 +25,59 @@ export default function LogIn() {
         text={username ? 'Log out' : 'Log in'}
         onClick={async () => {
           if (username) {
-            await dispatch(logOut()).unwrap();
-            notifySuccess('Successfully logged out.');
+            try {
+              await dispatch(logOut()).unwrap();
+              notifySuccess('Successfully logged out.');
+            } catch {
+              notifyFailure('Failed to log out.');
+            }
           } else {
-            setShow(true);
+            props.show();
           }
         }}
       />
+    </>
+  );
+}
+
+export default function LogIn(props: { transitionDuration?: number }) {
+  const dispatch = useAppDispatch();
+  const [username, setUsername] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [show, setShow] = React.useState(false);
+  const [error, setError] = React.useState<Error | null>(null);
+  React.useEffect(() => {
+    dispatch(logIn());
+  }, [dispatch]);
+  const sendLogIn = React.useCallback(async () => {
+    try {
+      await dispatch(logIn({ username, password })).unwrap();
+      notifySuccess('Successfully logged in.');
+      setError(null);
+      setShow(false);
+    } catch(err) {
+      setError(err);
+    }
+  }, [username, password, setShow, setError]);
+  return (
+    <>
+      <LogInButton show={() => setShow(true)} />
       <Dialog
         isOpen={show}
         icon={IconNames.LOG_IN}
         title="Log in"
         onClose={() => setShow(false)}
+        transitionDuration={props.transitionDuration}
       >
         <div className={Classes.DIALOG_BODY}>
           <form id="login">
             <FormGroup label="Username" labelInfo="(required)" labelFor="username">
-              <InputGroup id="username" name="username" placeholder="Username" />
+              <InputGroup
+                id="username"
+                name="username"
+                placeholder="Username"
+                onBlur={({ currentTarget: { value } }) => setUsername(value)}
+              />
             </FormGroup>
             <FormGroup label="Password" labelInfo="(required)" labelFor="password">
               <InputGroup
@@ -55,6 +85,7 @@ export default function LogIn() {
                 name="password"
                 type="password"
                 placeholder="Password"
+                onBlur={({ currentTarget: { value } }) => setPassword(value)}
               />
             </FormGroup>
           </form>
@@ -70,23 +101,7 @@ export default function LogIn() {
               icon={IconNames.CONFIRM}
               intent={Intent.SUCCESS}
               text="Log in"
-              onClick={async () => {
-                const getValue = (id: string) =>
-                  (document.getElementById(id) as HTMLInputElement | null)?.value || '';
-                try {
-                  await dispatch(
-                    logIn({
-                      username: getValue('username'),
-                      password: getValue('password'),
-                    })
-                  ).unwrap();
-                  notifySuccess('Successfully logged in.');
-                  setError(null);
-                  setShow(false);
-                } catch (err) {
-                  setError(err);
-                }
-              }}
+              onClick={sendLogIn}
             />
           </div>
         </div>
