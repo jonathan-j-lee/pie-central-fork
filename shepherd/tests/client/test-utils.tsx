@@ -30,8 +30,6 @@ declare global {
   }
 }
 
-const ORIGIN = 'http://localhost';
-
 let matchId = 1;
 let eventId = 1;
 
@@ -39,12 +37,16 @@ interface MatchGenerationOptions {
   blueScore?: number;
   goldScore?: number;
   fixture?: number;
+  excludeAuto?: boolean;
+  excludeIdle?: boolean;
 }
 
 function makeMatch({
   blueScore,
   goldScore,
   fixture,
+  excludeAuto,
+  excludeIdle,
 }: MatchGenerationOptions = {}): Match {
   const match = matchId++;
   return {
@@ -71,46 +73,50 @@ function makeMatch({
         value: null,
         description: null,
       },
-      {
-        id: eventId++,
-        match,
-        type: MatchEventType.AUTO,
-        timestamp: 10000,
-        alliance: AllianceColor.BLUE,
-        team: 1,
-        value: 30000,
-        description: null,
-      },
-      {
-        id: eventId++,
-        match,
-        type: MatchEventType.AUTO,
-        timestamp: 10000,
-        alliance: AllianceColor.GOLD,
-        team: 2,
-        value: 30000,
-        description: null,
-      },
-      {
-        id: eventId++,
-        match,
-        type: MatchEventType.IDLE,
-        timestamp: 30000,
-        alliance: AllianceColor.BLUE,
-        team: 1,
-        value: null,
-        description: null,
-      },
-      {
-        id: eventId++,
-        match,
-        type: MatchEventType.IDLE,
-        timestamp: 30000,
-        alliance: AllianceColor.GOLD,
-        team: 2,
-        value: null,
-        description: null,
-      },
+      ...(excludeAuto ? [] : [
+        {
+          id: eventId++,
+          match,
+          type: MatchEventType.AUTO,
+          timestamp: 10000,
+          alliance: AllianceColor.BLUE,
+          team: 1,
+          value: 30000,
+          description: null,
+        },
+        {
+          id: eventId++,
+          match,
+          type: MatchEventType.AUTO,
+          timestamp: 10000,
+          alliance: AllianceColor.GOLD,
+          team: 2,
+          value: 30000,
+          description: null,
+        },
+      ]),
+      ...(excludeIdle ? [] : [
+        {
+          id: eventId++,
+          match,
+          type: MatchEventType.IDLE,
+          timestamp: 30000,
+          alliance: AllianceColor.BLUE,
+          team: 1,
+          value: null,
+          description: null,
+        },
+        {
+          id: eventId++,
+          match,
+          type: MatchEventType.IDLE,
+          timestamp: 30000,
+          alliance: AllianceColor.GOLD,
+          team: 2,
+          value: null,
+          description: null,
+        },
+      ]),
       {
         id: eventId++,
         match,
@@ -139,26 +145,31 @@ const matches = [
   makeMatch({ blueScore: -5, goldScore: 5, fixture: 1 }),
   makeMatch({ blueScore: 4, goldScore: -4 }),
   makeMatch({ blueScore: 0, goldScore: 0 }),
+  makeMatch({ blueScore: 3, goldScore: -3, excludeIdle: true }),
+  makeMatch({ blueScore: 1, goldScore: 1, excludeAuto: true, excludeIdle: true }),
 ];
 
 export const upsertEntities = jest.fn();
 export const deleteEntities = jest.fn();
 
+export const makeEndpointUrl = (endpoint: string) =>
+  new URL(endpoint, 'http://localhost').href;
+
 function makeMutationEndpoints(endpoint: string) {
   return [
-    rest.put(new URL(endpoint, ORIGIN).href, (req, res, ctx) => {
+    rest.put(makeEndpointUrl(endpoint), (req, res, ctx) => {
       upsertEntities(endpoint, req.body);
       return res(ctx.json(req.body));
     }),
-    rest.delete(new URL(endpoint, ORIGIN).href, (req, res, ctx) => {
+    rest.delete(makeEndpointUrl(endpoint), (req, res, ctx) => {
       deleteEntities(endpoint, req.body);
       return res(ctx.json(req.body));
     }),
   ];
 }
 
-const server = setupServer(
-  rest.get(new URL('session', ORIGIN).href, (req, res, ctx) => {
+export const server = setupServer(
+  rest.get(makeEndpointUrl('session'), (req, res, ctx) => {
     const username = sessionStorage.getItem('username');
     return res(
       ctx.json({
@@ -168,7 +179,7 @@ const server = setupServer(
       })
     );
   }),
-  rest.post(new URL('login', ORIGIN).href, (req, res, ctx) => {
+  rest.post(makeEndpointUrl('login'), (req, res, ctx) => {
     const { username, password } = req.body as Record<string, any>;
     const authenticated = username === 'admin' && password === 'test';
     if (authenticated) {
@@ -176,11 +187,11 @@ const server = setupServer(
     }
     return res(ctx.status(authenticated ? 200 : 500));
   }),
-  rest.post(new URL('logout', ORIGIN).href, (req, res, ctx) => {
+  rest.post(makeEndpointUrl('logout'), (req, res, ctx) => {
     sessionStorage.removeItem('username');
     return res(ctx.status(200));
   }),
-  rest.get(new URL('teams', ORIGIN).href, (req, res, ctx) => {
+  rest.get(makeEndpointUrl('teams'), (req, res, ctx) => {
     const robotOptions = {
       hostname: 'localhost',
       callPort: 6000,
@@ -208,7 +219,7 @@ const server = setupServer(
     );
   }),
   ...makeMutationEndpoints('teams'),
-  rest.get(new URL('bracket', ORIGIN).href, (req, res, ctx) => {
+  rest.get(makeEndpointUrl('bracket'), (req, res, ctx) => {
     return res(
       ctx.json({
         id: 1,
@@ -231,19 +242,19 @@ const server = setupServer(
       }),
     );
   }),
-  rest.post(new URL('bracket', ORIGIN).href, (req, res, ctx) => {
+  rest.post(makeEndpointUrl('bracket'), (req, res, ctx) => {
     upsertEntities('bracket', req.body);
     return res(ctx.status(200));
   }),
-  rest.delete(new URL('bracket', ORIGIN).href, (req, res, ctx) => {
+  rest.delete(makeEndpointUrl('bracket'), (req, res, ctx) => {
     deleteEntities('bracket');
     return res(ctx.status(200));
   }),
-  rest.get(new URL('matches', ORIGIN).href, (req, res, ctx) => {
+  rest.get(makeEndpointUrl('matches'), (req, res, ctx) => {
     return res(ctx.json(matches));
   }),
   ...makeMutationEndpoints('matches'),
-  rest.get(new URL('alliances', ORIGIN).href, (req, res, ctx) => {
+  rest.get(makeEndpointUrl('alliances'), (req, res, ctx) => {
     return res(ctx.json([{ id: 1, name: 'Alameda' }, { id: 2, name: 'Santa Clara' }]));
   }),
   ...makeMutationEndpoints('alliances'),

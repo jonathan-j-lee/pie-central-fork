@@ -6,7 +6,9 @@ import {
   deleteEntities,
   getColumn,
   getRows,
+  init,
   logIn,
+  recvControl,
   refresh,
   render,
   screen,
@@ -15,6 +17,7 @@ import {
 import { within } from '@testing-library/dom';
 import userEvent from '@testing-library/user-event';
 import Schedule from '../../app/client/components/Schedule';
+import { AllianceColor, MatchEventType } from '../../app/types';
 
 jest.mock('@svgdotjs/svg.js', () => ({
   SVG: jest.fn(() => ({
@@ -52,22 +55,26 @@ jest.mock('react-router-dom', () => {
   };
 });
 
+const EM_DASH = '\u2014';
+
 beforeEach(async () => {
   render(<Schedule transitionDuration={0} />);
+  init();
   await refresh();
+  await act(async () => {
+    recvControl({ control: { matchId: 4 } });
+  });
 });
-
-const EM_DASH = '\u2014';
 
 it('displays matches', () => {
   const table = screen
     .getByText(/^number$/i)
     .closest('table') as HTMLTableElement | null;
   if (!table) {
-    return fail('match table not found');
+    throw new Error('match table not found');
   }
   const rows = getRows(table);
-  expect(rows).toHaveLength(3);
+  expect(rows).toHaveLength(5);
   let cells = rows[0]?.getElementsByTagName('td') ?? [];
   expect(cells).toHaveLength(8);
   expect(cells[0]).toHaveTextContent(/match 1/i);
@@ -95,7 +102,7 @@ it('displays match events', () => {
     .getByText(/^timestamp$/i)
     .closest('table') as HTMLTableElement | null;
   if (!table) {
-    return fail('match event table not found');
+    throw new Error('match event table not found');
   }
   const rows = getRows(table);
   expect(rows).toHaveLength(8);
@@ -127,37 +134,37 @@ it.each([
     'number',
     0,
     () => screen.getByText(/number/i),
-    [/match 1/i, /match 2/i, /match 3/i],
+    [/match 1/i, /match 2/i, /match 3/i, /match 4/i, /match 5/i],
   ],
   [
     'blue alliance',
     1,
     () => screen.getAllByText(/alliance/i)[0],
-    [/alameda/i, EM_DASH, EM_DASH],
+    [/alameda/i, EM_DASH, EM_DASH, EM_DASH, EM_DASH],
   ],
   [
     'blue score',
     3,
     () => screen.getAllByText(/score/i)[0],
-    [/^-5$/, /0$/, /(^|[^-])4$/],
+    [/^-5$/, /0$/, EM_DASH, /^3$/, /(^|[^-])4$/],
   ],
   [
     'gold alliance',
     4,
     () => screen.getAllByText(/alliance/i)[1],
-    [/santa clara/i, EM_DASH, EM_DASH],
+    [/santa clara/i, EM_DASH, EM_DASH, EM_DASH, EM_DASH],
   ],
   [
     'gold score',
     6,
     () => screen.getAllByText(/score/i)[1],
-    [/^-4$/, /0$/, /(^|[^-])5$/],
+    [/^-4$/, /^-3$/, /0$/, EM_DASH, /(^|[^-])5$/],
   ],
   [
     'fixture',
     7,
     () => screen.getByText(/elimination round/i),
-    [/alameda vs\. santa clara/i, EM_DASH, EM_DASH],
+    [/alameda vs\. santa clara/i, EM_DASH, EM_DASH, EM_DASH, EM_DASH],
   ],
   [
     'timestamp',
@@ -201,7 +208,7 @@ it.each([
   const [button] = getHeading()?.closest('td')?.getElementsByTagName('button') ?? [];
   const table = button.closest('table') as HTMLTableElement | null;
   if (!table) {
-    return fail('table not found');
+    throw new Error('table not found');
   }
   userEvent.click(button);
   let cells = getColumn(table, index);
@@ -226,7 +233,7 @@ it('allows editing matches', async () => {
   userEvent.click(screen.getByText(/^Edit$/));
   const table = screen.getByText(/number/i).closest('table') as HTMLTableElement | null;
   if (!table) {
-    return fail('table not found');
+    throw new Error('table not found');
   }
 
   const [, removeButton] = getColumn(table, 8);
@@ -249,15 +256,15 @@ it('allows editing matches', async () => {
   userEvent.click(within(fixture1).getByText(/alameda vs\. santa clara/i));
   await delay(20);
   userEvent.click(within(screen.getAllByRole('list')[1]).getByText(/\(none\)/i));
-
   await act(async () => {
     userEvent.click(screen.getByText(/confirm/i));
     await delay(100);
   });
-  const [[endpoint, payload]] = upsertEntities.mock.calls;
-  expect(endpoint).toEqual('matches');
-  expect(payload).toMatchObject([{ fixture: 1 }, { fixture: null, id: 1 }]);
-  expect(payload[0].id).toBeUndefined();
+
+  expect(upsertEntities).toHaveBeenCalledWith('matches', [
+    expect.objectContaining({ fixture: 1 }),
+    expect.objectContaining({ fixture: null, id: 1 }),
+  ]);
   expect(deleteEntities).toHaveBeenCalledWith('matches', [2]);
   expect(screen.getAllByText(/^saved match schedule\.$/i).length).toBeGreaterThan(0);
 });
@@ -269,7 +276,7 @@ it('allows editing match events', async () => {
     .getByText(/timestamp/i)
     .closest('table') as HTMLTableElement | null;
   if (!table) {
-    return fail('table not found');
+    throw new Error('table not found');
   }
 
   const [, , removeButton] = getColumn(table, 6);
@@ -293,40 +300,38 @@ it('allows editing match events', async () => {
   const rows = getRows(table);
   expect(rows).toHaveLength(8);
   userEvent.type(rows[7].getElementsByTagName('input')[0], '{selectall}50000');
-  userEvent.selectOptions(within(rows[7]).getByDisplayValue(/^none$/i), ['blue']);
-  userEvent.selectOptions(within(rows[7]).getByDisplayValue(/^other$/i), ['multiply']);
+  userEvent.selectOptions(within(rows[7]).getByDisplayValue(/^none$/i), [AllianceColor.BLUE]);
+  userEvent.selectOptions(within(rows[7]).getByDisplayValue(/^other$/i), [MatchEventType.MULTIPLY]);
   userEvent.type(within(rows[7]).getByDisplayValue(/^0$/), '2.5');
   userEvent.type(within(rows[0]).getByPlaceholderText(/enter a description/i), 'A');
   userEvent.type(within(rows[7]).getByPlaceholderText(/enter a description/i), 'B');
-
   await act(async () => {
     userEvent.click(screen.getByText(/confirm/i));
     await delay(100);
   });
-  const [[endpoint, payload]] = upsertEntities.mock.calls;
-  expect(endpoint).toEqual('matches');
-  expect(payload).toMatchObject([
-    {
+
+  expect(upsertEntities).toHaveBeenCalledWith('matches', [
+    expect.objectContaining({
       id: 1,
       events: [
-        { id: 1, description: 'A' },
-        { id: 2 },
-        { id: 4 },
-        { id: 5 },
-        { id: 6 },
-        { id: 7 },
-        { id: 8 },
+        expect.objectContaining({ id: 1, description: 'A' }),
+        expect.objectContaining({ id: 2 }),
+        expect.objectContaining({ id: 4 }),
+        expect.objectContaining({ id: 5 }),
+        expect.objectContaining({ id: 6 }),
+        expect.objectContaining({ id: 7 }),
+        expect.objectContaining({ id: 8 }),
         {
           match: 1,
           timestamp: 50000,
-          alliance: 'blue',
+          alliance: AllianceColor.BLUE,
           team: null,
-          type: 'multiply',
+          type: MatchEventType.MULTIPLY,
           value: 2.5,
           description: 'B',
         },
       ],
-    },
+    }),
   ]);
   expect(screen.getAllByText(/^saved match schedule\.$/i).length).toBeGreaterThan(0);
 });
@@ -349,7 +354,7 @@ it('requests bracket generation', async () => {
   expect(alertMessage).toBeInTheDocument();
   const alert = alertMessage.closest('div.bp3-alert') as HTMLDivElement | null;
   if (!alert) {
-    return fail('alert not found');
+    throw new Error('alert not found');
   }
   await act(async () => {
     userEvent.click(within(alert).getByText(/^confirm$/i));
@@ -366,7 +371,7 @@ it('requests bracket deletion', async () => {
   expect(alertMessage).toBeInTheDocument();
   const alert = alertMessage.closest('div.bp3-alert') as HTMLDivElement | null;
   if (!alert) {
-    return fail('alert not found');
+    throw new Error('alert not found');
   }
   await act(async () => {
     userEvent.click(within(alert).getByText(/^confirm$/i));

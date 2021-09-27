@@ -6,7 +6,9 @@ import {
   deleteEntities,
   getColumn,
   getRows,
+  init,
   logIn,
+  recvControl,
   refresh,
   render,
   screen,
@@ -18,7 +20,11 @@ import Leaderboard from '../../app/client/components/Leaderboard';
 
 beforeEach(async () => {
   render(<Leaderboard transitionDuration={0} />);
+  init();
   await refresh();
+  await act(async () => {
+    recvControl({ control: { matchId: 4 } });
+  });
   userEvent.click(screen.getByText(/include elimination matches/i));
 });
 
@@ -27,7 +33,7 @@ it('displays teams', () => {
     .getByText(/^number$/i)
     .closest('table') as HTMLTableElement | null;
   if (!table) {
-    return fail('team table not found');
+    throw new Error('team table not found');
   }
   const rows = getRows(table);
   expect(rows).toHaveLength(2);
@@ -66,7 +72,7 @@ it('displays alliances', () => {
     .getByText(/^berkeley \(#0\)$/i)
     .closest('table') as HTMLTableElement | null;
   if (!table) {
-    return fail('alliance table not found');
+    throw new Error('alliance table not found');
   }
   const rows = getRows(table);
   expect(rows).toHaveLength(2);
@@ -105,7 +111,7 @@ it.each([
   const [button] = getHeading()?.closest('td')?.getElementsByTagName('button') ?? [];
   const table = button.closest('table') as HTMLTableElement | null;
   if (!table) {
-    return fail('table not found');
+    throw new Error('table not found');
   }
   userEvent.click(button);
   let cells = getColumn(table, index);
@@ -130,7 +136,7 @@ it('allows editing teams', async () => {
   userEvent.click(screen.getByText(/^Edit$/));
   const table = screen.getByText(/number/i).closest('table') as HTMLTableElement | null;
   if (!table) {
-    return fail('table not found');
+    throw new Error('table not found');
   }
 
   const [removeButton] = getColumn(table, 8);
@@ -161,17 +167,15 @@ it('allows editing teams', async () => {
   userEvent.type(screen.getByLabelText(/log publisher port/i), '{selectall}5001');
   userEvent.type(screen.getByLabelText(/update port/i), '{selectall}-1');
   userEvent.type(screen.getByLabelText(/multicast group/i), '{selectall}224.1.1.2');
-
   userEvent.click(screen.getByText(/^close$/i));
   await act(async () => {
     userEvent.click(screen.getByText(/^Confirm$/));
     await delay(100);
   });
-  const [[endpoint, payload]] = upsertEntities.mock.calls;
-  expect(endpoint).toEqual('teams');
-  expect(payload).toMatchObject([
-    { id: 2, alliance: 1 },
-    {
+
+  expect(upsertEntities).toHaveBeenCalledWith('teams', [
+    expect.objectContaining({ id: 2, alliance: 1 }),
+    expect.objectContaining({
       name: 'MIT',
       number: 0,
       alliance: null,
@@ -180,9 +184,8 @@ it('allows editing teams', async () => {
       logPort: 5001,
       updatePort: 1,
       multicastGroup: '224.1.1.2',
-    },
+    }),
   ]);
-  expect(payload[1].id).toBeUndefined();
   expect(deleteEntities).toHaveBeenCalledWith('teams', [1]);
   expect(
     screen.getAllByText(/^saved team and alliance data\.$/i).length
@@ -196,7 +199,7 @@ it('allows editing alliances', async () => {
     .getByText(/berkeley \(#0\)/i)
     .closest('table') as HTMLTableElement | null;
   if (!table) {
-    return fail('table not found');
+    throw new Error('table not found');
   }
 
   const [removeButton] = getColumn(table, 6);
@@ -209,18 +212,15 @@ it('allows editing alliances', async () => {
     '{selectall}Contra Costa',
   );
   userEvent.type(within(names[1]).getByPlaceholderText(/enter a name/i), 'San Mateo');
-
   await act(async () => {
     userEvent.click(screen.getByText(/^Confirm$/));
     await delay(100);
   });
-  const [, [endpoint, payload]] = upsertEntities.mock.calls;
-  expect(endpoint).toEqual('alliances');
-  expect(payload).toMatchObject([
-    { id: 2, name: 'Contra Costa' },
-    { name: 'San Mateo' },
+
+  expect(upsertEntities).toHaveBeenCalledWith('alliances', [
+    expect.objectContaining({ id: 2, name: 'Contra Costa' }),
+    expect.objectContaining({ name: 'San Mateo' }),
   ]);
-  expect(payload[1].id).toBeUndefined();
   expect(deleteEntities).toHaveBeenCalledWith('alliances', [1]);
   expect(
     screen.getAllByText(/^saved team and alliance data\.$/i).length

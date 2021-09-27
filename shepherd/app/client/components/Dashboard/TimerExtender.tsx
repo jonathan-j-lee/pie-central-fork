@@ -33,7 +33,7 @@ export default function TimerExtender(props: { robots: Robot[] }) {
           onValueChange={(extension) => setExtension(extension)}
         />
         <OutcomeButton
-          disabled={disabled || extension === 0}
+          disabled={disabled || extension <= 0}
           text="Add time"
           intent={Intent.SUCCESS}
           icon={IconNames.TIME}
