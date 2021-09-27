@@ -224,6 +224,7 @@ const PerformanceSettings = () => (
   </>
 );
 
+// TODO: make custom component
 const portInputOptions = {
   min: 1,
   max: 65535,

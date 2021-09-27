@@ -9,7 +9,8 @@ import {
   InputGroup,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { notifySuccess, notifyFailure, OutcomeButton } from './Notification';
+import { ConfirmButton } from './EntityButtons';
+import { notifySuccess, notifyFailure } from './Notification';
 import { useAppDispatch, useAppSelector } from '../hooks';
 import { logIn, logOut } from '../store/user';
 
@@ -97,12 +98,7 @@ export default function LogIn(props: { transitionDuration?: number }) {
         </div>
         <div className={Classes.DIALOG_FOOTER}>
           <div className={Classes.DIALOG_FOOTER_ACTIONS}>
-            <OutcomeButton
-              icon={IconNames.CONFIRM}
-              intent={Intent.SUCCESS}
-              text="Log in"
-              onClick={sendLogIn}
-            />
+            <ConfirmButton text="Log in" onClick={sendLogIn} />
           </div>
         </div>
       </Dialog>

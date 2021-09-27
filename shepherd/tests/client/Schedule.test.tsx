@@ -228,6 +228,7 @@ it('allows editing matches', async () => {
   if (!table) {
     return fail('table not found');
   }
+
   const [, removeButton] = getColumn(table, 8);
   userEvent.click(within(removeButton).getByRole('button', { hidden: true }));
   userEvent.click(screen.getByText(/add match/i));
@@ -251,7 +252,7 @@ it('allows editing matches', async () => {
 
   await act(async () => {
     userEvent.click(screen.getByText(/confirm/i));
-    await delay(20);
+    await delay(100);
   });
   const [[endpoint, payload]] = upsertEntities.mock.calls;
   expect(endpoint).toEqual('matches');
@@ -264,10 +265,13 @@ it('allows editing matches', async () => {
 it('allows editing match events', async () => {
   await logIn();
   userEvent.click(screen.getByText(/^Edit$/));
-  const table = screen.getByText(/timestamp/i).closest('table') as HTMLTableElement | null;
+  const table = screen
+    .getByText(/timestamp/i)
+    .closest('table') as HTMLTableElement | null;
   if (!table) {
     return fail('table not found');
   }
+
   const [, , removeButton] = getColumn(table, 6);
   userEvent.click(within(removeButton).getByRole('button', { hidden: true }));
   userEvent.click(screen.getByText(/add event/i));
@@ -287,6 +291,7 @@ it('allows editing match events', async () => {
   expect(within(menu).getByText(/stanford \(#1\)/i)).toBeInTheDocument();
 
   const rows = getRows(table);
+  expect(rows).toHaveLength(8);
   userEvent.type(rows[7].getElementsByTagName('input')[0], '{selectall}50000');
   userEvent.selectOptions(within(rows[7]).getByDisplayValue(/^none$/i), ['blue']);
   userEvent.selectOptions(within(rows[7]).getByDisplayValue(/^other$/i), ['multiply']);
@@ -331,7 +336,9 @@ it('shows a help dialog', async () => {
   expect(screen.getByText(/final tournament is a best-of-three/i)).toBeInTheDocument();
   userEvent.click(screen.getByText(/^OK$/));
   await delay(10);
-  expect(screen.queryByText(/final tournament is a best-of-three/i)).not.toBeInTheDocument();
+  expect(
+    screen.queryByText(/final tournament is a best-of-three/i)
+  ).not.toBeInTheDocument();
 });
 
 it('requests bracket generation', async () => {

@@ -10,14 +10,11 @@ import {
   NumericInput,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-
 import { useAppDispatch } from '../../hooks';
-import teamsSlice, { save as saveTeams } from '../../store/teams';
-import { OutcomeButton } from '../Notification';
-import { notifyFailure, notifySuccess } from '../Notification';
+import teamsSlice from '../../store/teams';
 import { Team } from '../../../types';
 
-function PortInput(props: INumericInputProps) {
+function PortInput(props: INumericInputProps & { id?: string }) {
   return (
     <NumericInput
       minorStepSize={null}
@@ -50,9 +47,11 @@ export default function RobotSettings(props: { team: Team }) {
         <div className={Classes.DIALOG_BODY}>
           <FormGroup
             label="Hostname"
+            labelFor="hostname"
             helperText="Either an IP address or a domain name for Shepherd to connect to."
           >
             <InputGroup
+              id="hostname"
               placeholder="Example: 192.168.1.1"
               defaultValue={props.team.hostname}
               onBlur={({ currentTarget: { value: hostname } }) =>
@@ -62,9 +61,11 @@ export default function RobotSettings(props: { team: Team }) {
           </FormGroup>
           <FormGroup
             label="Remote call port"
+            labelFor="call-port"
             helperText="Port that Shepherd should connect to for sending calls."
           >
             <PortInput
+              id="call-port"
               defaultValue={props.team.callPort}
               onValueChange={(callPort) =>
                 callPort > 0 &&
@@ -74,9 +75,11 @@ export default function RobotSettings(props: { team: Team }) {
           </FormGroup>
           <FormGroup
             label="Log publisher port"
+            labelFor="log-port"
             helperText="Port that Shepherd should connect to for receiving logged events."
           >
             <PortInput
+              id="log-port"
               defaultValue={props.team.logPort}
               onValueChange={(logPort) =>
                 logPort > 0 &&
@@ -86,9 +89,11 @@ export default function RobotSettings(props: { team: Team }) {
           </FormGroup>
           <FormGroup
             label="Update port"
+            labelFor="update-port"
             helperText="Port that Shepherd should bind to for receiving Smart Device updates."
           >
             <PortInput
+              id="update-port"
               defaultValue={props.team.updatePort}
               onValueChange={(updatePort) =>
                 updatePort > 0 &&
@@ -98,9 +103,11 @@ export default function RobotSettings(props: { team: Team }) {
           </FormGroup>
           <FormGroup
             label="Multicast group"
+            labelFor="multicast-group"
             helperText="IP multicast group Runtime uses to broadcast Smart Device updates."
           >
             <InputGroup
+              id="multicast-group"
               placeholder="Example: 224.224.1.1"
               defaultValue={props.team.multicastGroup}
               onBlur={({ currentTarget: { value: multicastGroup } }) =>
@@ -111,19 +118,10 @@ export default function RobotSettings(props: { team: Team }) {
         </div>
         <div className={Classes.DIALOG_FOOTER}>
           <div className={Classes.DIALOG_FOOTER_ACTIONS}>
-            <OutcomeButton
-              icon={IconNames.CONFIRM}
-              intent={Intent.SUCCESS}
-              text="Confirm"
-              onClick={async () => {
-                try {
-                  await dispatch(saveTeams()).unwrap();
-                  notifySuccess('Saved team settings.');
-                  setShow(false);
-                } catch {
-                  notifyFailure('Failed to save team settings.');
-                }
-              }}
+            <Button
+              text="Close"
+              icon={IconNames.CROSS}
+              onClick={() => setShow(false)}
             />
           </div>
         </div>

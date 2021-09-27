@@ -144,6 +144,19 @@ const matches = [
 export const upsertEntities = jest.fn();
 export const deleteEntities = jest.fn();
 
+function makeMutationEndpoints(endpoint: string) {
+  return [
+    rest.put(new URL(endpoint, ORIGIN).href, (req, res, ctx) => {
+      upsertEntities(endpoint, req.body);
+      return res(ctx.json(req.body));
+    }),
+    rest.delete(new URL(endpoint, ORIGIN).href, (req, res, ctx) => {
+      deleteEntities(endpoint, req.body);
+      return res(ctx.json(req.body));
+    }),
+  ];
+}
+
 const server = setupServer(
   rest.get(new URL('session', ORIGIN).href, (req, res, ctx) => {
     const username = sessionStorage.getItem('username');
@@ -194,6 +207,7 @@ const server = setupServer(
       ]),
     );
   }),
+  ...makeMutationEndpoints('teams'),
   rest.get(new URL('bracket', ORIGIN).href, (req, res, ctx) => {
     return res(
       ctx.json({
@@ -228,17 +242,11 @@ const server = setupServer(
   rest.get(new URL('matches', ORIGIN).href, (req, res, ctx) => {
     return res(ctx.json(matches));
   }),
-  rest.put(new URL('matches', ORIGIN).href, (req, res, ctx) => {
-    upsertEntities('matches', req.body);
-    return res(ctx.json(req.body));
-  }),
-  rest.delete(new URL('matches', ORIGIN).href, (req, res, ctx) => {
-    deleteEntities('matches', req.body);
-    return res(ctx.json(req.body));
-  }),
+  ...makeMutationEndpoints('matches'),
   rest.get(new URL('alliances', ORIGIN).href, (req, res, ctx) => {
     return res(ctx.json([{ id: 1, name: 'Alameda' }, { id: 2, name: 'Santa Clara' }]));
   }),
+  ...makeMutationEndpoints('alliances'),
 );
 
 beforeAll(() => server.listen());

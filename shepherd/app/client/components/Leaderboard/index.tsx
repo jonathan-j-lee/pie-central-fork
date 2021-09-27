@@ -10,9 +10,9 @@ import { add as addAlliance, save as saveAlliances } from '../../store/alliances
 import controlSlice from '../../store/control';
 import { add as addTeam, save as saveTeams } from '../../store/teams';
 
-function LeaderboardHelp() {
+function LeaderboardHelp(props: { transitionDuration?: number }) {
   return (
-    <Help>
+    <Help transitionDuration={props.transitionDuration}>
       <p>
         During the tournament, teams form and compete in alliances of two or three.
         The alliance statistics are only derived from elimination matches, not the
@@ -26,7 +26,7 @@ function LeaderboardHelp() {
   );
 }
 
-export default function Leaderboard() {
+export default function Leaderboard(props: { transitionDuration?: number }) {
   const dispatch = useAppDispatch();
   const username = useAppSelector((state) => state.user.username);
   const edit = useAppSelector((state) => state.control.editing);
@@ -46,7 +46,7 @@ export default function Leaderboard() {
       <H2 className="spacer">Alliances</H2>
       <AllianceList edit={edit} />
       <ButtonGroup className="spacer">
-        <LeaderboardHelp />
+        <LeaderboardHelp transitionDuration={props.transitionDuration} />
         {(username || DEV_ENV) && (
           <>
             <EditButton edit={edit} setEdit={setEdit} />
@@ -62,8 +62,8 @@ export default function Leaderboard() {
                       dispatch(saveTeams()).unwrap(),
                       dispatch(saveAlliances()).unwrap(),
                     ]);
-                    setEdit(false);
                   }}
+                  finalize={() => setEdit(false)}
                 />
               </>
             )}

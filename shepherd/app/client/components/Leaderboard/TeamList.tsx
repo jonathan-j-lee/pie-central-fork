@@ -17,7 +17,7 @@ export default function TeamList(props: { edit: boolean; elimination: boolean })
       columns={[
         { field: 'name', heading: 'Name' },
         { field: 'number', heading: 'Number' },
-        { field: 'alliance', heading: 'Alliance' },
+        { field: 'allianceData.name', heading: 'Alliance' },
         { field: 'stats.wins', heading: 'Wins' },
         { field: 'stats.losses', heading: 'Losses' },
         { field: 'stats.ties', heading: 'Ties' },
