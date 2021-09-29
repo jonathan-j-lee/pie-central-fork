@@ -170,7 +170,7 @@ it('allows editing teams', async () => {
   userEvent.click(screen.getByText(/^close$/i));
   await act(async () => {
     userEvent.click(screen.getByText(/^Confirm$/));
-    await delay(100);
+    await delay(200);
   });
 
   expect(upsertEntities).toHaveBeenCalledWith('teams', [

@@ -29,6 +29,7 @@ beforeEach(async () => {
     port: 0,
     dbFilename: ':memory:',
     sessionSecret: 'test-secret',
+    broadcastInterval: 10000,
   }, controller);
   agent = request.agent(app);
   await logIn();

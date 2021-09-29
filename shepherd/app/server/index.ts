@@ -26,6 +26,11 @@ yargs(hideBin(process.argv))
         default: '',
         type: 'string',
       },
+      broadcastInterval: {
+        alias: 'b',
+        default: 1000,
+        type: 'number',
+      },
       game: {
         choices: _.keys(games),
       },

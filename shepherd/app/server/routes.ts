@@ -109,6 +109,7 @@ interface RoutingOptions {
   port: number;
   dbFilename: string;
   sessionSecret: string;
+  broadcastInterval: number;
   game?: string;
 }
 
@@ -380,7 +381,7 @@ export default async function (options: RoutingOptions, controller?: AbortContro
 
   const intervalId = setInterval(async () => {
     await fc.broadcast();
-  }, 4000);
+  }, options.broadcastInterval);
 
   server.listen({
     port: options.port,
@@ -391,10 +392,11 @@ export default async function (options: RoutingOptions, controller?: AbortContro
   });
 
   controller?.signal.addEventListener('abort', async () => {
+    await fc.disconnectAll();
     wsServer.close();
     clearInterval(intervalId);
     await orm.close(true);
   });
 
-  return { app };
+  return { app, server };
 }

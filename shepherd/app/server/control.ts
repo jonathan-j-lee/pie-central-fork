@@ -27,6 +27,8 @@ const logger = winston.createLogger({
   transports: [new winston.transports.Console()],
 });
 
+const EXECUTOR_ADDRESS = 'executor-service';
+
 class Robot extends EventEmitter {
   private teamId: number;
   private client: RuntimeClient;
@@ -35,7 +37,7 @@ class Robot extends EventEmitter {
   private lastUpdate: number;
   private uids: string[];
 
-  constructor(teamId: number, client: RuntimeClient) {
+  constructor(teamId: number, client: RuntimeClient) { // TODO: extend runtime client
     super();
     this.teamId = teamId;
     this.client = client;
@@ -80,21 +82,22 @@ class Robot extends EventEmitter {
     );
   }
 
-  close() {
+  async close() {
+    await this.idle();
     this.client.close();
   }
 
   async idle() {
     logger.debug('Idling robot', { teamId: this.teamId });
     this.clearTimeout();
-    await this.request('executor-service', 'idle');
+    await this.request(EXECUTOR_ADDRESS, 'idle');
   }
 
   private setTimeout(stop: number) {
-    const timeRemaining = Math.max(0, stop - Date.now());
     if (this.timeout && this.timeout.stop !== stop) {
       clearTimeout(this.timeout.id);
     }
+    const timeRemaining = Math.max(0, stop - Date.now());
     const id = setTimeout(() => this.emit('idle'), timeRemaining);
     this.timeout = { id, stop };
   }
@@ -128,19 +131,19 @@ class Robot extends EventEmitter {
   async auto(stop: number) {
     logger.debug('Entering autonomous mode', { teamId: this.teamId });
     this.setTimeout(stop);
-    await this.request('executor-service', 'auto');
+    await this.request(EXECUTOR_ADDRESS, 'auto');
   }
 
   async teleop(stop: number) {
     logger.debug('Entering teleop mode', { teamId: this.teamId });
     this.setTimeout(stop);
-    await this.request('executor-service', 'teleop');
+    await this.request(EXECUTOR_ADDRESS, 'teleop');
   }
 
   async estop() {
     logger.error('Emergency-stopping robot', { teamId: this.teamId });
     this.clearTimeout();
-    this.notify('executor-service', 'estop');
+    this.notify(EXECUTOR_ADDRESS, 'estop');
   }
 
   async exec() {
@@ -193,11 +196,11 @@ export default class FieldControl {
     const robot = this.robots.get(teamId);
     this.robots.delete(teamId);
     if (robot) {
-      robot.close();
+      await robot.close();
     }
   }
 
-  private async disconnectAll() {
+  async disconnectAll() {
     for (const teamId of Array.from(this.robots.keys())) {
       await this.disconnect(teamId);
     }
@@ -323,10 +326,10 @@ export default class FieldControl {
     clients?: Set<WebSocket> | WebSocket[],
     res?: ControlResponse,
   } = {}) {
-    const buf = JSON.stringify(res ?? await this.makeResponse());
+    const payload = JSON.stringify(res ?? await this.makeResponse());
     (clients ?? this.wsServer.clients).forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(buf);
+        client.send(payload);
       }
     });
   }
