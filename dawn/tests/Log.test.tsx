@@ -58,19 +58,18 @@ describe('log event', () => {
     [LogLevel.WARNING, /^WARN$/],
     [LogLevel.ERROR, /^ERROR$/],
     [LogLevel.CRITICAL, /^CRIT$/],
-  ])('shows and hides the log level %s', async (level, match) => {
+  ])('shows and hides the log level %s', async (level, pattern) => {
     log[level.toLowerCase()]('Testing', { timestamp: '2021-08-03T16:18:22.392159Z' });
     updateSetting('log.showLevel', true);
-    const labels = await screen.findAllByText(match);
-    expect(labels).toBeTruthy();
+    const labels = await screen.findAllByText(pattern);
     expect(labels.length).toBeGreaterThan(0);
     updateSetting('log.showLevel', false);
-    expect(screen.queryByText(match)).not.toBeInTheDocument();
+    expect(screen.queryByText(pattern)).not.toBeInTheDocument();
   });
 
   it('shows and hides the error traceback', async () => {
     updateSetting('log.showTraceback', true);
-    const pattern = /Traceback.*asyncio.exceptions.CancelledError/i;
+    const pattern = /Traceback.*asyncio\.exceptions\.CancelledError/i;
     expect(await screen.findByText(pattern)).toBeInTheDocument();
     updateSetting('log.showTraceback', false);
     expect(screen.queryByText(pattern)).not.toBeInTheDocument();
@@ -84,7 +83,7 @@ describe('log event', () => {
           process: 'device',
           pid: 133298,
         });
-      } catch (err) {
+      } catch {
         return false;
       }
     });
@@ -92,13 +91,14 @@ describe('log event', () => {
   });
 
   it('scrolls to follow the latest event', async () => {
+    const scrollIntoView = window.HTMLElement.prototype.scrollIntoView;
+    (scrollIntoView as jest.Mock).mockClear();
     log.debug('Follow this event', { timestamp: '2021-08-03T16:18:22.392159Z' });
     expect(
       await screen.findByText('[2021-08-03T16:18:22.392159Z]')
     ).toBeInTheDocument();
-    const scrollIntoView = window.HTMLElement.prototype.scrollIntoView;
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'end' });
-    (scrollIntoView as jest.Mock<typeof scrollIntoView>).mockClear();
+    (scrollIntoView as jest.Mock).mockClear();
     const [pinButton] = document.getElementsByClassName('log-pin');
     userEvent.click(pinButton);
     log.debug('Do not follow this event', { timestamp: '2021-08-03T16:18:23.392159Z' });

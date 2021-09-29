@@ -119,7 +119,7 @@ export interface ControlRequest {
   timer?: TimerState | null;
 }
 
-export interface LogEvent {
+export interface LogEvent extends Record<string, any> {
   timestamp: string;
   level: LogLevel;
   event: string;

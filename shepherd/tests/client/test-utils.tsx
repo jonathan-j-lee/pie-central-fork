@@ -149,6 +149,7 @@ const matches = [
   makeMatch({ blueScore: 1, goldScore: 1, excludeAuto: true, excludeIdle: true }),
 ];
 
+export const updateSession = jest.fn();
 export const upsertEntities = jest.fn();
 export const deleteEntities = jest.fn();
 
@@ -178,6 +179,10 @@ export const server = setupServer(
         },
       })
     );
+  }),
+  rest.put(makeEndpointUrl('session'), (req, res, ctx) => {
+    updateSession(req.body);
+    return res(ctx.status(200));
   }),
   rest.post(makeEndpointUrl('login'), (req, res, ctx) => {
     const { username, password } = req.body as Record<string, any>;
@@ -304,6 +309,17 @@ export function render(ui: React.ReactElement<any>) {
         unobserve: jest.fn(),
       };
     });
+  let clipboard = '';
+  Object.defineProperty(navigator, 'clipboard', {
+    value: {
+      writeText: jest.fn(async (text) => {
+        clipboard = text;
+      }),
+      readText: jest.fn(async () => clipboard),
+    },
+    writable: true,
+  });
+  window.HTMLElement.prototype.scrollIntoView = jest.fn();
   window.store = makeStore();
   function Wrapper({ children }: { children?: React.ReactNode }) {
     return <Provider store={window.store}>{children}</Provider>;

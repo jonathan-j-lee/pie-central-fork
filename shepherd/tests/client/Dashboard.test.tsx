@@ -289,7 +289,7 @@ it('removes a robot from the connection table', async () => {
     throw new Error('connection table not found');
   }
   userEvent.click(row.getElementsByTagName('button')[0]);
-  await delay(20);
+  await delay(50);
 
   expect(upsertEntities).toHaveBeenCalledWith('matches', [
     expect.objectContaining({
