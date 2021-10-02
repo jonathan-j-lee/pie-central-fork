@@ -1,7 +1,7 @@
-import * as React from 'react';
-import { render, screen, dispatchDevUpdate } from './test-utils';
 import PeripheralList from '../app/components/PeripheralList';
+import { render, screen, dispatchDevUpdate } from './test-utils';
 import userEvent from '@testing-library/user-event';
+import * as React from 'react';
 
 beforeEach(() => {
   render(<PeripheralList />);
@@ -32,9 +32,13 @@ it('updates when new parameter data are received', async () => {
 });
 
 it('sorts devices by type and UID', async () => {
-  const update = { '9444732965739290427392': {}, '0': {}, '4722366482869645213696': {} };
+  const update = {
+    '9444732965739290427392': {},
+    '0': {},
+    '4722366482869645213696': {},
+  };
   for (let i = 0; i < 60; i++) {
-    const timestamp = 5000 + 10*i;
+    const timestamp = 5000 + 10 * i;
     dispatchDevUpdate(update, { timestamp }, timestamp + 5);
   }
   const uids = screen.queryAllByText(/^\d+$/);

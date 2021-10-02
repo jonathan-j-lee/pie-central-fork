@@ -263,3 +263,5 @@ dist
 ## Other
 
 *.sqlite*
+*.tar.gz
+*.zip

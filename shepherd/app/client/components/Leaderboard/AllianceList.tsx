@@ -1,12 +1,10 @@
-import * as React from 'react';
-import * as _ from 'lodash';
-import { InputGroup } from '@blueprintjs/core';
-
+import { useAppDispatch, useAlliances } from '../../hooks';
+import alliancesSlice from '../../store/alliances';
 import { DeleteButton } from '../EntityButtons';
 import EntityTable from '../EntityTable';
 import { PLACEHOLDER, TeamMembers } from '../Util';
-import { useAppDispatch, useAlliances } from '../../hooks';
-import alliancesSlice from '../../store/alliances';
+import { InputGroup } from '@blueprintjs/core';
+import * as React from 'react';
 
 export default function AllianceList(props: { edit: boolean }) {
   const dispatch = useAppDispatch();
@@ -39,7 +37,9 @@ export default function AllianceList(props: { edit: boolean }) {
               alliance.name || PLACEHOLDER
             )}
           </td>
-          <td><TeamMembers teams={alliance.teams} /></td>
+          <td>
+            <TeamMembers teams={alliance.teams} />
+          </td>
           <td>{alliance.stats?.wins ?? '0'}</td>
           <td>{alliance.stats?.losses ?? '0'}</td>
           <td>{alliance.stats?.ties ?? '0'}</td>

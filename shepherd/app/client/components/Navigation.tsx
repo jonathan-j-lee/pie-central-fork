@@ -1,20 +1,12 @@
-import * as React from 'react';
-import { useHistory, useLocation } from 'react-router-dom';
-import {
-  Alignment,
-  Button,
-  Icon,
-  IconName,
-  Navbar,
-  Tab,
-  Tabs,
-} from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
+import { useAppSelector } from '../hooks';
 import LogIn from './LogIn';
 import Refresh from './Refresh';
 import ThemeToggle from './ThemeToggle';
 import { DEV_ENV } from './Util';
-import { useAppSelector } from '../hooks';
+import { Alignment, Icon, IconName, Navbar, Tab, Tabs } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import * as React from 'react';
+import { useHistory, useLocation } from 'react-router-dom';
 
 const Title = (props: { icon: IconName; title: string }) => (
   <>

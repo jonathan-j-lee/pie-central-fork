@@ -1,6 +1,6 @@
 {
   "name": "@pioneers/runtime-client",
-  "version": "1.0.0",
+  "version": "0.9.0",
   "description": "Node client for Runtime",
   "main": "index.js",
   "private": true,
@@ -14,12 +14,14 @@
   "dependencies": {
     "bignumber.js": "^9.0.1",
     "cbor": "^7.0.5",
-    "node-inspect-extracted": "^1.0.8",
-    "zeromq": "^6.0.0-beta.6"
+    "node-inspect-extracted": "^1.0.8"
   },
   "devDependencies": {
     "@types/node": "^15.14.0",
     "ts-node": "^10.0.0",
     "typescript": "^4.3.5"
+  },
+  "peerDependencies": {
+    "zeromq": "^6.0.0-beta.6"
   }
 }

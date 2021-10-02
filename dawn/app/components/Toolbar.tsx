@@ -1,4 +1,9 @@
-import * as React from 'react';
+import { useAppSelector } from '../hooks';
+import { Mode } from '../store/runtime';
+import { SettingsState } from '../store/settings';
+import { COMMANDS } from './Settings/KeybindingSettings';
+import Tour, { TOUR_IDLE_STEP } from './Tour';
+import { platform } from './Util';
 import {
   Button,
   ButtonGroup,
@@ -15,12 +20,7 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Ace } from 'ace-builds/ace';
-import { useAppSelector } from '../hooks';
-import { COMMANDS } from './Settings/KeybindingSettings';
-import Tour, { TOUR_IDLE_STEP } from './Tour';
-import { platform } from './Util';
-import { Mode } from '../store/runtime';
-import { SettingsState } from '../store/settings';
+import * as React from 'react';
 
 interface DawnPackageInfo {
   name: string;

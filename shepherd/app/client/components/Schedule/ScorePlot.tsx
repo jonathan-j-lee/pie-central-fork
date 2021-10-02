@@ -1,8 +1,3 @@
-import * as React from 'react';
-import { Card, Colors } from '@blueprintjs/core';
-import Chart from 'chart.js/auto';
-import { Scatter } from 'react-chartjs-2';
-import { useAppSelector } from '../../hooks';
 import {
   AllianceColor,
   GameState,
@@ -12,11 +7,15 @@ import {
   displayTime,
   isRunning,
 } from '../../../types';
+import { useAppSelector } from '../../hooks';
+import { Card, Colors } from '@blueprintjs/core';
+import * as React from 'react';
+import { Scatter } from 'react-chartjs-2';
 
 const AUTO_COLOR = 'rgba(113, 87, 217, 0.2)';
 const TELEOP_COLOR = 'rgba(242, 157, 73, 0.2)';
 
-type Point = { x: number, y: number };
+type Point = { x: number; y: number };
 
 function getScoreTimeSeries(match: Match) {
   const scores = {
@@ -42,8 +41,7 @@ function getScoreTimeSeries(match: Match) {
       }
     }
   }
-  const intervals: MatchInterval[] = game
-    .transitions
+  const intervals: MatchInterval[] = game.transitions
     .filter((transition) => isRunning(transition.phase))
     .map(({ phase, start, stop }) => ({
       phase,
@@ -51,7 +49,7 @@ function getScoreTimeSeries(match: Match) {
       stop: toOffset(stop),
     }));
   const margin = 0.2 * (max - min);
-  return { scores, intervals, min: min - 0.5*margin, max: max + 0.5*margin };
+  return { scores, intervals, min: min - 0.5 * margin, max: max + 0.5 * margin };
 }
 
 export default function ScorePlot(props: { match: Match }) {
@@ -125,7 +123,7 @@ export default function ScorePlot(props: { match: Match }) {
                 backgroundColor:
                   interval.phase === MatchPhase.AUTO ? AUTO_COLOR : TELEOP_COLOR,
                 borderWidth: 0,
-              }))
+              })),
             },
           },
         }}

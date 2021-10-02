@@ -1,6 +1,6 @@
-import { createAsyncThunk, createEntityAdapter, createSlice } from '@reduxjs/toolkit';
-import { LogLevel, LogOpenCondition } from './settings';
 import type { RootState } from '.';
+import { LogLevel, LogOpenCondition } from './settings';
+import { createAsyncThunk, createEntityAdapter, createSlice } from '@reduxjs/toolkit';
 
 interface LogEventPayload {
   timestamp: string;

@@ -1,6 +1,6 @@
+import type { RootState } from '.';
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import * as _ from 'lodash';
-import type { RootState } from '.';
 
 export enum EditorTheme {
   LIGHT = 'light',

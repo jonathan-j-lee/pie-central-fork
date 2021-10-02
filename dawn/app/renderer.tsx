@@ -1,12 +1,12 @@
+import './assets/custom.scss';
+import App from './components/App';
+import ErrorBoundary from './components/ErrorBoundary';
+import { SSHConfig } from './preload';
+import store from './store';
+import { HotkeysProvider } from '@blueprintjs/core';
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import { Provider } from 'react-redux';
-import { HotkeysProvider } from '@blueprintjs/core';
-import App from './components/App';
-import ErrorBoundary from './components/ErrorBoundary';
-import store from './store';
-import './assets/custom.scss';
-import { SSHConfig, SSHCommand } from './preload';
 
 declare global {
   interface Window {

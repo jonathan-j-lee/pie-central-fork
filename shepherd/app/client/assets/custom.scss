@@ -179,7 +179,9 @@ $stripe-angle: -45deg;
 
 .control-bar {
   display: inline-flex;
-  .bp3-control-group, .bp3-form-group, .bp3-button-group {
+  .bp3-control-group,
+  .bp3-form-group,
+  .bp3-button-group {
     margin-right: 1rem;
     margin-bottom: 0;
   }
@@ -190,7 +192,8 @@ $stripe-angle: -45deg;
   .log-search {
     flex-grow: 1;
     margin-right: 1rem;
-    .bp3-popover-target, .log-search-tags {
+    .bp3-popover-target,
+    .log-search-tags {
       width: 100% !important;
     }
   }
@@ -204,7 +207,8 @@ $stripe-angle: -45deg;
   :last-child {
     margin-bottom: 0;
   }
-  code, kbd {
+  code,
+  kbd {
     font-size: 0.8rem;
     margin: 0.1rem 0;
   }
@@ -243,7 +247,8 @@ $stripe-angle: -45deg;
   vertical-align: middle !important;
 }
 
-.log-search, input[type="search"] {
+.log-search,
+input[type='search'] {
   font-family: monospace !important;
 }
 

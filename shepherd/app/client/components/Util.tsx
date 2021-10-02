@@ -1,7 +1,5 @@
-import * as React from 'react';
-import { Button, Intent } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
 import { Team, displayTeam } from '../../types';
+import * as React from 'react';
 
 export const DEV_ENV = process.env.NODE_ENV === 'development';
 export const PLACEHOLDER = <>&mdash;</>;

@@ -1,8 +1,8 @@
-import * as React from 'react';
-import { FormGroup, Icon } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
 import { EditorTheme } from '../../store/settings';
 import { NumericInput, Radio, Select, Switch } from './Forms';
+import { FormGroup, Icon } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import * as React from 'react';
 
 const EDITOR_THEMES = [
   {

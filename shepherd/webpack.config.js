@@ -30,9 +30,6 @@ module.exports = [
       path: path.join(__dirname, 'build'),
       filename: 'server.js',
     },
-    node: {
-      __dirname: true,
-    },
     plugins: [
       new webpack.IgnorePlugin({
         checkResource(resource) {
@@ -53,6 +50,7 @@ module.exports = [
     ],
     externals: {
       sqlite3: 'commonjs sqlite3',
+      zeromq: 'commonjs zeromq',
     },
   },
   {

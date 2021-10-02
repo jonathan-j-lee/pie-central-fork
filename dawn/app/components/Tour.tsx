@@ -1,10 +1,10 @@
-import * as React from 'react';
-import Joyride, { CallBackProps, ACTIONS, EVENTS, STATUS } from 'react-joyride';
-import { Colors } from '@blueprintjs/core';
+import { useAppDispatch, useAppSelector } from '../hooks';
 import { AppDispatch } from '../store';
 import logSlice from '../store/log';
 import { EditorTheme } from '../store/settings';
-import { useAppDispatch, useAppSelector } from '../hooks';
+import { Colors } from '@blueprintjs/core';
+import * as React from 'react';
+import Joyride, { CallBackProps, ACTIONS, EVENTS, STATUS } from 'react-joyride';
 
 export const TOUR_IDLE_STEP = -1;
 const TOUR_STEPS = [

@@ -1,14 +1,11 @@
-import * as React from 'react';
-import {
-  Checkbox,
-  HTMLTable,
-} from '@blueprintjs/core';
-import * as _ from 'lodash';
-import { DeleteButton } from '../EntityButtons';
-import { PLACEHOLDER } from '../Util';
+import { GameState, displayAllianceColor, displayTeam } from '../../../types';
 import { useAppDispatch, useCurrentMatch } from '../../hooks';
 import { disconnectTeam, Robot, RobotSelection } from '../../store/control';
-import { GameState, displayAllianceColor, displayTeam } from '../../../types';
+import { DeleteButton } from '../EntityButtons';
+import { PLACEHOLDER } from '../Util';
+import { Checkbox, HTMLTable } from '@blueprintjs/core';
+import * as _ from 'lodash';
+import * as React from 'react';
 
 interface TeamConnectionTableProps {
   robots: Robot[];
@@ -45,7 +42,11 @@ export default function TeamConnectionTable(props: TeamConnectionTableProps) {
       </thead>
       <tbody>
         {props.robots.length === 0 && (
-          <tr><td colSpan={6} className="empty-row">No teams connected</td></tr>
+          <tr>
+            <td colSpan={6} className="empty-row">
+              No teams connected
+            </td>
+          </tr>
         )}
         {props.robots.map((robot) => (
           <tr key={robot.team.id}>
@@ -61,7 +62,9 @@ export default function TeamConnectionTable(props: TeamConnectionTableProps) {
               {displayAllianceColor(game.getAlliance(robot.team.id))}
             </td>
             <td>{displayTeam(robot.team)}</td>
-            <td><code>{robot.team.hostname || PLACEHOLDER}</code></td>
+            <td>
+              <code>{robot.team.hostname || PLACEHOLDER}</code>
+            </td>
             <td>{robot.updateRate.toFixed(2)} updates per second</td>
             <td>{robot.uids.join(', ') || PLACEHOLDER}</td>
             <td>

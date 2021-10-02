@@ -1,6 +1,3 @@
-import * as React from 'react';
-import { useHotkeys } from '@blueprintjs/core';
-import { Ace } from 'ace-builds/ace';
 import { useAppDispatch, useAppSelector } from '../hooks';
 import { create, open, save, lint } from '../store/editor';
 import logSlice, { copy } from '../store/log';
@@ -8,6 +5,9 @@ import { changeMode, upload, download, restart, Mode } from '../store/runtime';
 import { save as saveSettings } from '../store/settings';
 import { COMMANDS } from './Settings/KeybindingSettings';
 import { notify } from './Util';
+import { useHotkeys } from '@blueprintjs/core';
+import { Ace } from 'ace-builds/ace';
+import * as React from 'react';
 
 interface KeybindingMapperProps {
   mode: Mode;

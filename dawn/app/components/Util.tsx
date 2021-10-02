@@ -1,6 +1,6 @@
-import * as React from 'react';
 import { Button, Intent, Position, Toaster } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import * as React from 'react';
 
 const toaster = Toaster.create({ position: Position.TOP_RIGHT });
 

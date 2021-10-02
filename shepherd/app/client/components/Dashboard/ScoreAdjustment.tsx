@@ -1,16 +1,11 @@
-import * as React from 'react';
-import {
-  ControlGroup,
-  FormGroup,
-  Intent,
-  NumericInput,
-} from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
-import { AllianceColorSelect } from '../EntitySelects';
-import { OutcomeButton } from '../Notification';
+import { AllianceColor } from '../../../types';
 import { useAppDispatch, useAppSelector } from '../../hooks';
 import { adjustScore } from '../../store/control';
-import { AllianceColor, MatchEventType } from '../../../types';
+import { AllianceColorSelect } from '../EntitySelects';
+import { OutcomeButton } from '../Notification';
+import { ControlGroup, FormGroup, Intent, NumericInput } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import * as React from 'react';
 
 export default function ScoreAdjustment() {
   const dispatch = useAppDispatch();

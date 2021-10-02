@@ -1,14 +1,13 @@
-import * as React from 'react';
-import { Card, NonIdealState } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
-
+import { useAppSelector, useRobots } from '../../hooks';
+import MatchProjection from './MatchProjection';
 import ScoreAdjustment from './ScoreAdjustment';
 import TeamAdder from './TeamAdder';
 import TeamConnectionTable from './TeamConnectionTable';
 import TimerControl from './TimerControl';
 import TimerExtender from './TimerExtender';
-import MatchProjection from './MatchProjection';
-import { useAppSelector, useRobots } from '../../hooks';
+import { Card, NonIdealState } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import * as React from 'react';
 
 export default function Dashboard() {
   const matchId = useAppSelector((state) => state.control.matchId);
@@ -39,8 +38,7 @@ export default function Dashboard() {
         <div className="column">
           <MatchProjection />
         </div>
-        <div className="column">
-        </div>
+        <div className="column"></div>
       </div>
     </>
   );

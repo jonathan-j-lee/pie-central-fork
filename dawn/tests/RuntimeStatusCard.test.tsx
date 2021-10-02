@@ -1,7 +1,7 @@
-import * as React from 'react';
-import { log, render, screen, dispatchDevUpdate } from './test-utils';
 import RuntimeStatusCard from '../app/components/RuntimeStatusCard';
 import { changeMode, Mode } from '../app/store/runtime';
+import { log, render, screen, dispatchDevUpdate } from './test-utils';
+import * as React from 'react';
 
 beforeEach(() => {
   render(<RuntimeStatusCard />);

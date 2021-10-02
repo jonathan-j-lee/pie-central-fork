@@ -1,8 +1,8 @@
-import yargs from 'yargs';
-import * as _ from 'lodash';
-import { hideBin } from 'yargs/helpers';
 import games from './games';
 import serve from './routes';
+import * as _ from 'lodash';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
 
 yargs(hideBin(process.argv))
   .env('SHEPHERD')
@@ -35,6 +35,6 @@ yargs(hideBin(process.argv))
         choices: _.keys(games),
       },
     },
-    serve,
+    serve
   )
   .parse();

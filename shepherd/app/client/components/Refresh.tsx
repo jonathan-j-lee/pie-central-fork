@@ -1,9 +1,9 @@
-import * as React from 'react';
-import { Tag, Tooltip } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
+import { displayTime } from '../../types';
 import { useAppDispatch } from '../hooks';
 import { init as initControl, refresh } from '../store/control';
-import { displayTime } from '../../types';
+import { Tag, Tooltip } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import * as React from 'react';
 
 export default function Refresh(props: { interval: number }) {
   const dispatch = useAppDispatch();

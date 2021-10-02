@@ -1,7 +1,7 @@
-import * as React from 'react';
 import { Button, HTMLTable } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import * as _ from 'lodash';
+import * as React from 'react';
 
 interface EntityTableProps<T> {
   columns: { field: string; heading: string }[];

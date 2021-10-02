@@ -1,11 +1,25 @@
-import * as React from 'react';
+import {
+  GameState,
+  LogLevel,
+  displayAllianceColor,
+  displayLogFilter,
+  displayTeam,
+  parseLogFilter,
+  getLogLevels,
+} from '../../types';
+import { useAppDispatch, useAppSelector, useCurrentMatch } from '../hooks';
+import logSlice, {
+  LogEvent as LogEventData,
+  selectors as logSelectors,
+} from '../store/log';
+import { save as saveSession } from '../store/session';
+import { LogLevelSelect } from './EntitySelects';
+import { OutcomeButton } from './Notification';
 import {
   Button,
   ButtonGroup,
   ControlGroup,
-  FormGroup,
   Icon,
-  InputGroup,
   Intent,
   NumericInput,
   Position,
@@ -15,26 +29,9 @@ import {
   Tooltip,
 } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
-import Highlight from 'react-highlight';
 import * as _ from 'lodash';
-import { LogLevelSelect } from './EntitySelects';
-import { OutcomeButton } from './Notification';
-import { useAppDispatch, useAppSelector, useCurrentMatch } from '../hooks';
-import logSlice, {
-  LogEvent as LogEventData,
-  selectors as logSelectors,
-} from '../store/log';
-import {
-  GameState,
-  LogLevel,
-  Team,
-  displayAllianceColor,
-  displayLogFilter,
-  displayTeam,
-  parseLogFilter,
-  getLogLevels,
-} from '../../types';
-import { save as saveSession } from '../store/session';
+import * as React from 'react';
+import Highlight from 'react-highlight';
 
 const NOT_CONTEXT_FIELDS = ['timestamp', 'exception', 'event', 'level'];
 
@@ -48,15 +45,17 @@ function LogSearch() {
       content={
         <div className="tooltip-content">
           <p>
-            You can filter events with the pattern <code>&lt;key&gt;:&lt;value&gt;</code>,
-            where <code>key</code> is a property name and <code>value</code> is a JSON
-            value to match.
-            Prefixing the pattern with <code>!</code> will exclude events that do match.
-            Press <kbd>Enter</kbd> to apply a filter.
+            You can filter events with the pattern{' '}
+            <code>&lt;key&gt;:&lt;value&gt;</code>, where <code>key</code> is a property
+            name and <code>value</code> is a JSON value to match. Prefixing the pattern
+            with <code>!</code> will exclude events that do match. Press{' '}
+            <kbd>Enter</kbd> to apply a filter.
           </p>
           <p>
-            For example, <code>student_code:true !team:&#123;"number": 5&#125;</code> will
-            show all events emitted by student code that are <em>not</em> from team 5's robot.
+            For example,{' '}
+            <code>student_code:true !team:&#123;&quot;number&quot;: 5&#125;</code> will
+            show all events emitted by student code that are <em>not</em> from team
+            5&apos;s robot.
           </p>
         </div>
       }
@@ -66,7 +65,7 @@ function LogSearch() {
         className="log-search-tags"
         leftIcon={IconNames.SEARCH}
         tagProps={{ minimal: true }}
-        values={filters.map(filter => displayLogFilter(filter))}
+        values={filters.map((filter) => displayLogFilter(filter))}
         placeholder="Enter filters ..."
         inputProps={{ type: 'search' }}
         separator={/[\n\r]/}
@@ -104,9 +103,7 @@ function MaxEventInput() {
       min={0}
       value={value}
       onValueChange={(value) => setValue(value)}
-      onButtonClick={(value) =>
-        dispatch(saveSession({ log: { maxEvents: value } }))
-      }
+      onButtonClick={(value) => dispatch(saveSession({ log: { maxEvents: value } }))}
       onBlur={({ currentTarget: { value } }) =>
         dispatch(saveSession({ log: { maxEvents: Number(value) } }))
       }
@@ -227,7 +224,9 @@ function LogEvent(props: { event: LogEventData }) {
       <span>{event}</span>
       <LogLevelTag level={level} />
       <ShowContextTag event={props.event} />
-      <Tag round minimal className="log-tag">{displayTeam(team)}</Tag>
+      <Tag round minimal className="log-tag">
+        {displayTeam(team)}
+      </Tag>
       {alliance && (
         <Tag round minimal className={`log-tag ${alliance} bg`}>
           {displayAllianceColor(alliance)}
@@ -278,15 +277,16 @@ function useLogEvents() {
       },
     }))
     .filter((event) => {
-      if (levels.has(event.payload.level)) {
-        for (const filter of log.filters) {
-          const match = _.isMatch(event.payload, { [filter.key]: filter.value });
-          if (filter.exclude && match || !filter.exclude && !match) {
-            return false;
-          }
-        }
-        return true;
+      if (!levels.has(event.payload.level)) {
+        return false;
       }
+      for (const filter of log.filters) {
+        const match = _.isMatch(event.payload, { [filter.key]: filter.value });
+        if ((filter.exclude && match) || (!filter.exclude && !match)) {
+          return false;
+        }
+      }
+      return true;
     });
 }
 

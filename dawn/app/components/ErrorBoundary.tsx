@@ -1,7 +1,6 @@
-import * as React from 'react';
-import { Button, H1, H2, Intent, Pre } from '@blueprintjs/core';
-
 import store from '../store';
+import { Button, H1, H2, Intent, Pre } from '@blueprintjs/core';
+import * as React from 'react';
 
 export default class ErrorBoundary extends React.Component<{}, { err: null | Error }> {
   constructor(props: {}) {

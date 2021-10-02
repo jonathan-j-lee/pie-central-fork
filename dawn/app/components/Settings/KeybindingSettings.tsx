@@ -1,6 +1,6 @@
-import * as React from 'react';
-import { HTMLTable } from '@blueprintjs/core';
 import { EditableText } from './Forms';
+import { HTMLTable } from '@blueprintjs/core';
+import * as React from 'react';
 
 export const COMMANDS = [
   {

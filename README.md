@@ -1,5 +1,10 @@
 # pie-central-fork
 
+[![pie-central](https://github.com/jonathan-j-lee/pie-central-fork/actions/workflows/ci.yml/badge.svg)](https://github.com/jonathan-j-lee/pie-central-fork/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/jonathan-j-lee/pie-central-fork/branch/master/graph/badge.svg?token=VGDWDH8ZBI)](https://codecov.io/gh/jonathan-j-lee/pie-central-fork)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![docs: github pages](https://img.shields.io/badge/docs-gh%20pages-informational.svg)](https://jonathan-j-lee.github.io/pie-central-fork/)
+
 The PiE robotics kit is a platform for building and operating a robot programmed in Python.
 Designed to [give high school students hands-on engineering experience](https://pioneers.berkeley.edu/), the kit allows users to control sensors and actuators through a high-level API without deep technical expertise.
 

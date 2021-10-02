@@ -1,16 +1,11 @@
-import * as React from 'react';
-import {
-  ControlGroup,
-  FormGroup,
-  Intent,
-  InputGroup,
-} from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
-import { AllianceColorSelect, TeamSelect } from '../EntitySelects';
-import { OutcomeButton } from '../Notification';
+import { AllianceColor } from '../../../types';
 import { useAppDispatch, useCurrentMatch } from '../../hooks';
 import { connectTeam } from '../../store/control';
-import { AllianceColor } from '../../../types';
+import { AllianceColorSelect, TeamSelect } from '../EntitySelects';
+import { OutcomeButton } from '../Notification';
+import { ControlGroup, FormGroup, Intent, InputGroup } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import * as React from 'react';
 
 export default function TeamAdder() {
   const dispatch = useAppDispatch();

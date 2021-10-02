@@ -134,18 +134,25 @@ TEST_CASE("messages fail to be read", "[message]") {
 
     SECTION("message too long") {
         byte param1[255 - 2];
-        params[0] = { param1, sizeof(param1) };
+        params[0].base = param1;
+        params[0].size = sizeof(param1);
         REQUIRE(msg.make_dev_data(0b1, params));
         params[0].size--;
     }
     SECTION("message too short") {
     }
 
+    bool result;
     REQUIRE_FALSE(msg.read_sub_req(&present, &interval));
     REQUIRE_FALSE(msg.read_sub_res(&present, &interval, &uid));
     REQUIRE_FALSE(msg.read_dev_read(&present));
-    REQUIRE_FALSE(msg.read_dev_write(&present, params));
-    REQUIRE_FALSE(msg.read_dev_data(&present, params));
+    // HACK: The methods that use `params` work fine, but `REQUIRE_FALSE(...)` sometimes
+    // causes a segfault. Best guess is that the macro is capturing the `params`
+    // parameter and trying to read it, even though it's not a null-terminated string.
+    result = msg.read_dev_write(&present, params);
+    REQUIRE_FALSE(result);
+    result = msg.read_dev_data(&present, params);
+    REQUIRE_FALSE(result);
     REQUIRE_FALSE(msg.read_hb_req(&hb_id));
     REQUIRE_FALSE(msg.read_hb_res(&hb_id));
     REQUIRE_FALSE(msg.read_error(&error));

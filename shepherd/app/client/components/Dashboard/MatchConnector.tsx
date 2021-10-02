@@ -1,15 +1,11 @@
-import * as React from 'react';
-import {
-  ControlGroup,
-  FormGroup,
-  Intent,
-} from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
-import { MatchSelect } from '../EntitySelects';
-import { OutcomeButton } from '../Notification';
+import { MatchPhase } from '../../../types';
 import { useAppDispatch, useAppSelector } from '../../hooks';
 import { connectMatch } from '../../store/control';
-import { MatchPhase } from '../../../types';
+import { MatchSelect } from '../EntitySelects';
+import { OutcomeButton } from '../Notification';
+import { ControlGroup, FormGroup, Intent } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import * as React from 'react';
 
 interface MatchConnectorProps {
   phase: MatchPhase;

@@ -1,7 +1,6 @@
-import * as React from 'react';
-import * as _ from 'lodash';
+import Dashboard from '../../app/client/components/Dashboard';
+import { AllianceColor, MatchEventType, MatchPhase } from '../../app/types';
 import {
-  act,
   delay,
   getRows,
   init,
@@ -9,15 +8,14 @@ import {
   recvControl,
   refresh,
   render,
-  screen,
   server,
   upsertEntities,
 } from './test-utils';
 import { within } from '@testing-library/dom';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { rest } from 'msw';
-import Dashboard from '../../app/client/components/Dashboard';
-import { AllianceColor, MatchEventType, MatchPhase } from '../../app/types';
+import * as React from 'react';
 
 function getControl(pattern: RegExp): HTMLElement {
   const control = screen
@@ -97,117 +95,127 @@ describe.each([
   [1, [], [1, 2], MatchPhase.TELEOP, 180],
   [4, [{ id: 1, name: /berkeley \(#0\)/i }], [2], MatchPhase.AUTO, 30],
   [5, [{ id: 2, name: /stanford \(#1\)/i }], [1], MatchPhase.AUTO, 30],
-])('commands robots for match %d', (matchId, deselected, selected, phase, totalTime) => {
-  beforeEach(() => {
-    recvControl({
-      control: {
-        matchId,
-        robots: [
-          { teamId: 1, updateRate: 0, uids: [] },
-          { teamId: 2, updateRate: 0, uids: [] },
-        ],
-      },
-    });
-    for (const { name } of deselected) {
-      const row = screen.getByText(name).closest('tr');
-      if (!row) {
-        throw new Error('connection table row not found');
-      }
-      userEvent.click(row.getElementsByTagName('input')[0]);
-    }
-  });
-
-  it('starts the selected robots', async () => {
-    const phasePattern = phase === MatchPhase.AUTO ? /^autonomous$/i : /^tele-op$/i;
-    expect(screen.getByDisplayValue(phasePattern)).toBeInTheDocument();
-    expect(screen.getByDisplayValue(totalTime.toString())).toBeInTheDocument();
-    await act(async () => {
-      userEvent.click(screen.getByText(/^start$/i));
-    });
-    if (deselected.length) {
-      expect(
-        screen.getByText(/robots are normally started or stopped all together/i)
-      ).toBeInTheDocument();
-      await act(async () => {
-        userEvent.click(screen.getByText(/^confirm$/i));
+])(
+  'commands robots for match %d',
+  (matchId, deselected, selected, phase, totalTime) => {
+    beforeEach(() => {
+      recvControl({
+        control: {
+          matchId,
+          robots: [
+            { teamId: 1, updateRate: 0, uids: [] },
+            { teamId: 2, updateRate: 0, uids: [] },
+          ],
+        },
       });
-    }
-
-    const type = phase === MatchPhase.AUTO
-      ? MatchEventType.AUTO
-      : MatchEventType.TELEOP;
-    const [[payload]] = (window.ws.send as jest.Mock).mock.calls;
-    expect(JSON.parse(payload)).toMatchObject({
-      events: selected.map(
-        (team) => ({ match: matchId, type, team, value: totalTime * 1000 })
-      ),
+      for (const { name } of deselected) {
+        const row = screen.getByText(name).closest('tr');
+        if (!row) {
+          throw new Error('connection table row not found');
+        }
+        userEvent.click(row.getElementsByTagName('input')[0]);
+      }
     });
-    expect(screen.getAllByText(/started robots/i).length).toBeGreaterThan(0);
-  });
 
-  it.each([
-    [
-      'stops',
-      MatchEventType.IDLE,
-      /^Stop$/,
-      /shepherd normally stops robots/i,
-      /stopped robots/i,
-    ],
-    [
-      'e-stops',
-      MatchEventType.ESTOP,
-      /^e-stop$/i,
-      /e-stopped robots cannot be restarted/i,
-      /e-stopped robots/i,
-    ],
-  ])('%s the selected robots', async (action, type, pattern, warning, notification) => {
-    await act(async () => {
-      userEvent.click(screen.getByText(pattern));
+    it('starts the selected robots', async () => {
+      const phasePattern = phase === MatchPhase.AUTO ? /^autonomous$/i : /^tele-op$/i;
+      expect(screen.getByDisplayValue(phasePattern)).toBeInTheDocument();
+      expect(screen.getByDisplayValue(totalTime.toString())).toBeInTheDocument();
+      await act(async () => {
+        userEvent.click(screen.getByText(/^start$/i));
+      });
+      if (deselected.length) {
+        // eslint-disable-next-line jest/no-conditional-expect
+        expect(
+          screen.getByText(/robots are normally started or stopped all together/i)
+        ).toBeInTheDocument();
+        await act(async () => {
+          userEvent.click(screen.getByText(/^confirm$/i));
+        });
+      }
+
+      const type =
+        phase === MatchPhase.AUTO ? MatchEventType.AUTO : MatchEventType.TELEOP;
+      const [[payload]] = (window.ws.send as jest.Mock).mock.calls;
+      expect(JSON.parse(payload)).toMatchObject({
+        events: selected.map((team) => ({
+          match: matchId,
+          type,
+          team,
+          value: totalTime * 1000,
+        })),
+      });
+      expect(screen.getAllByText(/started robots/i).length).toBeGreaterThan(0);
     });
-    expect(screen.getByText(warning)).toBeInTheDocument();
-    if (deselected.length) {
+
+    it.each([
+      [
+        'stops',
+        MatchEventType.IDLE,
+        /^Stop$/,
+        /shepherd normally stops robots/i,
+        /stopped robots/i,
+      ],
+      [
+        'e-stops',
+        MatchEventType.ESTOP,
+        /^e-stop$/i,
+        /e-stopped robots cannot be restarted/i,
+        /e-stopped robots/i,
+      ],
+    ])(
+      '%s the selected robots',
+      async (action, type, pattern, warning, notification) => {
+        await act(async () => {
+          userEvent.click(screen.getByText(pattern));
+        });
+        expect(screen.getByText(warning)).toBeInTheDocument();
+        expect(
+          screen.queryAllByText(/robots are normally started or stopped all together/i)
+        ).toHaveLength(deselected.length ? 1 : 0);
+        await act(async () => {
+          userEvent.click(screen.getByText(/^confirm$/i));
+        });
+
+        const [[payload]] = (window.ws.send as jest.Mock).mock.calls;
+        expect(JSON.parse(payload)).toMatchObject({
+          events: selected.map((team) => ({ match: matchId, type, team })),
+        });
+        expect(screen.getAllByText(notification).length).toBeGreaterThan(0);
+      }
+    );
+
+    it('extends the match for the selected robots', async () => {
+      const button = screen.getByText(/add time/i).closest('button');
+      if (!button) {
+        throw new Error('button not found');
+      }
+      expect(button).toBeDisabled();
+      const control = getControl(/manually delay the shutoff of the selected robots/i);
+      const input = within(control).getByPlaceholderText(/number of seconds/i);
+      userEvent.type(input, '{selectall}-1');
+      userEvent.click(control);
+      expect(button).toBeDisabled();
+      userEvent.type(input, '{selectall}0.5');
+      await act(async () => {
+        userEvent.click(button);
+      });
+
+      const [[payload]] = (window.ws.send as jest.Mock).mock.calls;
+      expect(JSON.parse(payload)).toMatchObject({
+        events: selected.map((team) => ({
+          match: matchId,
+          type: MatchEventType.EXTEND,
+          team,
+          value: 500,
+        })),
+      });
       expect(
-        screen.getByText(/robots are normally started or stopped all together/i)
-      ).toBeInTheDocument();
-    }
-    await act(async () => {
-      userEvent.click(screen.getByText(/^confirm$/i));
+        screen.getAllByText(/extended match for selected robots/i).length
+      ).toBeGreaterThan(0);
     });
-
-    const [[payload]] = (window.ws.send as jest.Mock).mock.calls;
-    expect(JSON.parse(payload)).toMatchObject({
-      events: selected.map((team) => ({ match: matchId, type, team })),
-    });
-    expect(screen.getAllByText(notification).length).toBeGreaterThan(0);
-  });
-
-  it('extends the match for the selected robots', async () => {
-    const button = screen.getByText(/add time/i).closest('button');
-    if (!button) {
-      throw new Error('button not found');
-    }
-    expect(button).toBeDisabled();
-    const control = getControl(/manually delay the shutoff of the selected robots/i);
-    const input = within(control).getByPlaceholderText(/number of seconds/i);
-    userEvent.type(input, '{selectall}-1');
-    userEvent.click(control);
-    expect(button).toBeDisabled();
-    userEvent.type(input, '{selectall}0.5');
-    await act(async () => {
-      userEvent.click(button);
-    });
-
-    const [[payload]] = (window.ws.send as jest.Mock).mock.calls;
-    expect(JSON.parse(payload)).toMatchObject({
-      events: selected.map((team) =>
-        ({ match: matchId, type: MatchEventType.EXTEND, team, value: 500 })
-      ),
-    });
-    expect(
-      screen.getAllByText(/extended match for selected robots/i).length
-    ).toBeGreaterThan(0);
-  });
-});
+  }
+);
 
 it('selects robots with controlled checkboxes', () => {
   recvControl({
@@ -219,9 +227,7 @@ it('selects robots with controlled checkboxes', () => {
       ],
     },
   });
-  const table = screen
-    .getByText(/^update rate$/i)
-    .closest('table');
+  const table = screen.getByText(/^update rate$/i).closest('table');
   if (!table) {
     throw new Error('robot table not found');
   }
@@ -280,7 +286,7 @@ it('displays a connection table', () => {
 
 it('removes a robot from the connection table', async () => {
   recvControl({
-    control: { matchId: 5, robots: [{ teamId: 1, updateRate: 0, uids: [] }]}
+    control: { matchId: 5, robots: [{ teamId: 1, updateRate: 0, uids: [] }] },
   });
   const row = screen
     .getByText(/^berkeley \(#0\)$/i)
@@ -327,18 +333,19 @@ it.each([
   if (hostname) {
     userEvent.type(
       within(control).getByPlaceholderText(/example: 192\.168\.1\.1/i),
-      hostname,
+      hostname
     );
     userEvent.click(control);
   }
   await act(async () => {
     userEvent.click(button);
-    await delay(200);
+    await delay(300);
   });
 
   if (hostname) {
+    // eslint-disable-next-line jest/no-conditional-expect
     expect(upsertEntities).toHaveBeenCalledWith('teams', [
-      expect.objectContaining({ id: teamId, hostname })
+      expect.objectContaining({ id: teamId, hostname }),
     ]);
   }
   expect(upsertEntities).toHaveBeenCalledWith('matches', [
@@ -377,9 +384,8 @@ it.each([
     await delay(100);
   });
 
-  expect(upsertEntities).toHaveBeenCalledWith(
-    'matches',
-    [expect.objectContaining({
+  expect(upsertEntities).toHaveBeenCalledWith('matches', [
+    expect.objectContaining({
       id: 1,
       events: expect.arrayContaining([
         expect.objectContaining({
@@ -390,15 +396,17 @@ it.each([
           value: points,
         }),
       ]),
-    })]
-  );
+    }),
+  ]);
   expect(screen.queryAllByText(/adjusted score/i).length).toBeGreaterThan(0);
 });
 
 it('estimates when all matches will be finished', async () => {
   jest.useFakeTimers();
   jest.setSystemTime(10000);
-  expect(screen.getByText(/finish 1 remaining scheduled match(es)?/i)).toBeInTheDocument();
+  expect(
+    screen.getByText(/finish 1 remaining scheduled match(es)?/i)
+  ).toBeInTheDocument();
   recvControl({ control: { matchId: 1 } });
   jest.useRealTimers();
   await delay(20);
@@ -407,8 +415,8 @@ it('estimates when all matches will be finished', async () => {
   server.use(
     rest.get(makeEndpointUrl('matches'), (req, res, ctx) => {
       return res(ctx.json([]));
-    }),
+    })
   );
   await refresh();
-  expect(screen.getByText(/you have completed all matches/i));
+  expect(screen.getByText(/you have completed all matches/i)).toBeInTheDocument();
 });

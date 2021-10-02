@@ -1,16 +1,14 @@
-import * as React from 'react';
-import { useStore } from 'react-redux';
-import { Button, Classes, Dialog, Intent, Tab, Tabs } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
-import * as _ from 'lodash';
-
 import { useAppDispatch } from '../../hooks';
 import settingsSlice, { save } from '../../store/settings';
+import { notify } from '../Util';
 import EditorSettings from './EditorSettings';
 import KeybindingSettings from './KeybindingSettings';
 import LogSettings from './LogSettings';
 import RuntimeSettings from './RuntimeSettings';
-import { notify } from '../Util';
+import { Button, Classes, Dialog, Intent, Tab, Tabs } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import * as React from 'react';
+import { useStore } from 'react-redux';
 
 interface SettingsProps {
   isOpen: boolean;

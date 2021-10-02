@@ -1,9 +1,9 @@
-import * as React from 'react';
+import { useAppDispatch, useAppSelector } from '../hooks';
+import { Alliance, Mode, ConnectionStatus, updateRate } from '../store/runtime';
+import { EditorTheme } from '../store/settings';
 import { Colors, Callout, IconName, Intent, Spinner, Tag } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAppDispatch, useAppSelector } from '../hooks';
-import { EditorTheme } from '../store/settings';
-import { Alliance, Mode, ConnectionStatus, updateRate } from '../store/runtime';
+import * as React from 'react';
 
 function ModeTag(props: { mode: Mode }) {
   let modeName;

@@ -1,17 +1,4 @@
-import * as React from 'react';
-import { useHistory, useLocation } from 'react-router-dom';
-import { ButtonGroup, H2, Intent } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
-import * as _ from 'lodash';
-
-import { AddButton, ConfirmButton, EditButton } from '../EntityButtons';
-import Bracket from './Bracket';
-import Help from '../Help';
-import MatchList from './MatchList';
-import MatchEventList from './MatchEventList';
-import ScorePlot from './ScorePlot';
-import { AlertButton } from '../Notification';
-import { DEV_ENV, PLACEHOLDER } from '../Util';
+import { getQualScore } from '../../../types';
 import { useAppDispatch, useAppSelector, useTeams, useQuery } from '../../hooks';
 import {
   generate as generateBracket,
@@ -24,7 +11,19 @@ import {
   add as addMatch,
   save as saveMatches,
 } from '../../store/matches';
-import { getQualScore } from '../../../types';
+import { AddButton, ConfirmButton, EditButton } from '../EntityButtons';
+import Help from '../Help';
+import { AlertButton } from '../Notification';
+import { DEV_ENV, PLACEHOLDER } from '../Util';
+import Bracket from './Bracket';
+import MatchEventList from './MatchEventList';
+import MatchList from './MatchList';
+import ScorePlot from './ScorePlot';
+import { ButtonGroup, H2, Intent } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import * as _ from 'lodash';
+import * as React from 'react';
+import { useHistory, useLocation } from 'react-router-dom';
 
 function useQueriedMatch() {
   const location = useLocation();
@@ -36,7 +35,6 @@ function useQueriedMatch() {
     if (matchId !== null) {
       history.push(location.pathname);
     }
-    return;
   } else {
     return matchSelectors.selectById(matches, matchId);
   }
@@ -46,9 +44,8 @@ function ScheduleHelp(props: { transitionDuration?: number }) {
   return (
     <Help transitionDuration={props.transitionDuration}>
       <p>
-        The final tournament is a best-of-three playoff where ties are ignored.
-        To place alliances, every team is first assigned
-        a <strong>qualification score</strong>:
+        The final tournament is a best-of-three playoff where ties are ignored. To place
+        alliances, every team is first assigned a <strong>qualification score</strong>:
       </p>
       <code className="bracket-formula">
         qual_score = 2000 * wins + 1000 * ties + total_score
@@ -63,12 +60,8 @@ function ScheduleHelp(props: { transitionDuration?: number }) {
         members. Byes are awarded starting from the highest-ranking alliance.
         Higher-ranking alliances also receive more favorable match-ups.
       </p>
-      <p>
-        As the formula suggests, winning matches is the best way to place strongly.
-      </p>
-      <p>
-        A striped background indicates an ongoing match.
-      </p>
+      <p>As the formula suggests, winning matches is the best way to place strongly.</p>
+      <p>A striped background indicates an ongoing match.</p>
     </Help>
   );
 }
@@ -78,7 +71,8 @@ export default function Schedule(props: { transitionDuration?: number }) {
   const username = useAppSelector((state) => state.user.username);
   const bracket = useAppSelector((state) => state.bracket);
   const edit = useAppSelector((state) => state.control.editing);
-  const setEdit = (editing: boolean) => dispatch(controlSlice.actions.update({ editing }));
+  const setEdit = (editing: boolean) =>
+    dispatch(controlSlice.actions.update({ editing }));
   const match = useQueriedMatch();
   const teams = useTeams();
   return (
@@ -121,22 +115,29 @@ export default function Schedule(props: { transitionDuration?: number }) {
         {edit && (
           <ButtonGroup>
             <AlertButton
-              warnings={bracket ? [
-                'Generating a bracket will remove an existing one. ' +
-                'Are you sure you want to continue?'
-              ] : []}
+              warnings={
+                bracket
+                  ? [
+                      'Generating a bracket will remove an existing one. ' +
+                        'Are you sure you want to continue?',
+                    ]
+                  : []
+              }
               text="Generate bracket"
               intent={Intent.PRIMARY}
               icon={IconNames.MANY_TO_ONE}
               onClick={async () => {
                 const alliances = _.chain(teams)
                   .groupBy((team) => team.alliance)
-                  .mapValues((teams) =>
-                    teams.reduce((total, team) =>
-                      total + getQualScore(team.stats), 0)/teams.length
+                  .mapValues(
+                    (teams) =>
+                      teams.reduce(
+                        (total, team) => total + getQualScore(team.stats),
+                        0
+                      ) / teams.length
                   )
                   .toPairs()
-                  .sortBy(([allianceId, score]) => -score)
+                  .sortBy(([, score]) => -score)
                   .map(([allianceId]) => Number(allianceId))
                   .value();
                 await dispatch(generateBracket(alliances)).unwrap();

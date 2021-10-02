@@ -1,7 +1,7 @@
-import * as React from 'react';
-import { Classes } from '@blueprintjs/core';
 import { useAppSelector } from '../hooks';
 import { EditorTheme } from '../store/settings';
+import { Classes } from '@blueprintjs/core';
+import * as React from 'react';
 
 export default function ThemeProvider(props: { children: React.ReactNode }) {
   const editorTheme = useAppSelector((state) => state.settings.editor.editorTheme);

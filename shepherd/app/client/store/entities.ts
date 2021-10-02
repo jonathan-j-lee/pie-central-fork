@@ -17,7 +17,7 @@ export function makeEndpointClient<T, ID extends number | string>(
   type State = typeof initialState;
   const apiEndpoint = endpoint ?? `/${name}`;
 
-  const fetch = createAsyncThunk<T[]>(`${name}/fetch`, async (arg, thunkAPI) => {
+  const fetch = createAsyncThunk<T[]>(`${name}/fetch`, async () => {
     return (await request.get(apiEndpoint)).body;
   });
 

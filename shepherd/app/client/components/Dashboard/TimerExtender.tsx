@@ -1,19 +1,12 @@
-import * as React from 'react';
-import {
-  ControlGroup,
-  FormGroup,
-  Intent,
-  NumericInput,
-} from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
-import { OutcomeButton } from '../Notification';
-import { useAppDispatch, useAppSelector } from '../../hooks';
+import { useAppDispatch } from '../../hooks';
 import { extendMatch, Robot } from '../../store/control';
-import { MatchEventType } from '../../../types';
+import { OutcomeButton } from '../Notification';
+import { ControlGroup, FormGroup, Intent, NumericInput } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import * as React from 'react';
 
 export default function TimerExtender(props: { robots: Robot[] }) {
   const dispatch = useAppDispatch();
-  const matchId = useAppSelector((state) => state.control.matchId);
   const [extension, setExtension] = React.useState(0);
   const disabled = props.robots.filter((robot) => robot.selected).length === 0;
   return (

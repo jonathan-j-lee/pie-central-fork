@@ -1,11 +1,11 @@
-import * as React from 'react';
-import { Button, Collapse, Icon, Intent, Pre, Tag } from '@blueprintjs/core';
-import { IconName, IconNames } from '@blueprintjs/icons';
-import Highlight from 'react-highlight';
-import * as _ from 'lodash';
 import { useAppDispatch, useAppSelector } from '../hooks';
 import logSlice, { LogEvent as LogEventData, logEventSelectors } from '../store/log';
 import settingsSlice, { SettingsState, EditorTheme, LogLevel } from '../store/settings';
+import { Button, Collapse, Icon, Intent, Pre, Tag } from '@blueprintjs/core';
+import { IconName, IconNames } from '@blueprintjs/icons';
+import * as _ from 'lodash';
+import * as React from 'react';
+import Highlight from 'react-highlight';
 
 const NOT_CONTEXT_FIELDS = ['timestamp', 'exception', 'event', 'level'];
 
@@ -103,14 +103,14 @@ export default function Log(props: { transitionDuration?: number }) {
   const timestamps = logEventSelectors.selectIds(log);
   React.useEffect(() => {
     for (const theme of Object.values(EditorTheme)) {
-      const stylesheetId = `highlight-${theme}`;
-      const stylesheet = document.getElementById(stylesheetId) as HTMLLinkElement | null;
+      const id = `highlight-${theme}`;
+      const stylesheet = document.getElementById(id) as HTMLLinkElement | null;
       if (stylesheet) {
         stylesheet.disabled = true;
       }
     }
-    const stylesheetId = `highlight-${editorTheme}`;
-    const enabledStylesheet = document.getElementById(stylesheetId) as HTMLLinkElement | null;
+    const id = `highlight-${editorTheme}`;
+    const enabledStylesheet = document.getElementById(id) as HTMLLinkElement | null;
     if (enabledStylesheet) {
       enabledStylesheet.disabled = false;
     }

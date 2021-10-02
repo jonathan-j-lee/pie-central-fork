@@ -1,7 +1,7 @@
-import * as React from 'react';
+import { OutcomeButton, OutcomeButtonProps } from './Notification';
 import { Button, IButtonProps, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { OutcomeButton, OutcomeButtonProps } from './Notification';
+import * as React from 'react';
 
 export function AddButton(props: IButtonProps) {
   return <Button intent={Intent.PRIMARY} icon={IconNames.ADD} {...props} />;

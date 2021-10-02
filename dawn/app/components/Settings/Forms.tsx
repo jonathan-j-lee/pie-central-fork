@@ -1,11 +1,10 @@
-import * as React from 'react';
-import * as _ from 'lodash';
+import { useAppDispatch, useAppSelector } from '../../hooks';
+import settingsSlice from '../../store/settings';
 import {
   Button,
   Callout,
   Classes,
   EditableText as BlueprintEditableText,
-  FormGroup,
   IconName,
   Intent,
   HTMLSelect as BlueprintSelect,
@@ -20,8 +19,8 @@ import {
   Tooltip,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAppDispatch, useAppSelector } from '../../hooks';
-import settingsSlice from '../../store/settings';
+import * as _ from 'lodash';
+import * as React from 'react';
 
 interface InputOuterProps<S> {
   path: string;
@@ -36,7 +35,7 @@ interface InputInnerProps<S> {
 function makeSettingInput<S, P extends InputOuterProps<S>>(
   Input: React.FC<P & InputInnerProps<S>>
 ): React.FC<P> {
-  return (props: P) => {
+  return function Setting(props: P) {
     const [error, setError] = React.useState<Error | null>(null);
     const dispatch = useAppDispatch();
     const setting: S = useAppSelector((state) => _.get(state.settings, props.path));
@@ -108,7 +107,7 @@ interface TextInputProps extends BaseTextProps {
   id?: string;
   type?: string;
   leftIcon?: IconName;
-  rightElement?: JSX.Element;
+  rightElement?: React.ReactElement;
 }
 
 export const TextInput = makeSettingInput<string, TextInputProps>((props) => (
@@ -303,7 +302,7 @@ interface EntityTableProps extends InputOuterProps<Entity> {
   headings: Array<string>;
   default?: [string, any];
   widths?: Array<number>;
-  render: (kv: [string, any], update: EntityUpdater) => Array<React.ReactNode>;
+  render: (kv: [string, any], update: EntityUpdater) => React.ReactNode[];
   emptyMessage?: string;
   addLabel?: string;
 }

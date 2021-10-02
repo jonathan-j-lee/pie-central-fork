@@ -1,17 +1,10 @@
-import * as React from 'react';
-import * as _ from 'lodash';
-import {
-  delay,
-  init,
-  render,
-  recvControl,
-  refresh,
-  screen,
-  updateSession,
-} from './test-utils';
-import userEvent from '@testing-library/user-event';
 import Log from '../../app/client/components/Log';
-import { AllianceColor, LogLevel } from '../../app/types';
+import { LogLevel } from '../../app/types';
+import { delay, init, render, recvControl, refresh, updateSession } from './test-utils';
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import * as _ from 'lodash';
+import * as React from 'react';
 
 beforeEach(async () => {
   render(<Log />);
@@ -20,20 +13,22 @@ beforeEach(async () => {
   recvControl({ control: { matchId: 1 } });
   recvControl({
     control: {},
-    events: [{
-      event: 'Process started',
-      level: LogLevel.ERROR,
-      process: 'device',
-      pid: 133298,
-      timestamp: '1970-01-01T00:00:10.000Z',
-      exception:
-        'Traceback (most recent call last):\n' +
-        '  File "/usr/lib/python3.9/asyncio/tasks.py", line 492, in wait_for\n' +
-        '    fut.result()\n' +
-        'asyncio.exceptions.CancelledError',
-      student_code: true,
-      team: { id: 1, number: 0, name: 'Berkeley', hostname: 'localhost' },
-    }],
+    events: [
+      {
+        event: 'Process started',
+        level: LogLevel.ERROR,
+        process: 'device',
+        pid: 133298,
+        timestamp: '1970-01-01T00:00:10.000Z',
+        exception:
+          'Traceback (most recent call last):\n' +
+          '  File "/usr/lib/python3.9/asyncio/tasks.py", line 492, in wait_for\n' +
+          '    fut.result()\n' +
+          'asyncio.exceptions.CancelledError',
+        student_code: true,
+        team: { id: 1, number: 0, name: 'Berkeley', hostname: 'localhost' },
+      },
+    ],
   });
 });
 
@@ -61,7 +56,7 @@ describe('log event', () => {
             id: 1,
             number: 0,
             name: 'Berkeley',
-            hostname: 'localhost'
+            hostname: 'localhost',
           },
         });
       } catch {
@@ -98,13 +93,17 @@ describe('log event', () => {
 
 describe('log filters', () => {
   beforeEach(() => {
-    const events = [LogLevel.DEBUG, LogLevel.INFO, LogLevel.WARNING, LogLevel.CRITICAL]
-      .map((level, index) => ({
-        level,
-        event: 'Testing',
-        timestamp: new Date(10000 * (index + 2)).toISOString(),
-        team: {},
-      }));
+    const events = [
+      LogLevel.DEBUG,
+      LogLevel.INFO,
+      LogLevel.WARNING,
+      LogLevel.CRITICAL,
+    ].map((level, index) => ({
+      level,
+      event: 'Testing',
+      timestamp: new Date(10000 * (index + 2)).toISOString(),
+      team: {},
+    }));
     recvControl({ control: {}, events });
   });
 
@@ -157,12 +156,14 @@ describe('log filters', () => {
     expect(screen.getByText(/process started/i)).toBeInTheDocument();
     recvControl({
       control: {},
-      events: [{
-        level: LogLevel.INFO,
-        event: 'Testing',
-        timestamp: new Date(70000).toISOString(),
-        team: {},
-      }],
+      events: [
+        {
+          level: LogLevel.INFO,
+          event: 'Testing',
+          timestamp: new Date(70000).toISOString(),
+          team: {},
+        },
+      ],
     });
     await delay(20);
     expect(screen.queryByText(/process started/i)).not.toBeInTheDocument();

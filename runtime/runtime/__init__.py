@@ -5,7 +5,7 @@ import click
 from runtime import buffer, log, process
 from runtime.service import broker, device, executor
 
-__version__ = '0.0.1-alpha'
+__version__ = '0.9.0'
 
 
 async def main(ctx: click.Context) -> None:

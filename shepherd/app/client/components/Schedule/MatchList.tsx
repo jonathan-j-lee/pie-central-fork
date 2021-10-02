@@ -1,15 +1,14 @@
-import * as React from 'react';
-import { Link } from 'react-router-dom';
-import { Icon } from '@blueprintjs/core';
-import { IconName, IconNames } from '@blueprintjs/icons';
-import * as _ from 'lodash';
-
+import { useAppDispatch, useAppSelector, useMatches } from '../../hooks';
+import matchesSlice from '../../store/matches';
 import { DeleteButton } from '../EntityButtons';
 import { FixtureSelect } from '../EntitySelects';
 import EntityTable from '../EntityTable';
 import { PLACEHOLDER, TeamMembers } from '../Util';
-import { useAppDispatch, useAppSelector, useMatches } from '../../hooks';
-import matchesSlice from '../../store/matches';
+import { Icon } from '@blueprintjs/core';
+import { IconName, IconNames } from '@blueprintjs/icons';
+import * as _ from 'lodash';
+import * as React from 'react';
+import { Link } from 'react-router-dom';
 
 interface ScoreProps {
   allyScore: number;
@@ -33,7 +32,11 @@ function Score(props: ScoreProps) {
   const past = !props.current && props.started;
   const future = !props.current && !past;
   return (
-    <td className={`score ${props.className ?? ''} ${!future && status} ${props.current ? 'current' : ''}`}>
+    <td
+      className={`score ${props.className ?? ''} ${!future && status} ${
+        props.current ? 'current' : ''
+      }`}
+    >
       {past && <Icon icon={icon} className="score-icon" />}
       {future ? PLACEHOLDER : props.allyScore}
     </td>
@@ -61,8 +64,12 @@ export default function MatchList(props: { edit: boolean }) {
       headings={
         <tr>
           <td />
-          <td colSpan={3} className="alliance-heading">Blue</td>
-          <td colSpan={3} className="alliance-heading">Gold</td>
+          <td colSpan={3} className="alliance-heading">
+            Blue
+          </td>
+          <td colSpan={3} className="alliance-heading">
+            Gold
+          </td>
         </tr>
       }
       render={(match) => (
@@ -75,7 +82,9 @@ export default function MatchList(props: { edit: boolean }) {
             )}
           </td>
           <td>{match.fixtureData?.blue?.winningAlliance?.name ?? PLACEHOLDER}</td>
-          <td><TeamMembers teams={match.blueTeams} /></td>
+          <td>
+            <TeamMembers teams={match.blueTeams} />
+          </td>
           <Score
             allyScore={match.blueScore}
             opponentScore={match.goldScore}
@@ -84,7 +93,9 @@ export default function MatchList(props: { edit: boolean }) {
             className="blue"
           />
           <td>{match.fixtureData?.gold?.winningAlliance?.name ?? PLACEHOLDER}</td>
-          <td><TeamMembers teams={match.goldTeams} /></td>
+          <td>
+            <TeamMembers teams={match.goldTeams} />
+          </td>
           <Score
             allyScore={match.goldScore}
             opponentScore={match.blueScore}
@@ -102,10 +113,12 @@ export default function MatchList(props: { edit: boolean }) {
                   )
                 }
               />
+            ) : match.fixtureData?.blue || match.fixtureData?.gold ? (
+              `${match.fixtureData?.blue?.winningAlliance?.name || '?'} vs. ${
+                match.fixtureData?.gold?.winningAlliance?.name || '?'
+              }`
             ) : (
-              match.fixtureData?.blue || match.fixtureData?.gold
-                ? `${match.fixtureData?.blue?.winningAlliance?.name || '?'} vs. ${match.fixtureData?.gold?.winningAlliance?.name || '?'}`
-                : PLACEHOLDER
+              PLACEHOLDER
             )}
           </td>
           {props.edit && (

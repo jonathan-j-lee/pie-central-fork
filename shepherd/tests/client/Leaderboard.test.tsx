@@ -1,7 +1,5 @@
-import * as React from 'react';
-import * as _ from 'lodash';
+import Leaderboard from '../../app/client/components/Leaderboard';
 import {
-  act,
   delay,
   deleteEntities,
   getColumn,
@@ -11,12 +9,14 @@ import {
   recvControl,
   refresh,
   render,
-  screen,
   upsertEntities,
+  TextMatch,
 } from './test-utils';
 import { within } from '@testing-library/dom';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import Leaderboard from '../../app/client/components/Leaderboard';
+import * as _ from 'lodash';
+import * as React from 'react';
 
 beforeEach(async () => {
   render(<Leaderboard transitionDuration={0} />);
@@ -116,17 +116,19 @@ it.each([
   userEvent.click(button);
   let cells = getColumn(table, index);
   expect(cells).toHaveLength(contents.length);
-  for (const [cell, content] of _.zip(cells, contents)) {
-    if (content) {
-      expect(cell).toHaveTextContent(content);
-    }
+  for (const [cell, content] of _.zip(cells, contents) as [
+    HTMLTableCellElement,
+    TextMatch
+  ][]) {
+    expect(cell).toHaveTextContent(content);
   }
   userEvent.click(button);
   cells = getColumn(table, index);
-  for (const [cell, content] of _.zip(cells, _.reverse(contents))) {
-    if (content) {
-      expect(cell).toHaveTextContent(content);
-    }
+  for (const [cell, content] of _.zip(cells, _.reverse(contents)) as [
+    HTMLTableCellElement,
+    TextMatch
+  ][]) {
+    expect(cell).toHaveTextContent(content);
   }
 });
 
@@ -209,7 +211,7 @@ it('allows editing alliances', async () => {
   const names = getColumn(table, 0);
   userEvent.type(
     within(names[0]).getByDisplayValue(/santa clara/i),
-    '{selectall}Contra Costa',
+    '{selectall}Contra Costa'
   );
   userEvent.type(within(names[1]).getByPlaceholderText(/enter a name/i), 'San Mateo');
   await act(async () => {

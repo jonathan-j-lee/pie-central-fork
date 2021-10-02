@@ -1,7 +1,6 @@
-import * as React from 'react';
-import * as _ from 'lodash';
+import Schedule from '../../app/client/components/Schedule';
+import { AllianceColor, MatchEventType } from '../../app/types';
 import {
-  act,
   delay,
   deleteEntities,
   getColumn,
@@ -11,13 +10,14 @@ import {
   recvControl,
   refresh,
   render,
-  screen,
   upsertEntities,
+  TextMatch,
 } from './test-utils';
 import { within } from '@testing-library/dom';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import Schedule from '../../app/client/components/Schedule';
-import { AllianceColor, MatchEventType } from '../../app/types';
+import * as _ from 'lodash';
+import * as React from 'react';
 
 jest.mock('@svgdotjs/svg.js', () => ({
   SVG: jest.fn(() => ({
@@ -38,8 +38,9 @@ jest.mock('@svgdotjs/svg.js', () => ({
 jest.mock('react-router-dom', () => {
   return {
     // TODO: mock BrowserRouter, Switch, Route, Redirect
-    Link: ({ to, children }: { to: string, children?: React.ReactNode }) =>
-      <span>{children}</span>,
+    Link({ children }: { children?: React.ReactNode }) {
+      return <span>{children}</span>;
+    },
     useLocation: () => ({
       key: '',
       pathname: '/schedule',
@@ -118,7 +119,9 @@ it('displays match events', () => {
   expect(cells[0]).toHaveTextContent(/\+00:00\.0/);
   expect(cells[1]).toHaveTextContent(/gold/i);
   expect(cells[2]).toHaveTextContent(/stanford \(#1\)/i);
-  expect(cells[3]).toHaveTextContent(/started the autonomous phase for stanford \(#1\) for 00:30\./i);
+  expect(cells[3]).toHaveTextContent(
+    /started the autonomous phase for stanford \(#1\) for 00:30\./i
+  );
   expect(cells[4]).toHaveTextContent(EM_DASH);
   cells = rows[6]?.getElementsByTagName('td') ?? [];
   expect(cells).toHaveLength(5);
@@ -213,17 +216,19 @@ it.each([
   userEvent.click(button);
   let cells = getColumn(table, index);
   expect(cells).toHaveLength(contents.length);
-  for (const [cell, content] of _.zip(cells, contents)) {
-    if (content) {
-      expect(cell).toHaveTextContent(content);
-    }
+  for (const [cell, content] of _.zip(cells, contents) as [
+    HTMLTableCellElement,
+    TextMatch
+  ][]) {
+    expect(cell).toHaveTextContent(content);
   }
   userEvent.click(button);
   cells = getColumn(table, index);
-  for (const [cell, content] of _.zip(cells, _.reverse(contents))) {
-    if (content) {
-      expect(cell).toHaveTextContent(content);
-    }
+  for (const [cell, content] of _.zip(cells, _.reverse(contents)) as [
+    HTMLTableCellElement,
+    TextMatch
+  ][]) {
+    expect(cell).toHaveTextContent(content);
   }
 });
 
@@ -300,8 +305,12 @@ it('allows editing match events', async () => {
   const rows = getRows(table);
   expect(rows).toHaveLength(8);
   userEvent.type(rows[7].getElementsByTagName('input')[0], '{selectall}50000');
-  userEvent.selectOptions(within(rows[7]).getByDisplayValue(/^none$/i), [AllianceColor.BLUE]);
-  userEvent.selectOptions(within(rows[7]).getByDisplayValue(/^other$/i), [MatchEventType.MULTIPLY]);
+  userEvent.selectOptions(within(rows[7]).getByDisplayValue(/^none$/i), [
+    AllianceColor.BLUE,
+  ]);
+  userEvent.selectOptions(within(rows[7]).getByDisplayValue(/^other$/i), [
+    MatchEventType.MULTIPLY,
+  ]);
   userEvent.type(within(rows[7]).getByDisplayValue(/^0$/), '2.5');
   userEvent.type(within(rows[0]).getByPlaceholderText(/enter a description/i), 'A');
   userEvent.type(within(rows[7]).getByPlaceholderText(/enter a description/i), 'B');

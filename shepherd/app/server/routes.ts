@@ -1,21 +1,28 @@
-import * as http from 'http'; // TODO: support HTTPS
-import * as path from 'path';
-import * as _ from 'lodash';
-import express, { Express, Request, Response, NextFunction } from 'express';
-import helmet from 'helmet';
-import session from 'express-session';
+import { FixtureUpdate, LogSettings, User } from '../types';
+import FieldControl from './control';
+import db, {
+  User as UserModel,
+  Alliance,
+  Fixture,
+  Team,
+  Match,
+  MatchEvent,
+} from './db';
+import games from './games';
+import { BaseEntity, EntityRepository, RequestContext } from '@mikro-orm/core';
 import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
+import express, { Express, Request, Response, NextFunction } from 'express';
+import session from 'express-session';
+import helmet from 'helmet';
+import * as http from 'http';
+import * as _ from 'lodash';
 import passport from 'passport';
+import { Strategy as LocalStrategy } from 'passport-local';
+// TODO: support HTTPS
+import * as path from 'path';
 import winston from 'winston';
 import { Server as WebSocketServer } from 'ws';
-import { Strategy as LocalStrategy } from 'passport-local';
-import { BaseEntity, EntityRepository, RequestContext } from '@mikro-orm/core';
-
-import db, { User as UserModel, Alliance, Fixture, Team, Match, MatchEvent } from './db';
-import FieldControl from './control';
-import games from './games';
-import { FixtureUpdate, LogSettings, User } from '../types';
 
 declare global {
   namespace Express {
@@ -122,7 +129,6 @@ export default async function (options: RoutingOptions, controller?: AbortContro
   const server = http.createServer(app);
   const wsServer = new WebSocketServer({ server });
   const fc = new FieldControl(orm, wsServer);
-  const dirname = path.dirname(__filename);
   const auth = new passport.Passport();
 
   auth.use(
@@ -149,7 +155,7 @@ export default async function (options: RoutingOptions, controller?: AbortContro
   });
 
   app.use(helmet());
-  app.use('/static', express.static(path.join(dirname, 'static')));
+  app.use('/static', express.static(path.join(__dirname, 'static')));
   app.use(cookieParser());
   app.use(bodyParser.urlencoded({ extended: true }));
   app.use(bodyParser.json());
@@ -276,7 +282,7 @@ export default async function (options: RoutingOptions, controller?: AbortContro
     return Math.pow(2, Math.floor(Math.log2(x)));
   }
 
-  function *pairFixtures(fixtures: Fixture[]) {
+  function* pairFixtures(fixtures: Fixture[]) {
     if (fixtures.length % 2 === 1) {
       throw new Error('provide an even number of fixtures');
     }
@@ -309,10 +315,12 @@ export default async function (options: RoutingOptions, controller?: AbortContro
     if (alliances.length === 0) {
       return res.sendStatus(400);
     }
-    fixtures = alliances.map((alliance) => fixtureRepo.create({
-      winner: alliance,
-      root: false,
-    }));
+    fixtures = alliances.map((alliance) =>
+      fixtureRepo.create({
+        winner: alliance,
+        root: false,
+      })
+    );
     while (fixtures.length > 1) {
       const byes = fixtures.length - lastBinaryPower(fixtures.length);
       if (byes > 0) {
@@ -338,14 +346,13 @@ export default async function (options: RoutingOptions, controller?: AbortContro
       while (current) {
         chain.push(current);
         current = await fixtureRepo.findOne({
-          $or: [
-            { blue: current.id },
-            { gold: current.id },
-          ],
+          $or: [{ blue: current.id }, { gold: current.id }],
           winner: current.winner,
         });
       }
-      await fixtureRepo.persistAndFlush(chain.map((fixture) => fixture.assign({ winner: null })));
+      await fixtureRepo.persistAndFlush(
+        chain.map((fixture) => fixture.assign({ winner: null }))
+      );
     }
     await fixtureRepo.persistAndFlush(fixture.assign({ winner: update.winner }));
     res.sendStatus(200);
@@ -357,7 +364,7 @@ export default async function (options: RoutingOptions, controller?: AbortContro
   });
 
   app.get('*', (req, res) => {
-    res.sendFile(path.join(dirname, 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
   });
 
   if (options.game) {
@@ -383,13 +390,16 @@ export default async function (options: RoutingOptions, controller?: AbortContro
     await fc.broadcast();
   }, options.broadcastInterval);
 
-  server.listen({
-    port: options.port,
-    signal: controller?.signal,
-  }, () => {
-    // TODO: add hostname
-    logger.info(`Serving on ${options.port}`);
-  });
+  server.listen(
+    {
+      port: options.port,
+      signal: controller?.signal,
+    },
+    () => {
+      // TODO: add hostname
+      logger.info(`Serving on ${options.port}`);
+    }
+  );
 
   controller?.signal.addEventListener('abort', async () => {
     await fc.disconnectAll();

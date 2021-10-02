@@ -1,27 +1,18 @@
-import * as React from 'react';
-import { Action, Dispatch, Middleware, MiddlewareAPI } from 'redux';
-import { Provider } from 'react-redux';
-import * as _ from 'lodash';
 import { AppStore, makeStore } from '../../app/client/store';
-import controlSlice, {
+import {
   init as initControl,
   refresh as refreshData,
 } from '../../app/client/store/control';
-import logSlice from '../../app/client/store/log';
-import matchesSlice from '../../app/client/store/matches';
 import { logIn as logInUser } from '../../app/client/store/user';
-import {
-  AllianceColor,
-  ControlRequest,
-  ControlResponse,
-  Match,
-  MatchEventType,
-} from '../../app/types';
-import { render as rtlRender, screen } from '@testing-library/react';
+import { AllianceColor, ControlResponse, Match, MatchEventType } from '../../app/types';
 import '@testing-library/jest-dom';
+import { render as rtlRender } from '@testing-library/react';
+import 'jest-canvas-mock';
+import * as _ from 'lodash';
 import { rest } from 'msw';
 import { setupServer } from 'msw/node';
-import 'jest-canvas-mock';
+import * as React from 'react';
+import { Provider } from 'react-redux';
 
 declare global {
   interface Window {
@@ -73,50 +64,54 @@ function makeMatch({
         value: null,
         description: null,
       },
-      ...(excludeAuto ? [] : [
-        {
-          id: eventId++,
-          match,
-          type: MatchEventType.AUTO,
-          timestamp: 10000,
-          alliance: AllianceColor.BLUE,
-          team: 1,
-          value: 30000,
-          description: null,
-        },
-        {
-          id: eventId++,
-          match,
-          type: MatchEventType.AUTO,
-          timestamp: 10000,
-          alliance: AllianceColor.GOLD,
-          team: 2,
-          value: 30000,
-          description: null,
-        },
-      ]),
-      ...(excludeIdle ? [] : [
-        {
-          id: eventId++,
-          match,
-          type: MatchEventType.IDLE,
-          timestamp: 30000,
-          alliance: AllianceColor.BLUE,
-          team: 1,
-          value: null,
-          description: null,
-        },
-        {
-          id: eventId++,
-          match,
-          type: MatchEventType.IDLE,
-          timestamp: 30000,
-          alliance: AllianceColor.GOLD,
-          team: 2,
-          value: null,
-          description: null,
-        },
-      ]),
+      ...(excludeAuto
+        ? []
+        : [
+            {
+              id: eventId++,
+              match,
+              type: MatchEventType.AUTO,
+              timestamp: 10000,
+              alliance: AllianceColor.BLUE,
+              team: 1,
+              value: 30000,
+              description: null,
+            },
+            {
+              id: eventId++,
+              match,
+              type: MatchEventType.AUTO,
+              timestamp: 10000,
+              alliance: AllianceColor.GOLD,
+              team: 2,
+              value: 30000,
+              description: null,
+            },
+          ]),
+      ...(excludeIdle
+        ? []
+        : [
+            {
+              id: eventId++,
+              match,
+              type: MatchEventType.IDLE,
+              timestamp: 30000,
+              alliance: AllianceColor.BLUE,
+              team: 1,
+              value: null,
+              description: null,
+            },
+            {
+              id: eventId++,
+              match,
+              type: MatchEventType.IDLE,
+              timestamp: 30000,
+              alliance: AllianceColor.GOLD,
+              team: 2,
+              value: null,
+              description: null,
+            },
+          ]),
       {
         id: eventId++,
         match,
@@ -175,8 +170,7 @@ export const server = setupServer(
     return res(
       ctx.json({
         user: { username, darkTheme: false, game: null },
-        log: {
-        },
+        log: {},
       })
     );
   }),
@@ -220,7 +214,7 @@ export const server = setupServer(
           alliance: 2,
           ...robotOptions,
         },
-      ]),
+      ])
     );
   }),
   ...makeMutationEndpoints('teams'),
@@ -244,7 +238,7 @@ export const server = setupServer(
           blue: null,
           gold: null,
         },
-      }),
+      })
     );
   }),
   rest.post(makeEndpointUrl('bracket'), (req, res, ctx) => {
@@ -260,9 +254,14 @@ export const server = setupServer(
   }),
   ...makeMutationEndpoints('matches'),
   rest.get(makeEndpointUrl('alliances'), (req, res, ctx) => {
-    return res(ctx.json([{ id: 1, name: 'Alameda' }, { id: 2, name: 'Santa Clara' }]));
+    return res(
+      ctx.json([
+        { id: 1, name: 'Alameda' },
+        { id: 2, name: 'Santa Clara' },
+      ])
+    );
   }),
-  ...makeMutationEndpoints('alliances'),
+  ...makeMutationEndpoints('alliances')
 );
 
 beforeAll(() => server.listen());
@@ -274,32 +273,30 @@ afterEach(() => {
 
 export function render(ui: React.ReactElement<any>) {
   // https://html.spec.whatwg.org/multipage/web-sockets.html#the-websocket-interface
-  jest
-    .spyOn(window, 'WebSocket')
-    .mockImplementation((url: string, protocols?: string | string[]) => {
-      window.ws = {
-        CONNECTING: 0,
-        OPEN: 1,
-        CLOSING: 2,
-        CLOSED: 3,
-        readyState: 0,
-        bufferedAmount: 0,
-        protocol: '',
-        url: 'ws://localhost',
-        onopen: jest.fn(),
-        onclose: jest.fn(),
-        onerror: jest.fn(),
-        onmessage: jest.fn(),
-        close: jest.fn(),
-        send: jest.fn(),
-        addEventListener: jest.fn(),
-        removeEventListener: jest.fn(),
-        dispatchEvent: jest.fn(),
-        binaryType: 'blob',
-        extensions: '',
-      } as WebSocket;
-      return window.ws;
-    });
+  jest.spyOn(window, 'WebSocket').mockImplementation((url: string) => {
+    window.ws = {
+      CONNECTING: 0,
+      OPEN: 1,
+      CLOSING: 2,
+      CLOSED: 3,
+      readyState: 0,
+      bufferedAmount: 0,
+      protocol: '',
+      url,
+      onopen: jest.fn(),
+      onclose: jest.fn(),
+      onerror: jest.fn(),
+      onmessage: jest.fn(),
+      close: jest.fn(),
+      send: jest.fn(),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      dispatchEvent: jest.fn(),
+      binaryType: 'blob',
+      extensions: '',
+    } as WebSocket;
+    return window.ws;
+  });
   window.ResizeObserver =
     window.ResizeObserver ??
     jest.fn(() => {
@@ -355,7 +352,9 @@ export async function refresh() {
 }
 
 export async function logIn() {
-  await window.store.dispatch(logInUser({ username: 'admin', password: 'test' })).unwrap();
+  await window.store
+    .dispatch(logInUser({ username: 'admin', password: 'test' }))
+    .unwrap();
 }
 
 export function getRows(table: HTMLTableElement) {
@@ -363,9 +362,12 @@ export function getRows(table: HTMLTableElement) {
   return [...tableBody.getElementsByTagName('tr')] as HTMLTableRowElement[];
 }
 
-export function getColumn(table: HTMLTableElement, index: number): HTMLTableCellElement[] {
+export function getColumn(
+  table: HTMLTableElement,
+  index: number
+): HTMLTableCellElement[] {
   const rows = getRows(table);
   return rows.map((row) => row.getElementsByTagName('td')[index]);
 }
 
-export * from '@testing-library/react';
+export type TextMatch = string | RegExp;

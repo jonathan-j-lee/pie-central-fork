@@ -1,18 +1,17 @@
-import * as React from 'react';
+import { Team } from '../../../types';
+import { useAppDispatch } from '../../hooks';
+import teamsSlice from '../../store/teams';
 import {
   Button,
   Classes,
   Dialog,
   FormGroup,
   InputGroup,
-  Intent,
   INumericInputProps,
   NumericInput,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAppDispatch } from '../../hooks';
-import teamsSlice from '../../store/teams';
-import { Team } from '../../../types';
+import * as React from 'react';
 
 function PortInput(props: INumericInputProps & { id?: string }) {
   return (

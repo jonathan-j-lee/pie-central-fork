@@ -1,5 +1,7 @@
-import * as React from 'react';
-import * as _ from 'lodash';
+import Log from '../app/components/Log';
+import logSlice from '../app/store/log';
+import { changeMode, Mode } from '../app/store/runtime';
+import { LogLevel, LogOpenCondition } from '../app/store/settings';
 import {
   act,
   delay,
@@ -11,10 +13,8 @@ import {
   TestEditor,
 } from './test-utils';
 import userEvent from '@testing-library/user-event';
-import Log from '../app/components/Log';
-import logSlice from '../app/store/log';
-import { changeMode, Mode } from '../app/store/runtime';
-import { LogLevel, LogOpenCondition } from '../app/store/settings';
+import * as _ from 'lodash';
+import * as React from 'react';
 
 beforeEach(() => {
   render(

@@ -1,7 +1,7 @@
-import * as path from 'path';
 import { contextBridge, ipcRenderer } from 'electron';
-import * as shellEscape from 'shell-escape';
 import { SSHExecCommandOptions } from 'node-ssh';
+import * as path from 'path';
+import * as shellEscape from 'shell-escape';
 
 export interface SSHConfig {
   host: string;

@@ -1,9 +1,9 @@
 /*
- * For a detailed explanation regarding each configuration property and type check, visit:
+ * For a detailed explanation regarding each configuration property, visit:
  * https://jestjs.io/docs/configuration
  */
 
-export default {
+module.exports = {
   // All imported modules in your tests should be mocked automatically
   // automock: false,
 
@@ -20,7 +20,7 @@ export default {
   collectCoverage: true,
 
   // An array of glob patterns indicating a set of files for which coverage information should be collected
-  // collectCoverageFrom: undefined,
+  collectCoverageFrom: ['app/**/*.ts(x)?'],
 
   // The directory where Jest should output its coverage files
   coverageDirectory: 'coverage',
@@ -63,8 +63,7 @@ export default {
   // globals: {},
 
   // The maximum amount of workers used to run your tests. Can be specified as % or a number. E.g. maxWorkers: 10% will use 10% of your CPU amount + 1 as the maximum worker number. maxWorkers: 2 will use a maximum of 2 workers.
-  maxWorkers: '50%',
-  // maxWorkers: 1,
+  // maxWorkers: "50%",
 
   // An array of directory names to be searched recursively up from the requiring module's location
   // moduleDirectories: [

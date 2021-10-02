@@ -1,9 +1,9 @@
-import * as React from 'react';
+import { useAppDispatch, useAppSelector } from '../hooks';
+import editorSlice, { save } from '../store/editor';
 import { Button, Classes, Dialog, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Ace } from 'ace-builds/ace';
-import { useAppDispatch, useAppSelector } from '../hooks';
-import editorSlice, { save } from '../store/editor';
+import * as React from 'react';
 
 interface OverwriteDialogProps {
   editor?: Ace.Editor;

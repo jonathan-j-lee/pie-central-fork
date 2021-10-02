@@ -1,22 +1,20 @@
-import * as React from 'react';
-import { Ace } from 'ace-builds/ace';
-import * as _ from 'lodash';
-import { Provider } from 'react-redux';
-import { render as rtlRender, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import '@testing-library/jest-dom';
-import 'jest-canvas-mock';
-
 import Editor from '../app/components/Editor';
 import KeybindingMapper from '../app/components/KeybindingMapper';
 import OverwriteDialog from '../app/components/OverwriteDialog';
 import Toolbar from '../app/components/Toolbar';
-
 import { AppStore, makeStore } from '../app/store';
 import { append } from '../app/store/log';
 import { updateDevices } from '../app/store/peripherals';
 import runtimeSlice, { Mode } from '../app/store/runtime';
 import settingsSlice, { LogLevel } from '../app/store/settings';
+import '@testing-library/jest-dom';
+import { render as rtlRender, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { Ace } from 'ace-builds/ace';
+import 'jest-canvas-mock';
+import * as _ from 'lodash';
+import * as React from 'react';
+import { Provider } from 'react-redux';
 
 const openSettings = jest.fn();
 const closeSettings = jest.fn();
@@ -98,7 +96,7 @@ export type TextMatch =
   | string
   | ((content: string, element: Element | null) => boolean);
 
-function render(
+export function render(
   ui: React.ReactElement<any>,
   { storeOptions = {}, renderOptions = {} } = {}
 ) {
@@ -139,10 +137,11 @@ function render(
   return rtlRender(ui, { wrapper: Wrapper, ...renderOptions });
 }
 
-const updateSetting = (path: string, value: any) =>
+export function updateSetting(path: string, value: any) {
   window.store.dispatch(settingsSlice.actions.update({ path, value }));
+}
 
-const log = _.chain(LogLevel)
+export const log = _.chain(LogLevel)
   .map((level) => [
     level,
     (event: string, context: { timestamp: string; [key: string]: any }) =>
@@ -157,12 +156,13 @@ const log = _.chain(LogLevel)
   .fromPairs()
   .value();
 
-const dispatchDevUpdate = (update = {}, other = {}, timestamp = 0) => {
+export function dispatchDevUpdate(update = {}, other = {}, timestamp = 0) {
   window.store.dispatch(updateDevices(update, other));
   window.store.dispatch(runtimeSlice.actions.updateRate(timestamp));
-};
+}
+
+export function delay(timeout: number) {
+  return new Promise((resolve) => setTimeout(resolve, timeout));
+}
 
 export * from '@testing-library/react';
-export { render, log, dispatchDevUpdate, updateSetting };
-export const delay = (timeout: number) =>
-  new Promise((resolve) => setTimeout(resolve, timeout));

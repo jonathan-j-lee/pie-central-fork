@@ -1,6 +1,5 @@
-#!/bin/sh
+#!/bin/bash -ex
 
-set -e
 pylint runtime
 pylint \
   --disable=redefined-outer-name \

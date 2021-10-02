@@ -8,6 +8,11 @@ extends:
   - 'plugin:promise/recommended'
   - 'plugin:jest/recommended'
   - prettier
+ignorePatterns:
+  - /build
+  - /coverage
+  - /dist
+  - /node_modules
 parser: '@typescript-eslint/parser'
 parserOptions:
   ecmaFeatures:
@@ -20,13 +25,12 @@ plugins:
   - jest
   - '@typescript-eslint'
 rules:
-  comma-dangle: ['error', 'only-multiline']
+  comma-dangle:
+    - error
+    - only-multiline
   no-use-before-define: off
-  '@typescript-eslint/no-use-before-define': error
   no-unused-vars: off
   '@typescript-eslint/no-unused-vars': error
-ignorePatterns:
-  - build
 settings:
   react:
     version: detect

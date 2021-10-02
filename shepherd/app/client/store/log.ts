@@ -1,5 +1,3 @@
-import { createSlice, createEntityAdapter, PayloadAction } from '@reduxjs/toolkit';
-import * as _ from 'lodash';
 import {
   LogEvent as LogEventPayload,
   LogLevel,
@@ -8,6 +6,8 @@ import {
   Session,
 } from '../../types';
 import { fetch as fetchSession, save as saveSession } from './session';
+import { createSlice, createEntityAdapter, PayloadAction } from '@reduxjs/toolkit';
+import * as _ from 'lodash';
 
 export interface LogEvent {
   showContext: boolean;
@@ -41,7 +41,10 @@ export default createSlice({
   initialState,
   reducers: {
     append(state, action: PayloadAction<LogEventPayload[]>) {
-      adapter.addMany(state, action.payload.map((payload) => ({ showContext: false, payload })));
+      adapter.addMany(
+        state,
+        action.payload.map((payload) => ({ showContext: false, payload }))
+      );
       removeExcessEvents(state);
     },
     toggleContext(state, action: PayloadAction<string>) {
@@ -57,7 +60,10 @@ export default createSlice({
   },
   extraReducers(builder) {
     builder
-      .addCase(saveSession.pending, (state, action) => ({ ...state, ...action.meta.arg.log }))
+      .addCase(saveSession.pending, (state, action) => ({
+        ...state,
+        ...action.meta.arg.log,
+      }))
       .addCase(fetchSession.fulfilled, (state, action: PayloadAction<Session>) => {
         state = _.merge({}, state, action.payload.log);
         removeExcessEvents(state);

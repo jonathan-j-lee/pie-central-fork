@@ -1,13 +1,21 @@
-import * as React from 'react';
+import {
+  Alliance,
+  AllianceColor,
+  Fixture,
+  LogLevel,
+  Match,
+  MatchEventType,
+  Team,
+  displayTeam,
+} from '../../types';
+import { useAppSelector, useBracket } from '../hooks';
+import { selectors as allianceSelectors } from '../store/alliances';
+import { selectors as matchSelectors } from '../store/matches';
+import { selectors as teamSelectors } from '../store/teams';
 import { Button, HTMLSelect, MenuItem } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { Select } from '@blueprintjs/select';
-import { useAppSelector, useBracket } from '../hooks';
-import type { RootState } from '../store';
-import { selectors as allianceSelectors } from '../store/alliances';
-import { selectors as teamSelectors } from '../store/teams';
-import { selectors as matchSelectors } from '../store/matches';
-import { Alliance, AllianceColor, Fixture, LogLevel, Match, MatchEventType, Team, displayTeam } from '../../types';
+import * as React from 'react';
 
 interface EntitySelectProps<T> {
   id: number | null;
@@ -24,20 +32,20 @@ function makeSelect<T extends { id: number }>(
   icon?: IconName
 ) {
   const SelectFactory = Select.ofType<T | null>();
-  return (props: EntitySelectProps<T>) => {
+  return function EntitySelect(props: EntitySelectProps<T>) {
     const [entity, entities] = useEntities(props.id);
     return (
       <SelectFactory
         disabled={props.disabled}
-        items={
-          ([null] as (T | null)[]).concat(
-            entities
-              .filter((entity) => entity.id >= 0)
-              .filter(props.filter ?? (() => true))
-          )
-        }
+        items={([null] as (T | null)[]).concat(
+          entities
+            .filter((entity) => entity.id >= 0)
+            .filter(props.filter ?? (() => true))
+        )}
         itemPredicate={(query, entity) =>
-          selectName(entity ?? undefined).toLowerCase().includes(query.toLowerCase())
+          selectName(entity ?? undefined)
+            .toLowerCase()
+            .includes(query.toLowerCase())
         }
         itemRenderer={(entity, { handleClick }) => (
           <MenuItem
@@ -75,15 +83,19 @@ export const AllianceSelect = makeSelect<Alliance>(
 export const FixtureSelect = makeSelect<Fixture>(
   (id) => {
     let [, fixtures] = useBracket();
-    fixtures = fixtures
-      .filter((fixture) => fixture.blue?.winner || fixture.gold?.winner);
+    fixtures = fixtures.filter(
+      (fixture) => fixture.blue?.winner || fixture.gold?.winner
+    );
     const [fixture] = fixtures.filter((fixture) => fixture.id === id);
     return [fixture, fixtures];
   },
-  (fixture) => fixture
-    ? `${fixture.blue?.winningAlliance?.name || '?'} vs. ${fixture.gold?.winningAlliance?.name || '?'}`
-    : '',
-  IconNames.MANY_TO_ONE,
+  (fixture) =>
+    fixture
+      ? `${fixture.blue?.winningAlliance?.name || '?'} vs. ${
+          fixture.gold?.winningAlliance?.name || '?'
+        }`
+      : '',
+  IconNames.MANY_TO_ONE
 );
 
 export const TeamSelect = makeSelect<Team>(
@@ -94,7 +106,7 @@ export const TeamSelect = makeSelect<Team>(
       teamSelectors.selectAll(teams),
     ];
   },
-  (team) => team ? displayTeam(team) : '',
+  (team) => (team ? displayTeam(team) : '')
 );
 
 export const MatchSelect = makeSelect<Match>(
@@ -156,9 +168,7 @@ export function LogLevelSelect(props: EnumSelectProps<LogLevel>) {
   return (
     <HTMLSelect
       value={props.value}
-      onChange={({ currentTarget: { value } }) =>
-        props.setValue(value as LogLevel)
-      }
+      onChange={({ currentTarget: { value } }) => props.setValue(value as LogLevel)}
     >
       <option value={LogLevel.DEBUG}>Debug</option>
       <option value={LogLevel.INFO}>Info</option>

@@ -241,8 +241,8 @@ async def test_bad_requests(mocker, endpoints):
     if isinstance(client.node, remote.SocketNode):
         with pytest.raises(remote.RemoteCallError):
             await client.call['echo-id']()  # No address
-    mocker.patch('random.randrange')
-    random.randrange.return_value = 0
+    mocker.patch('random.randint')
+    random.randint.return_value = 0
     with client.requests.new_request():
         with pytest.raises(ValueError):
             await client.call['echo-id'](1, address=service.node.address)

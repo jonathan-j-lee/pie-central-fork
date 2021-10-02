@@ -1,9 +1,8 @@
-import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import request from 'superagent';
-import * as _ from 'lodash';
-import type { RootState } from '.';
 import { User, Session } from '../../types';
 import { fetch as fetchSession, save as saveSession } from './session';
+import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
+import * as _ from 'lodash';
+import request from 'superagent';
 
 interface LogInRequest {
   username: string;
@@ -20,7 +19,7 @@ export const logIn = createAsyncThunk<void, LogInRequest | undefined>(
   }
 );
 
-export const logOut = createAsyncThunk('user/logOut', async (arg, thunkAPI) => {
+export const logOut = createAsyncThunk('user/logOut', async () => {
   await request.post('/logout');
 });
 
@@ -37,10 +36,12 @@ export default createSlice({
       .addCase(logOut.fulfilled, (state) => {
         state.username = null;
       })
-      .addCase(saveSession.pending, (state, action) => ({ ...state, ...action.meta.arg.user }))
-      .addCase(fetchSession.fulfilled,
-        (state, action: PayloadAction<Session>) =>
-          _.merge({}, state, action.payload.user)
+      .addCase(saveSession.pending, (state, action) => ({
+        ...state,
+        ...action.meta.arg.user,
+      }))
+      .addCase(fetchSession.fulfilled, (state, action: PayloadAction<Session>) =>
+        _.merge({}, state, action.payload.user)
       );
   },
 });

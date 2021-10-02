@@ -1,14 +1,14 @@
-import * as React from 'react';
-import { H1, Intent, Spinner } from '@blueprintjs/core';
-import { useTimer } from '../hooks';
 import { displayTime, displayPhase, isRunning } from '../../types';
+import { useTimer } from '../hooks';
+import { H1, Intent, Spinner } from '@blueprintjs/core';
+import * as React from 'react';
 
 export default function Timer() {
   const timer = useTimer();
   const running = isRunning(timer.phase) && timer.totalTime > 0;
   const timeRemaining = running ? Math.max(timer.timeRemaining, 0) : -1;
   const fraction = running ? timeRemaining / timer.totalTime : undefined;
-  let intent: Intent | undefined = undefined;
+  let intent: Intent | undefined;
   if (fraction) {
     intent = Intent.SUCCESS;
     if (fraction < 0.1) {

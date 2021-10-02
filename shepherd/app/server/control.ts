@@ -1,14 +1,3 @@
-import EventEmitter from 'events';
-import { EntityManager, MikroORM } from '@mikro-orm/core';
-import RuntimeClient from '@pioneers/runtime-client';
-import WebSocket, { Server as WebSocketServer } from 'ws';
-import winston from 'winston';
-import * as _ from 'lodash';
-import {
-  Match as MatchModel,
-  MatchEvent as MatchEventModel,
-  Team as TeamModel,
-} from './db';
 import {
   GameState,
   Match,
@@ -21,6 +10,17 @@ import {
   TimerState,
   RobotStatus,
 } from '../types';
+import {
+  Match as MatchModel,
+  MatchEvent as MatchEventModel,
+  Team as TeamModel,
+} from './db';
+import { EntityManager, MikroORM } from '@mikro-orm/core';
+import RuntimeClient from '@pioneers/runtime-client';
+import EventEmitter from 'events';
+import * as _ from 'lodash';
+import winston from 'winston';
+import WebSocket, { Server as WebSocketServer } from 'ws';
 
 const logger = winston.createLogger({
   level: 'debug',
@@ -37,7 +37,8 @@ class Robot extends EventEmitter {
   private lastUpdate: number;
   private uids: string[];
 
-  constructor(teamId: number, client: RuntimeClient) { // TODO: extend runtime client
+  constructor(teamId: number, client: RuntimeClient) {
+    // TODO: extend runtime client
     super();
     this.teamId = teamId;
     this.client = client;
@@ -223,15 +224,19 @@ export default class FieldControl {
         activations: [teamId],
       });
     });
-    newRobot.on('log', async (events: LogEvent[]) => await this.broadcast({
-      res: {
-        control: {},
-        events: events.map((event) => ({
-          ...event,
-          team: _.pick(team, ['id', 'number', 'name', 'hostname']),
-        })),
-      },
-    }));
+    newRobot.on(
+      'log',
+      async (events: LogEvent[]) =>
+        await this.broadcast({
+          res: {
+            control: {},
+            events: events.map((event) => ({
+              ...event,
+              team: _.pick(team, ['id', 'number', 'name', 'hostname']),
+            })),
+          },
+        })
+    );
     this.robots.set(teamId, newRobot);
     return newRobot;
   }
@@ -322,11 +327,14 @@ export default class FieldControl {
     }
   }
 
-  async broadcast({ clients, res }: {
-    clients?: Set<WebSocket> | WebSocket[],
-    res?: ControlResponse,
+  async broadcast({
+    clients,
+    res,
+  }: {
+    clients?: Set<WebSocket> | WebSocket[];
+    res?: ControlResponse;
   } = {}) {
-    const payload = JSON.stringify(res ?? await this.makeResponse());
+    const payload = JSON.stringify(res ?? (await this.makeResponse()));
     (clients ?? this.wsServer.clients).forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(payload);

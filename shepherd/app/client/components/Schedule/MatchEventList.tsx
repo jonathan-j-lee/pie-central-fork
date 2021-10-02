@@ -1,17 +1,3 @@
-import * as React from 'react';
-import { HTMLSelect, InputGroup, NumericInput } from '@blueprintjs/core';
-
-import { DeleteButton } from '../EntityButtons';
-import {
-  AllianceColorSelect,
-  MatchEventTypeSelect,
-  TeamSelect,
-} from '../EntitySelects';
-import EntityTable from '../EntityTable';
-import { PLACEHOLDER } from '../Util';
-import { useAppDispatch, useAppSelector } from '../../hooks';
-import { updateEvent, removeEvent } from '../../store/matches';
-import { selectors as teamSelectors } from '../../store/teams';
 import {
   AllianceColor,
   GameState,
@@ -22,6 +8,19 @@ import {
   displayTeam,
   displayTime,
 } from '../../../types';
+import { useAppDispatch, useAppSelector } from '../../hooks';
+import { updateEvent, removeEvent } from '../../store/matches';
+import { selectors as teamSelectors } from '../../store/teams';
+import { DeleteButton } from '../EntityButtons';
+import {
+  AllianceColorSelect,
+  MatchEventTypeSelect,
+  TeamSelect,
+} from '../EntitySelects';
+import EntityTable from '../EntityTable';
+import { PLACEHOLDER } from '../Util';
+import { InputGroup, NumericInput } from '@blueprintjs/core';
+import * as React from 'react';
 
 const TYPES_WITH_VALUE = [
   MatchEventType.AUTO,
@@ -112,18 +111,20 @@ export default function MatchEventList(props: { match: Match; edit: boolean }) {
                 onSelect={(team) =>
                   dispatch(updateEvent(props.match, event.id, { team }))
                 }
-                {...(event.type === MatchEventType.JOIN ? {} : {
-                  filter(team) {
-                    switch (event.alliance) {
-                      case AllianceColor.BLUE:
-                        return game.blue.teams.includes(team.id);
-                      case AllianceColor.GOLD:
-                        return game.gold.teams.includes(team.id);
-                      default:
-                        return false;
-                    }
-                  },
-                })}
+                {...(event.type === MatchEventType.JOIN
+                  ? {}
+                  : {
+                      filter(team) {
+                        switch (event.alliance) {
+                          case AllianceColor.BLUE:
+                            return game.blue.teams.includes(team.id);
+                          case AllianceColor.GOLD:
+                            return game.gold.teams.includes(team.id);
+                          default:
+                            return false;
+                        }
+                      },
+                    })}
               />
             ) : event.team ? (
               displayTeam(event.teamData)

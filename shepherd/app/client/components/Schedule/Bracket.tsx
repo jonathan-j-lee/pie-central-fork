@@ -1,6 +1,4 @@
-import * as React from 'react';
-import { Callout, Colors, Intent } from '@blueprintjs/core';
-import { Container, SVG } from '@svgdotjs/svg.js';
+import { Fixture } from '../../../types';
 import {
   useAppDispatch,
   useAppSelector,
@@ -9,7 +7,9 @@ import {
 } from '../../hooks';
 import type { AppDispatch } from '../../store';
 import { updateWinner } from '../../store/bracket';
-import { Alliance, Fixture } from '../../../types';
+import { Callout, Colors, Intent } from '@blueprintjs/core';
+import { Container, SVG } from '@svgdotjs/svg.js';
+import * as React from 'react';
 
 interface BracketColors {
   text: string;
@@ -84,14 +84,14 @@ interface BracketNode {
   y: number;
 }
 
-const sign = (x: number) => x < 0 ? -1 : (x > 0 ? 1 : 0);
+const sign = (x: number) => (x < 0 ? -1 : x > 0 ? 1 : 0);
 
 function getBracketPath(
   current: BracketNode,
   prev: BracketNode,
-  options: BracketRenderOptions,
+  options: BracketRenderOptions
 ) {
-  const xDelta = sign(options.horizontalOffset) * options.width / 2;
+  const xDelta = (sign(options.horizontalOffset) * options.width) / 2;
   const xNear = current.x - xDelta;
   const xFar = current.x + xDelta;
   const xMid = (prev.x + xNear) / 2;
@@ -105,7 +105,7 @@ function drawNextRound(
   draw: Container,
   current: BracketNode,
   xFar: number,
-  options: BracketRenderOptions,
+  options: BracketRenderOptions
 ) {
   if (current.fixture) {
     const x = current.x + options.horizontalOffset;
@@ -119,17 +119,17 @@ function drawNextRound(
   }
 }
 
-function drawNode(draw: Container, current: BracketNode, options: BracketRenderOptions) {
+function drawNode(
+  draw: Container,
+  current: BracketNode,
+  options: BracketRenderOptions
+) {
   const winner = current.fixture?.winner;
-  const label = draw
-    .rect(options.width, options.height)
-    .center(current.x, current.y)
+  const label = draw.rect(options.width, options.height).center(current.x, current.y);
   if (options.current === current.fixture?.id) {
     const pattern = draw
       .pattern(2 * options.stripeWidth, options.height, (add) => {
-        add
-          .rect(options.stripeWidth, options.height)
-          .fill(options.colors.activeLabel);
+        add.rect(options.stripeWidth, options.height).fill(options.colors.activeLabel);
         add
           .rect(options.stripeWidth, options.height)
           .move(options.stripeWidth, 0)
@@ -152,7 +152,7 @@ function drawPath(
   prev: Fixture,
   branch: 'blue' | 'gold',
   pathSpec: string,
-  options: BracketRenderOptions,
+  options: BracketRenderOptions
 ) {
   const winner = current.winner;
   const activeColor = options.colors.activePath[branch];
@@ -169,7 +169,9 @@ function drawPath(
     .stroke({ width: options.strokeWidth, color });
   if (options.edit && winner) {
     path
-      .on('mouseover', () => path.stroke({ width: options.strokeWidth, color: selectedColor }))
+      .on('mouseover', () =>
+        path.stroke({ width: options.strokeWidth, color: selectedColor })
+      )
       .on('mouseout', () => path.stroke({ width: options.strokeWidth, color }))
       .on('click', () => {
         if (prev) {
@@ -188,7 +190,7 @@ function drawBracket(
   current: BracketNode,
   prev: BracketNode,
   branch: 'blue' | 'gold',
-  options: BracketRenderOptions,
+  options: BracketRenderOptions
 ) {
   if (current.fixture && prev.fixture) {
     const { xFar, path } = getBracketPath(current, prev, options);
@@ -218,9 +220,7 @@ export default function Bracket(props: { edit: boolean }) {
       colors: darkTheme ? DARK_THEME : LIGHT_THEME,
       current: match?.fixture ?? null,
     };
-    draw
-      .text('Champion')
-      .center(80, -60);
+    draw.text('Champion').center(80, -60);
     draw
       .polyline('120,-45 40,-45 20,-15')
       .fill('none')
@@ -230,25 +230,28 @@ export default function Bracket(props: { edit: boolean }) {
       { fixture: bracket.blue, x: -80, y: -60 },
       { fixture: bracket, x: 0, y: -options.height / 2 },
       'blue',
-      { ...options, horizontalOffset: -150 },
+      { ...options, horizontalOffset: -150 }
     );
     drawBracket(
       draw,
       { fixture: bracket.gold, x: 80, y: 60 },
       { fixture: bracket, x: 0, y: options.height / 2 },
       'gold',
-      { ...options, horizontalOffset: 150 },
+      { ...options, horizontalOffset: 150 }
     );
     drawNode(draw, { fixture: bracket, x: 0, y: 0 }, options);
   }, [props.edit, darkTheme, dispatch, diagramRef, bracket]);
-  return bracket && (
-    <>
-      <svg width="100%" height="400px" ref={diagramRef} />
-      {props.edit && (
-        <Callout className="spacer" intent={Intent.PRIMARY}>
-          You can edit which alliances advance in each round by clicking the blue and gold paths.
-        </Callout>
-      )}
-    </>
+  return (
+    bracket && (
+      <>
+        <svg width="100%" height="400px" ref={diagramRef} />
+        {props.edit && (
+          <Callout className="spacer" intent={Intent.PRIMARY}>
+            You can edit which alliances advance in each round by clicking the blue and
+            gold paths.
+          </Callout>
+        )}
+      </>
+    )
   );
 }

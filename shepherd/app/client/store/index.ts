@@ -1,4 +1,3 @@
-import { configureStore } from '@reduxjs/toolkit';
 import alliances from './alliances';
 import bracket from './bracket';
 import control, { wsClient } from './control';
@@ -6,6 +5,7 @@ import log from './log';
 import matches from './matches';
 import teams from './teams';
 import user from './user';
+import { configureStore } from '@reduxjs/toolkit';
 
 export function makeStore() {
   return configureStore({

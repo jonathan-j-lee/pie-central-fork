@@ -1,6 +1,3 @@
-import request from 'supertest';
-import * as _ from 'lodash';
-import WebSocket from 'ws';
 import serve from '../../app/server/routes';
 import {
   AllianceColor,
@@ -11,10 +8,12 @@ import {
   MatchEvent,
   MatchEventType,
   MatchPhase,
-  Team,
   TimerState,
 } from '../../app/types';
 import RuntimeClient from '@pioneers/runtime-client';
+import * as _ from 'lodash';
+import request from 'supertest';
+import WebSocket from 'ws';
 
 jest.mock('@pioneers/runtime-client');
 
@@ -44,58 +43,6 @@ function delay(duration: number) {
   return new Promise((resolve) => setTimeout(resolve, duration));
 }
 
-beforeEach(async () => {
-  controller = new AbortController();
-  const { app, server } = await serve({
-    port: 0,
-    dbFilename: ':memory:',
-    sessionSecret: 'test-secret',
-    broadcastInterval: 400,
-  }, controller);
-  const address = server.address();
-  if (!address) {
-    throw new Error('server has no address');
-  }
-  ws = new WebSocket(_.isString(address) ? address : `ws://localhost:${address.port}`);
-  ws.on('message', broadcast);
-  await recvControl();
-
-  agent = request.agent(app);
-  await agent
-    .post('/login')
-    .send({ username: 'admin', password: 'test' })
-    .expect(200);
-  const { body: [team1, team2] } = await agent
-    .put('/teams')
-    .send([
-      { number: 0, name: 'Berkeley', hostname: '192.168.1.1', ...CONNECTION_SETTINGS },
-      { number: 1, name: 'Stanford', hostname: '192.168.1.2', ...CONNECTION_SETTINGS },
-      { number: 2, name: 'MIT', hostname: '192.168.1.3', ...CONNECTION_SETTINGS },
-    ])
-    .expect(200);
-  const { body: [match] } = await agent
-    .put('/matches')
-    .send([
-      {
-        events: [
-          { type: MatchEventType.JOIN, alliance: AllianceColor.BLUE, team: team1.id },
-          { type: MatchEventType.JOIN, alliance: AllianceColor.GOLD, team: team2.id },
-          { type: MatchEventType.AUTO, team: team1.id, value: 30000, timestamp: 10000 },
-          { type: MatchEventType.AUTO, team: team2.id, value: 30000, timestamp: 10000 },
-        ],
-      }
-    ])
-    .expect(200);
-  matchId = match.id;
-  clientMockClear();
-});
-
-afterEach(() => {
-  jest.useRealTimers();
-  controller?.abort();
-  ws.close();
-});
-
 function sendControl(req: ControlRequest) {
   ws.send(JSON.stringify(req));
 }
@@ -108,8 +55,66 @@ function recvControl(): Promise<ControlResponse> {
   });
 }
 
+beforeEach(async () => {
+  controller = new AbortController();
+  const { app, server } = await serve(
+    {
+      port: 0,
+      dbFilename: ':memory:',
+      sessionSecret: 'test-secret',
+      broadcastInterval: 400,
+    },
+    controller
+  );
+  const address = server.address();
+  if (!address) {
+    throw new Error('server has no address');
+  }
+  ws = new WebSocket(_.isString(address) ? address : `ws://localhost:${address.port}`);
+  ws.on('message', broadcast);
+  await recvControl();
+
+  agent = request.agent(app);
+  await agent.post('/login').send({ username: 'admin', password: 'test' }).expect(200);
+  const {
+    body: [team1, team2],
+  } = await agent
+    .put('/teams')
+    .send([
+      { number: 0, name: 'Berkeley', hostname: '192.168.1.1', ...CONNECTION_SETTINGS },
+      { number: 1, name: 'Stanford', hostname: '192.168.1.2', ...CONNECTION_SETTINGS },
+      { number: 2, name: 'MIT', hostname: '192.168.1.3', ...CONNECTION_SETTINGS },
+    ])
+    .expect(200);
+  const {
+    body: [match],
+  } = await agent
+    .put('/matches')
+    .send([
+      {
+        events: [
+          { type: MatchEventType.JOIN, alliance: AllianceColor.BLUE, team: team1.id },
+          { type: MatchEventType.JOIN, alliance: AllianceColor.GOLD, team: team2.id },
+          { type: MatchEventType.AUTO, team: team1.id, value: 30000, timestamp: 10000 },
+          { type: MatchEventType.AUTO, team: team2.id, value: 30000, timestamp: 10000 },
+        ],
+      },
+    ])
+    .expect(200);
+  matchId = match.id;
+  clientMockClear();
+});
+
+afterEach(() => {
+  jest.useRealTimers();
+  controller?.abort();
+  ws.close();
+});
+
 it('sets and clears the current match', async () => {
   sendControl({ matchId });
+  await recvControl();
+  await recvControl();
   expect(await recvControl()).toMatchObject({
     control: {
       matchId,
@@ -137,6 +142,8 @@ it('sets and clears the current match', async () => {
           team: 2,
           value: 30000,
         },
+        { type: MatchEventType.IDLE, alliance: AllianceColor.BLUE, team: 1 },
+        { type: MatchEventType.IDLE, alliance: AllianceColor.GOLD, team: 2 },
       ],
     },
   });
@@ -147,16 +154,17 @@ it('sets and clears the current match', async () => {
     expect(client.open).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.objectContaining({ host, ...CONNECTION_SETTINGS }),
+      expect.objectContaining({ host, ...CONNECTION_SETTINGS })
     );
-    expect(client.request).toHaveBeenCalledTimes(1);
-    expect(client.request).toHaveBeenLastCalledWith('executor-service', 'auto');
+    expect(client.request).toHaveBeenCalledTimes(2);
+    expect(client.request).toHaveBeenNthCalledWith(1, 'executor-service', 'auto');
+    expect(client.request).toHaveBeenNthCalledWith(2, 'executor-service', 'idle');
   }
 
   sendControl({ matchId: null });
   expect(await recvControl()).toMatchObject({ control: { matchId: null, robots: [] } });
   for (const client of clients) {
-    expect(client.request).toHaveBeenCalledTimes(2);
+    expect(client.request).toHaveBeenCalledTimes(3);
     expect(client.request).toHaveBeenLastCalledWith('executor-service', 'idle');
     expect(client.close).toHaveBeenCalled();
   }
@@ -204,9 +212,9 @@ it('runs and automatically idles robots', async () => {
   expect(client2.request).toHaveBeenCalledTimes(1);
   expect(client2.request).toHaveBeenCalledWith('executor-service', 'idle');
 
-  const { body: [match] } = await agent
-    .get('/matches')
-    .expect(200);
+  const {
+    body: [match],
+  } = await agent.get('/matches').expect(200);
   expect(match.events).toHaveLength(7);
   expect(match.events).toMatchObject(
     expect.arrayContaining(events.map((event) => expect.objectContaining(event)))
@@ -240,36 +248,34 @@ it('runs and preemptively idles robots', async () => {
     expect(client.request).toHaveBeenNthCalledWith(2, 'executor-service', 'idle');
   }
 
-  const { body: [match] } = await agent
-    .get('/matches')
-    .expect(200);
+  const {
+    body: [match],
+  } = await agent.get('/matches').expect(200);
   expect(match.events).toHaveLength(8);
   expect(match.events).toMatchObject(
     expect.arrayContaining(
-      autoEvents
-        .concat(idleEvents)
-        .map((event) => expect.objectContaining(event))
+      autoEvents.concat(idleEvents).map((event) => expect.objectContaining(event))
     )
   );
 });
 
 it('extends a match', async () => {
   const teleopEvents = [
-    { type: MatchEventType.TELEOP, team: 1, alliance: AllianceColor.BLUE, value: 50 },
-    { type: MatchEventType.TELEOP, team: 2, alliance: AllianceColor.GOLD, value: 50 },
+    { type: MatchEventType.TELEOP, team: 1, alliance: AllianceColor.BLUE, value: 100 },
+    { type: MatchEventType.TELEOP, team: 2, alliance: AllianceColor.GOLD, value: 100 },
   ];
   sendControl({ matchId, events: teleopEvents });
   await recvControl();
   const afterTeleop = Date.now();
   const extendEvents = [
-    { type: MatchEventType.EXTEND, team: 1, alliance: AllianceColor.BLUE, value: 100 },
-    { type: MatchEventType.EXTEND, team: 2, alliance: AllianceColor.GOLD, value: 100 },
+    { type: MatchEventType.EXTEND, team: 1, alliance: AllianceColor.BLUE, value: 200 },
+    { type: MatchEventType.EXTEND, team: 2, alliance: AllianceColor.GOLD, value: 200 },
   ];
   sendControl({ matchId, events: extendEvents });
   await recvControl();
 
-  await delay(50);
-  expect(Date.now() - afterTeleop).toBeLessThan(150);
+  await delay(100);
+  expect(Date.now() - afterTeleop).toBeLessThan(300);
   const clients = (RuntimeClient as jest.Mock).mock.instances;
   expect(clients).toHaveLength(2);
   for (const client of clients) {
@@ -279,9 +285,9 @@ it('extends a match', async () => {
     expect(client.request).toHaveBeenNthCalledWith(2, 'executor-service', 'teleop');
   }
 
+  await delay(200);
+  expect(Date.now() - afterTeleop).toBeGreaterThan(300);
   await delay(100);
-  expect(Date.now() - afterTeleop).toBeGreaterThan(150);
-  await delay(50);
   for (const client of clients) {
     expect(client.request).toHaveBeenCalledTimes(3);
     expect(client.request).toHaveBeenNthCalledWith(3, 'executor-service', 'idle');
@@ -302,9 +308,9 @@ it('e-stops robots', async () => {
     expect(client.notify).toHaveBeenLastCalledWith('executor-service', 'estop');
   }
 
-  const { body: [match] } = await agent
-    .get('/matches')
-    .expect(200);
+  const {
+    body: [match],
+  } = await agent.get('/matches').expect(200);
   expect(match.events).toHaveLength(6);
   expect(match.events).toMatchObject(
     expect.arrayContaining(events.map((event) => expect.objectContaining(event)))
@@ -321,14 +327,18 @@ it('sends async robot updates', async () => {
   expect(clients).toHaveLength(2);
   const [[onUpdate]] = clients[0].open.mock.calls;
   onUpdate(new Error('bad decoding'), []);
-  onUpdate(null, [{
-    0: { switch0: true, switch1: false, switch2: true },
-    1: { switch0: false, switch1: true, switch2: true },
-  }]);
-  onUpdate(null, [{
-    0: { switch0: true, switch1: false, switch2: true },
-    2: { switch0: false, switch1: true, switch2: true },
-  }]);
+  onUpdate(null, [
+    {
+      0: { switch0: true, switch1: false, switch2: true },
+      1: { switch0: false, switch1: true, switch2: true },
+    },
+  ]);
+  onUpdate(null, [
+    {
+      0: { switch0: true, switch1: false, switch2: true },
+      2: { switch0: false, switch1: true, switch2: true },
+    },
+  ]);
 
   jest.advanceTimersByTime(2000);
   const res = await recvControl();
@@ -341,9 +351,9 @@ it('sends async robot updates', async () => {
 it('sends async match updates', async () => {
   sendControl({ matchId });
   await recvControl();
-  const { body: [match] } = await agent
-    .get('/matches')
-    .expect(200);
+  const {
+    body: [match],
+  } = await agent.get('/matches').expect(200);
   await agent
     .put('/matches')
     .send([
@@ -363,45 +373,49 @@ it('sends async match updates', async () => {
   expect(gameAfter.blue.score).toBeCloseTo(5);
 });
 
-it.each([
-  [MatchPhase.AUTO],
-  [MatchPhase.TELEOP],
-])('sends async timer updates during %s', async (phase) => {
-  jest.useFakeTimers();
-  jest.setSystemTime(50000);
-  const timer: TimerState = {
-    phase,
-    timeRemaining: 10000,
-    totalTime: 10000,
-    stage: 'init',
-  };
+it.each([[MatchPhase.AUTO], [MatchPhase.TELEOP]])(
+  'sends async timer updates during %s',
+  async (phase) => {
+    jest.useFakeTimers();
+    jest.setSystemTime(50000);
+    const timer: TimerState = {
+      phase,
+      timeRemaining: 10000,
+      totalTime: 10000,
+      stage: 'init',
+    };
 
-  sendControl({ matchId, timer });
-  jest.advanceTimersByTime(50000);
-  expect((await recvControl()).control.timer).toMatchObject(timer);
+    sendControl({ matchId, timer });
+    jest.advanceTimersByTime(50000);
+    expect((await recvControl()).control.timer).toMatchObject(timer);
 
-  const type = phase === MatchPhase.AUTO ? MatchEventType.AUTO : MatchEventType.TELEOP;
-  sendControl({
-    events: [{ type, team: 1, value: 10000 }, { type, team: 2, value: 10000 }],
-  });
-  for (const i of _.range(10)) {
+    const type =
+      phase === MatchPhase.AUTO ? MatchEventType.AUTO : MatchEventType.TELEOP;
+    sendControl({
+      events: [
+        { type, team: 1, value: 10000 },
+        { type, team: 2, value: 10000 },
+      ],
+    });
+    for (const i of _.range(10)) {
+      expect((await recvControl()).control.timer).toMatchObject({
+        ...timer,
+        timeRemaining: 10000 - i * 1000,
+        stage: 'running',
+      });
+      jest.advanceTimersByTime(1000);
+    }
     expect((await recvControl()).control.timer).toMatchObject({
       ...timer,
-      timeRemaining: 10000 - i*1000,
-      stage: 'running',
+      timeRemaining: 0,
+      stage: 'done',
     });
-    jest.advanceTimersByTime(1000);
-  }
-  expect((await recvControl()).control.timer).toMatchObject({
-    ...timer,
-    timeRemaining: 0,
-    stage: 'done',
-  });
 
-  sendControl({ matchId, timer });
-  jest.advanceTimersByTime(50000);
-  expect((await recvControl()).control.timer).toMatchObject(timer);
-});
+    sendControl({ matchId, timer });
+    jest.advanceTimersByTime(50000);
+    expect((await recvControl()).control.timer).toMatchObject(timer);
+  }
+);
 
 it('sends async log updates', async () => {
   sendControl({ matchId });
@@ -435,9 +449,9 @@ it('sends async log updates', async () => {
 it('disconnects from a robot', async () => {
   sendControl({ matchId });
   await recvControl();
-  const { body: [match] } = await agent
-    .get('/matches')
-    .expect(200);
+  const {
+    body: [match],
+  } = await agent.get('/matches').expect(200);
   await agent
     .put('/matches')
     .send([{ ...match, events: match.events.slice(1) }])
@@ -464,29 +478,36 @@ it('broadcasts updates to multiple websocket clients', async () => {
   }
 });
 
-it.each([
-  [MatchEventType.AUTO],
-  [MatchEventType.TELEOP],
-])('does not block when a robot is offline during %s', async (type) => {
-  sendControl({ matchId });
-  await recvControl();
-  await delay(50); // Knex (SQL query generator) will time out without this delay
-  const [client1, client2] = (RuntimeClient as jest.Mock).mock.instances;
-  let done = false;
-  client1.request.mockImplementation(async () => {
-    while (!done) {
-      await delay(50);
-    }
-  });
+it.each([[MatchEventType.AUTO], [MatchEventType.TELEOP]])(
+  'does not block when a robot is offline during %s',
+  async (type) => {
+    sendControl({ matchId });
+    await recvControl();
+    await delay(50); // Knex (SQL query generator) will time out without this delay
+    const [client1, client2] = (RuntimeClient as jest.Mock).mock.instances;
+    let done = false;
+    client1.request.mockImplementation(async () => {
+      // eslint-disable-next-line no-unmodified-loop-condition
+      while (!done) {
+        await delay(50);
+      }
+    });
 
-  sendControl({
-    matchId,
-    events: [{ type, team: 1, value: 10000 }, { type, team: 2, value: 10000 }],
-  });
-  const res = await recvControl();
-  await delay(50);
-  expect(res.match?.events ?? []).toHaveLength(8);
-  expect(client2.request).toHaveBeenCalledTimes(3);
-  expect(client2.request).toHaveBeenCalledWith('executor-service', type);
-  done = true;
-});
+    try {
+      sendControl({
+        matchId,
+        events: [
+          { type, team: 1, value: 10000 },
+          { type, team: 2, value: 10000 },
+        ],
+      });
+      const res = await recvControl();
+      await delay(50);
+      expect(res.match?.events ?? []).toHaveLength(8);
+      expect(client2.request).toHaveBeenCalledTimes(3);
+      expect(client2.request).toHaveBeenCalledWith('executor-service', type);
+    } finally {
+      done = true;
+    }
+  }
+);

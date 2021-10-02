@@ -1,7 +1,7 @@
+import { Team } from '../../types';
+import { makeEndpointClient, generateTempId } from './entities';
 import { createSlice } from '@reduxjs/toolkit';
 import * as _ from 'lodash';
-import { makeEndpointClient, generateTempId } from './entities';
-import { Team } from '../../types';
 
 export const { adapter, selectors, fetch, save, sliceOptions } = makeEndpointClient<
   Team,

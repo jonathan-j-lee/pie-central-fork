@@ -1,4 +1,9 @@
-import * as crypto from 'crypto';
+import {
+  AllianceColor,
+  GameState,
+  MatchEvent as MatchEventData,
+  MatchEventType,
+} from '../types';
 import {
   BaseEntity,
   Collection,
@@ -12,16 +17,10 @@ import {
   PrimaryKey,
   Property,
 } from '@mikro-orm/core';
-import { TsMorphMetadataProvider } from '@mikro-orm/reflection';
+import * as crypto from 'crypto';
 import * as _ from 'lodash';
-import winston from 'winston';
 import { promisify } from 'util';
-import {
-  AllianceColor,
-  GameState,
-  MatchEvent as MatchEventData,
-  MatchEventType,
-} from '../types';
+import winston from 'winston';
 
 const logger = winston.createLogger({
   level: 'debug',
@@ -70,7 +69,6 @@ export class User extends BaseEntity<User, 'username'> {
   }
 }
 
-// FIXME: TsMorphMetadataProvider is broken
 // TODO: more stringent database constraints
 @Entity()
 export class Alliance extends BaseEntity<Alliance, 'id'> {
@@ -217,7 +215,6 @@ async function init(filename: string) {
     type: 'sqlite',
     dbName: filename,
     discovery: { disableDynamicFileAccess: true },
-    metadataProvider: TsMorphMetadataProvider,
   });
   const generator = orm.getSchemaGenerator();
   await generator.updateSchema();

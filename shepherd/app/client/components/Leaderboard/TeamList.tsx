@@ -1,13 +1,12 @@
-import * as React from 'react';
-import { InputGroup, NumericInput } from '@blueprintjs/core';
-
-import RobotSettings from './RobotSettings';
-import EntityTable from '../EntityTable';
+import { useAppDispatch, useTeams } from '../../hooks';
+import teamsSlice from '../../store/teams';
 import { DeleteButton } from '../EntityButtons';
 import { AllianceSelect } from '../EntitySelects';
+import EntityTable from '../EntityTable';
 import { PLACEHOLDER } from '../Util';
-import { useAppDispatch, useAppSelector, useTeams } from '../../hooks';
-import teamsSlice from '../../store/teams';
+import RobotSettings from './RobotSettings';
+import { InputGroup, NumericInput } from '@blueprintjs/core';
+import * as React from 'react';
 
 export default function TeamList(props: { edit: boolean; elimination: boolean }) {
   const dispatch = useAppDispatch();
@@ -73,7 +72,11 @@ export default function TeamList(props: { edit: boolean; elimination: boolean })
           <td>{team.stats?.losses ?? '0'}</td>
           <td>{team.stats?.ties ?? '0'}</td>
           <td>{team.stats?.totalScore ?? '0'}</td>
-          {props.edit && <td><RobotSettings team={team} /></td>}
+          {props.edit && (
+            <td>
+              <RobotSettings team={team} />
+            </td>
+          )}
           {props.edit && (
             <td>
               <DeleteButton

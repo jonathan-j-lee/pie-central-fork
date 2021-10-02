@@ -1,8 +1,8 @@
-import * as React from 'react';
-import { Classes, Icon, Switch, IconSize } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
 import { useAppDispatch, useAppSelector } from '../hooks';
 import { save } from '../store/session';
+import { Classes, Icon, Switch, IconSize } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import * as React from 'react';
 
 export default function ThemeToggle() {
   const dispatch = useAppDispatch();

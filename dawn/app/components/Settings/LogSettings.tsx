@@ -1,8 +1,7 @@
-import * as React from 'react';
-import { FormGroup } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
-import { NumericInput, Select, Switch } from './Forms';
 import { LogOpenCondition } from '../../store/settings';
+import { NumericInput, Select, Switch } from './Forms';
+import { FormGroup } from '@blueprintjs/core';
+import * as React from 'react';
 
 const LOG_OPEN_CONDITIONS = [
   { id: LogOpenCondition.START, display: 'On Start' },

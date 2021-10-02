@@ -1,14 +1,7 @@
-import { createSlice } from '@reduxjs/toolkit';
+import { AllianceColor, Match, MatchEvent, MatchEventType } from '../../types';
 import { makeEndpointClient, generateTempId } from './entities';
+import { createSlice } from '@reduxjs/toolkit';
 import * as _ from 'lodash';
-import {
-  AllianceColor,
-  Match,
-  MatchEvent,
-  MatchEventType,
-  MatchPhase,
-  TimerState,
-} from '../../types';
 
 export const { adapter, selectors, fetch, save, sliceOptions } = makeEndpointClient<
   Match,
@@ -21,7 +14,7 @@ export const { adapter, selectors, fetch, save, sliceOptions } = makeEndpointCli
       ...(match.id < 0 ? _.omit(match, 'id') : match),
       events: match.events.map((event) => (event.id < 0 ? _.omit(event, 'id') : event)),
     } as any),
-  (a, b) => a.id - b.id,
+  (a, b) => a.id - b.id
 );
 
 const slice = createSlice({
@@ -37,7 +30,8 @@ const slice = createSlice({
 
 export default slice;
 
-export const add = () => slice.actions.upsert({ id: generateTempId(), fixture: null, events: [] });
+export const add = () =>
+  slice.actions.upsert({ id: generateTempId(), fixture: null, events: [] });
 
 export const addEvent = (match: Match, initialData?: Partial<MatchEvent>) =>
   slice.actions.upsert({

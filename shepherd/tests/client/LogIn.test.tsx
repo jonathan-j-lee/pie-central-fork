@@ -1,7 +1,8 @@
-import * as React from 'react';
 import LogIn from '../../app/client/components/LogIn';
-import { act, delay, render, screen } from './test-utils';
+import { delay, render } from './test-utils';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as React from 'react';
 
 beforeEach(() => {
   render(<LogIn transitionDuration={0} />);

@@ -1,17 +1,12 @@
-import * as React from 'react';
-import { Ace } from 'ace-builds/ace';
-import { FocusStyleManager } from '@blueprintjs/core';
-
 import { useAppDispatch } from '../hooks';
 import { initializeSettings } from '../store';
 import { exit } from '../store/editor';
 import { append } from '../store/log';
 import { updateDevices } from '../store/peripherals';
 import { Mode } from '../store/runtime';
-
-import Log from './Log';
 import Editor from './Editor';
 import KeybindingMapper from './KeybindingMapper';
+import Log from './Log';
 import OverwriteDialog from './OverwriteDialog';
 import PeripheralList from './PeripheralList';
 import RuntimeStatusCard from './RuntimeStatusCard';
@@ -19,6 +14,9 @@ import Settings from './Settings';
 import ThemeProvider from './ThemeProvider';
 import Toolbar from './Toolbar';
 import { platform } from './Util';
+import { FocusStyleManager } from '@blueprintjs/core';
+import { Ace } from 'ace-builds/ace';
+import * as React from 'react';
 
 const INITIALIZE_DELAY = 100;
 

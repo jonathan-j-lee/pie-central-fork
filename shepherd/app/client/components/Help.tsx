@@ -1,6 +1,6 @@
-import * as React from 'react';
 import { Alert, Button, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import * as React from 'react';
 
 interface HelpProps {
   transitionDuration?: number;

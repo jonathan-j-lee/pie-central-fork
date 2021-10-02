@@ -1,0 +1,10 @@
+app
+coverage
+node_modules
+tests
+
+.prettierignore
+*.yml
+*.json
+*.sqlite3
+*.js

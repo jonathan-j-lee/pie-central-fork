@@ -1,4 +1,14 @@
-import * as React from 'react';
+import {
+  GameState,
+  MatchEventType,
+  MatchPhase,
+  displayPhase,
+  getDefaultDuration,
+} from '../../../types';
+import { useAppDispatch, useCurrentMatch } from '../../hooks';
+import { changeMode, Robot } from '../../store/control';
+import { AlertButton } from '../Notification';
+import MatchConnector from './MatchConnector';
 import {
   ControlGroup,
   FormGroup,
@@ -7,17 +17,7 @@ import {
   NumericInput,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import {
-  GameState,
-  MatchEventType,
-  MatchPhase,
-  displayPhase,
-  getDefaultDuration,
-} from '../../../types';
-import { AlertButton } from '../Notification';
-import { useAppDispatch, useCurrentMatch } from '../../hooks';
-import { changeMode, Robot } from '../../store/control';
-import MatchConnector from './MatchConnector';
+import * as React from 'react';
 
 export default function TimerControl(props: { robots: Robot[] }) {
   const dispatch = useAppDispatch();
@@ -78,9 +78,10 @@ export default function TimerControl(props: { robots: Robot[] }) {
             onClick={async () => {
               await dispatch(
                 changeMode({
-                  mode: phase === MatchPhase.AUTO
-                    ? MatchEventType.AUTO
-                    : MatchEventType.TELEOP,
+                  mode:
+                    phase === MatchPhase.AUTO
+                      ? MatchEventType.AUTO
+                      : MatchEventType.TELEOP,
                   totalTime,
                   robots: props.robots,
                 })

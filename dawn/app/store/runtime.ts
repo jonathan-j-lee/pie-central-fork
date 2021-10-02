@@ -1,10 +1,10 @@
-import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
-import { Ace } from 'ace-builds/ace';
+import type { RootState, AppDispatch } from '.';
 import { prompt } from './editor';
 import log, { append } from './log';
 import peripherals from './peripherals';
 import { LogOpenCondition } from './settings';
-import type { RootState, AppDispatch } from '.';
+import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { Ace } from 'ace-builds/ace';
 
 export enum Mode {
   AUTO = 'auto',

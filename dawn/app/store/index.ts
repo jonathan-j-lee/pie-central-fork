@@ -1,12 +1,11 @@
-import { createAsyncThunk, configureStore } from '@reduxjs/toolkit';
-import { Store } from 'redux';
-import { Ace } from 'ace-builds/ace';
-
 import editor, { open } from './editor';
 import log from './log';
 import peripherals from './peripherals';
 import runtime from './runtime';
 import settings, { load, save } from './settings';
+import { createAsyncThunk, configureStore } from '@reduxjs/toolkit';
+import { Ace } from 'ace-builds/ace';
+import { Store } from 'redux';
 
 export function makeStore(options = {}) {
   const extraArgument: { store?: Store } = {};

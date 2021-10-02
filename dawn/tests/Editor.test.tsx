@@ -1,6 +1,4 @@
-import * as React from 'react';
-// @ts-ignore
-import ace from 'ace-builds/src-min-noconflict/ace';
+import { exit } from '../app/store/editor';
 import {
   act,
   delay,
@@ -10,9 +8,11 @@ import {
   makeCommandTriggers,
   TestEditor,
 } from './test-utils';
-import { mocked } from 'ts-jest/utils';
 import userEvent from '@testing-library/user-event';
-import { exit } from '../app/store/editor';
+// @ts-ignore
+import ace from 'ace-builds/src-min-noconflict/ace';
+import * as React from 'react';
+import { mocked } from 'ts-jest/utils';
 
 beforeEach(() => {
   render(<TestEditor />);
@@ -400,7 +400,7 @@ describe.each([
     expect(await screen.findByText(/^unsaved changes$/i)).toBeInTheDocument();
     await act(async () => {
       userEvent.click(screen.getByLabelText(/^close$/i));
-      await delay(10);
+      await delay(50);
     });
     expect(editor.getValue()).toEqual('abc\n');
     expect(mocked(window.ipc.invoke)).not.toHaveBeenCalledWith(
@@ -417,7 +417,7 @@ describe.each([
     expect(await screen.findByText(/^unsaved changes$/i)).toBeInTheDocument();
     await act(async () => {
       userEvent.click(screen.getByText(/^discard$/i));
-      await delay(10);
+      await delay(50);
     });
     check(editor.getValue());
     expect(mocked(window.ipc.invoke)).not.toHaveBeenCalledWith(
@@ -434,7 +434,7 @@ describe.each([
     expect(await screen.findByText(/^unsaved changes$/i)).toBeInTheDocument();
     await act(async () => {
       userEvent.click(screen.getByText(/^save$/i));
-      await delay(10);
+      await delay(50);
     });
     check(editor.getValue());
     expect(mocked(window.ipc.invoke)).toHaveBeenCalledWith(
@@ -466,12 +466,12 @@ it('can normalize a file before saving', async () => {
     'save-file',
     'test-save.py',
     '',
-    'ascii',
+    'ascii'
   );
   expect(mocked(window.ipc.invoke)).toHaveBeenCalledWith(
     'save-file',
     'test-save.py',
     'def main():\n    pass\n',
-    'ascii',
+    'ascii'
   );
 });

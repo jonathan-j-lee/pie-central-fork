@@ -1,0 +1,173 @@
+name: CI
+on:
+  push:
+    branches:
+      - master
+      - test/ci*
+    tags:
+      - v*
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+# TODO: cache dependencies
+# TODO: deploy to production
+# TODO: use commit messages to author a release changelog
+# TODO: check the each project passes a static check using a commit hook
+jobs:
+  dawn:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    defaults:
+      run:
+        working-directory: dawn
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 16.x
+      - run: npm ci
+        working-directory: runtime/node-client
+      - run: npm run prepare
+        working-directory: runtime/node-client
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm test
+      - run: npm run package
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: codecov/codecov-action@v2
+        with:
+          files: coverage/lcov.info
+  runtime:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: runtime
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Install packages with apt
+        run: |
+          sudo apt update -y
+          sudo apt install -y \
+            autoconf \
+            build-essential \
+            libtool \
+            openssl \
+            pdf2svg \
+            texlive \
+            texlive-pictures \
+            texlive-latex-extra \
+      - name: Ensure release information is set  # https://github.com/nektos/act/issues/251
+        run: |
+          if [ ! -f "/etc/lsb-release" ]; then
+            echo "DISTRIB_RELEASE=18.04" > /etc/lsb-release
+          fi
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      - run: pip install pipenv
+      - run: pipenv install --deploy --dev
+      - name: Compile native COBS module
+        run: make $(pwd)/cobs-c/cobs.o
+        working-directory: smart-devices
+      - run: pipenv run build
+      - run: pipenv run format:check
+      - run: pipenv run lint
+      - run: pipenv run typecheck
+      - run: pipenv run test
+      - run: pipenv run package
+      - run: pipenv run docs:build
+      - run: pipenv run coverage xml
+      - uses: codecov/codecov-action@v2
+        with:
+          files: coverage.xml
+      - name: Upload artifacts on release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: true
+          fail_on_unmatched_files: true
+          files: runtime/dist/*
+      - name: Deploy documentation
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: runtime/docs/build/html
+  shepherd:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shepherd
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 16.x
+      - run: npm ci
+        working-directory: runtime/node-client
+      - run: npm run prepare
+        working-directory: runtime/node-client
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm test
+      - run: npm run package
+      - name: Upload artifacts on release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: true
+          fail_on_unmatched_files: true
+          files: shepherd/dist/*
+      - uses: codecov/codecov-action@v2
+        with:
+          files: coverage/lcov.info
+  smart-devices:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: smart-devices
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Install packages with apt
+        run: |
+          sudo apt update -y
+          sudo apt install -y \
+            arduino \
+            autoconf \
+            build-essential \
+            libtool \
+            wget \
+      - name: Install arduino-cli
+        run: curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+      - name: Download C++ testing dependencies
+        run: |
+          mkdir -p tests/mocks/catch2
+          wget https://github.com/catchorg/Catch2/releases/download/v2.13.7/catch.hpp -O tests/mocks/catch2/catch.hpp
+          wget https://raw.githubusercontent.com/rollbear/trompeloeil/v41/include/trompeloeil.hpp -O tests/mocks/trompeloeil.hpp
+          wget https://raw.githubusercontent.com/rollbear/trompeloeil/v41/include/catch2/trompeloeil.hpp -O tests/mocks/catch2/trompeloeil.hpp
+      - run: make test
+      - run: make package ARDUINO_CLI=./bin/arduino-cli
+      - name: Upload artifacts on release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: true
+          fail_on_unmatched_files: true
+          files: smart-devices/smart-dev*.tar.gz

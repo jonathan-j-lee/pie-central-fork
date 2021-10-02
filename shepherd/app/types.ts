@@ -41,10 +41,11 @@ const LogLevelPriority = {
 
 export function getLogLevels(level: LogLevel) {
   const minLevel = LogLevelPriority[level];
-  return new Set(Object
-    .entries(LogLevelPriority)
-    .filter(([level, priority]) => minLevel <= priority)
-    .map(([level]) => level));
+  return new Set(
+    Object.entries(LogLevelPriority)
+      .filter(([, priority]) => minLevel <= priority)
+      .map(([level]) => level)
+  );
 }
 
 interface RankStatistics {
@@ -256,7 +257,7 @@ export function displayLogFilter(filter: LogEventFilter) {
 }
 
 export function parseLogFilter(filter: string): LogEventFilter | null {
-  const match = filter.match(/^(\!)?(.+?)\:(.+)$/i);
+  const match = filter.match(/^(!)?(.+?):(.+)$/i);
   if (match) {
     const [, exclude, key, value] = match;
     try {
@@ -282,7 +283,7 @@ export function getQualScore(stats: RankStatistics) {
 export function countMatchStatistics<M extends Match>(
   matches: M[],
   getAllegiance: (match: M) => AllianceColor,
-  getGame: (match: M) => GameState = (match) => GameState.fromEvents(match.events),
+  getGame: (match: M) => GameState = (match) => GameState.fromEvents(match.events)
 ) {
   const stats: RankStatistics = { wins: 0, losses: 0, ties: 0, totalScore: 0 };
   for (const match of matches) {
@@ -417,10 +418,11 @@ export class GameState {
   getTimer(now?: number): Partial<TimerState> {
     const timestamp = now ?? Date.now();
     const intervals = this.intervals
-      .filter(([, interval]) =>
-        isRunning(interval.phase)
-        && interval.start <= timestamp
-        && timestamp < interval.stop
+      .filter(
+        ([, interval]) =>
+          isRunning(interval.phase) &&
+          interval.start <= timestamp &&
+          timestamp < interval.stop
       )
       .map(([, interval]) => interval);
     if (intervals.length === 0) {
@@ -432,9 +434,9 @@ export class GameState {
   }
 
   get intervals(): [number, MatchInterval][] {
-    return Array
-      .from(this.blue.intervals.entries())
-      .concat(Array.from(this.gold.intervals.entries()));
+    return Array.from(this.blue.intervals.entries()).concat(
+      Array.from(this.gold.intervals.entries())
+    );
   }
 
   get winner(): AllianceColor {
@@ -470,8 +472,8 @@ export class GameState {
   }
 
   get started() {
-    return isRunning(this.phase) || this.transitions.some(({ phase }) =>
-      isRunning(phase)
+    return (
+      isRunning(this.phase) || this.transitions.some(({ phase }) => isRunning(phase))
     );
   }
 }

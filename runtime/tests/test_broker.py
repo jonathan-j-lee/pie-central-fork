@@ -80,15 +80,18 @@ async def test_option(broker):
 
 @pytest.mark.asyncio
 async def test_lint(broker):
-    record1, record2, record3 = await broker.lint()
-    assert record1['symbol'] == 'undefined-variable'
-    assert record1['type'] == 'error'
-    assert record1['message'] == "Undefined variable 'doesnt_exist'"
-    assert record2['symbol'] == 'global-statement'
-    assert record2['type'] == 'warning'
-    assert record2['message'] == 'Using the global statement'
-    assert record3['symbol'] == 'invalid-name'
-    assert record3['type'] == 'convention'
+    record1, record2, record3 = sorted(
+        await broker.lint(),
+        key=lambda record: record['symbol'],
+    )
+    assert record1['symbol'] == 'global-statement'
+    assert record1['type'] == 'warning'
+    assert record1['message'] == 'Using the global statement'
+    assert record2['symbol'] == 'invalid-name'
+    assert record2['type'] == 'convention'
+    assert record3['symbol'] == 'undefined-variable'
+    assert record3['type'] == 'error'
+    assert record3['message'] == "Undefined variable 'doesnt_exist'"
 
 
 @pytest.mark.asyncio

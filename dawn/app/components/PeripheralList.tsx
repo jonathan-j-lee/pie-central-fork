@@ -1,4 +1,7 @@
-import * as React from 'react';
+import { useAppDispatch, useAppSelector } from '../hooks';
+import { Peripheral, peripheralSelectors, updateDevices } from '../store/peripherals';
+import { ConnectionStatus } from '../store/runtime';
+import { EditorTheme } from '../store/settings';
 import {
   Button,
   Callout,
@@ -13,12 +16,9 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import Chart from 'chart.js/auto';
-import { Scatter, defaults } from 'react-chartjs-2';
 import * as _ from 'lodash';
-import { useAppDispatch, useAppSelector } from '../hooks';
-import { Peripheral, peripheralSelectors, updateDevices } from '../store/peripherals';
-import { ConnectionStatus } from '../store/runtime';
-import { EditorTheme } from '../store/settings';
+import * as React from 'react';
+import { Scatter, defaults } from 'react-chartjs-2';
 
 defaults.font.family = 'monospace';
 

@@ -1,8 +1,8 @@
+import type { AppDispatch, RootState } from '.';
+import settingsSlice from './settings';
 import { createAsyncThunk, createSlice, isAnyOf } from '@reduxjs/toolkit';
 import { Ace } from 'ace-builds/ace';
 import { Store } from 'redux';
-import settingsSlice from './settings';
-import type { AppDispatch, RootState } from '.';
 
 const NEWLINE = '\n';
 

@@ -1,11 +1,10 @@
-import * as React from 'react';
-import { Card, Colors } from '@blueprintjs/core';
-import * as _ from 'lodash';
-import Chart from 'chart.js/auto';
-import { Scatter } from 'react-chartjs-2';
-import { PLACEHOLDER } from '../Util';
-import { useAppSelector, useMatches } from '../../hooks';
 import { displayTime } from '../../../types';
+import { useAppSelector, useMatches } from '../../hooks';
+import { PLACEHOLDER } from '../Util';
+import { Card, Colors } from '@blueprintjs/core';
+import Chart from 'chart.js/auto';
+import * as React from 'react';
+import { Scatter } from 'react-chartjs-2';
 
 function cumulativeSum(xs: number[], initial = 0) {
   const seq = [initial];
@@ -19,18 +18,17 @@ function useMatchProjection() {
   const matches = useMatches();
   const durations = matches
     .map((match) => {
-      const timestamps = match
-        .events
+      const timestamps = match.events
         .map((event) => event.timestamp)
         .filter((timestamp) => timestamp);
       return (Math.max(...timestamps) - Math.min(...timestamps)) / 1000;
     })
-    .filter((duration) => 0 < duration && duration < Infinity);
+    .filter((duration) => duration > 0 && duration < Infinity);
   const history = cumulativeSum(durations);
   const meanMatchDuration = history[history.length - 1] / durations.length;
   const projected = cumulativeSum(
     Array(matches.length - durations.length).fill(meanMatchDuration),
-    history[history.length - 1],
+    history[history.length - 1]
   );
   const matchesRemaining = projected.length - 1;
   return {
@@ -65,9 +63,9 @@ export default function MatchProjection() {
         <p>You have completed all matches.</p>
       ) : (
         <p>
-          With no downtime, we estimate you will
-          finish {projection.matchesRemaining} remaining scheduled matches
-          by {projection.stop?.toLocaleTimeString() ?? PLACEHOLDER}.
+          With no downtime, we estimate you will finish {projection.matchesRemaining}{' '}
+          remaining scheduled matches by{' '}
+          {projection.stop?.toLocaleTimeString() ?? PLACEHOLDER}.
         </p>
       )}
       <Scatter

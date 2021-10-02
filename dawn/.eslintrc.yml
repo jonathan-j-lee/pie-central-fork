@@ -8,6 +8,11 @@ extends:
   - 'plugin:promise/recommended'
   - 'plugin:jest/recommended'
   - prettier
+ignorePatterns:
+  - /build
+  - /coverage
+  - /dist
+  - /node_modules
 parser: '@typescript-eslint/parser'
 parserOptions:
   ecmaFeatures:

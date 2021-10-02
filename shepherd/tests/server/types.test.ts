@@ -51,44 +51,47 @@ it('displays a time', () => {
 });
 
 it('displays a summary', () => {
-  const summary = (type: MatchEventType, value?: number) => displaySummary(
-    {
-      id: 1,
-      match: 1,
-      type,
-      timestamp: 1632267193036,
-      alliance: AllianceColor.BLUE,
-      team: 0,
-      value: value ?? null,
-      description: null,
-    },
-    {
-      name: 'Berkeley',
-      number: 0,
-    }
+  const summary = (type: MatchEventType, value?: number) =>
+    displaySummary(
+      {
+        id: 1,
+        match: 1,
+        type,
+        timestamp: 1632267193036,
+        alliance: AllianceColor.BLUE,
+        team: 0,
+        value: value ?? null,
+        description: null,
+      },
+      {
+        name: 'Berkeley',
+        number: 0,
+      }
+    );
+  expect(summary(MatchEventType.JOIN)).toEqual(
+    'Berkeley (#0) joined the Blue alliance.'
   );
-  expect(
-    summary(MatchEventType.JOIN)
-  ).toEqual('Berkeley (#0) joined the Blue alliance.');
-  expect(
-    summary(MatchEventType.AUTO, 30010)
-  ).toEqual('Started the autonomous phase for Berkeley (#0) for 00:30.');
-  expect(
-    summary(MatchEventType.TELEOP, 30010)
-  ).toEqual('Started the tele-op phase for Berkeley (#0) for 00:30.');
+  expect(summary(MatchEventType.AUTO, 30010)).toEqual(
+    'Started the autonomous phase for Berkeley (#0) for 00:30.'
+  );
+  expect(summary(MatchEventType.TELEOP, 30010)).toEqual(
+    'Started the tele-op phase for Berkeley (#0) for 00:30.'
+  );
   expect(summary(MatchEventType.IDLE)).toEqual('Stopped Berkeley (#0).');
   expect(summary(MatchEventType.ESTOP)).toEqual('Emergency-stopped Berkeley (#0).');
-  expect(
-    summary(MatchEventType.ADD, 5)
-  ).toEqual('The Blue alliance scored 5 points (without multipliers).');
+  expect(summary(MatchEventType.ADD, 5)).toEqual(
+    'The Blue alliance scored 5 points (without multipliers).'
+  );
   expect(summary(MatchEventType.ADD, -5)).toEqual('The Blue alliance lost 5 points.');
-  expect(
-    summary(MatchEventType.MULTIPLY, 0.51)
-  ).toEqual('The Blue alliance got a 0.5x score multiplier.');
-  expect(
-    summary(MatchEventType.EXTEND, 10010)
-  ).toEqual('The current phase was extended for Berkeley (#0) by 00:10.');
-  expect(summary(MatchEventType.OTHER)).toEqual('An event occurred for the Blue alliance.');
+  expect(summary(MatchEventType.MULTIPLY, 0.51)).toEqual(
+    'The Blue alliance got a 0.5x score multiplier.'
+  );
+  expect(summary(MatchEventType.EXTEND, 10010)).toEqual(
+    'The current phase was extended for Berkeley (#0) by 00:10.'
+  );
+  expect(summary(MatchEventType.OTHER)).toEqual(
+    'An event occurred for the Blue alliance.'
+  );
 });
 
 it('displays a log filter', () => {
@@ -100,9 +103,11 @@ it('displays a log filter', () => {
 
 it('parses a log filter', () => {
   expect(parseLogFilter('key:5')).toEqual({ exclude: false, key: 'key', value: 5 });
-  expect(
-    parseLogFilter('!key:{"x": 1}')
-  ).toEqual({ exclude: true, key: 'key', value: { x: 1 } });
+  expect(parseLogFilter('!key:{"x": 1}')).toEqual({
+    exclude: true,
+    key: 'key',
+    value: { x: 1 },
+  });
   expect(parseLogFilter('key:value')).toBe(null);
   expect(parseLogFilter('nofilter')).toBe(null);
 });
@@ -112,9 +117,12 @@ it('computes a qualification score', () => {
 });
 
 it('counts match statistics', () => {
-  expect(
-    countMatchStatistics([], () => AllianceColor.BLUE)
-  ).toEqual({ wins: 0, losses: 0, ties: 0, totalScore: 0 });
+  expect(countMatchStatistics([], () => AllianceColor.BLUE)).toEqual({
+    wins: 0,
+    losses: 0,
+    ties: 0,
+    totalScore: 0,
+  });
   const match = {
     id: 1,
     match: 1,
@@ -143,7 +151,7 @@ it('counts match statistics', () => {
         },
         { id: 3, fixture: null, events: [] },
       ],
-      () => AllianceColor.BLUE,
+      () => AllianceColor.BLUE
     )
   ).toEqual({ wins: 1, losses: 1, ties: 1, totalScore: 5 });
 });

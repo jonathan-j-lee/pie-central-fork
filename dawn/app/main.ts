@@ -1,5 +1,4 @@
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import Client from '@pioneers/runtime-client';
 import * as bunyan from 'bunyan';
 import {
   app,
@@ -10,8 +9,9 @@ import {
   Menu,
   MenuItemConstructorOptions,
 } from 'electron';
+import * as fs from 'fs/promises';
 import { NodeSSH } from 'node-ssh';
-import Client from '@pioneers/runtime-client';
+import * as path from 'path';
 
 const ssh = new NodeSSH();
 const logger = bunyan.createLogger({ name: 'dawn' });
@@ -89,7 +89,7 @@ ipcMain.on('send-control', (event, gamepads) => {
 });
 
 ipcMain.handle('exec', async (event, config, ...commands) => {
-  const connection = await ssh.connect(config);
+  await ssh.connect(config);
   try {
     const results = [];
     for (const { command, options } of commands) {
@@ -152,26 +152,26 @@ ipcMain.handle('save-file', async (event, filePath, contents, encoding) => {
   logger.info({ filePath, encoding }, 'Saved file');
 });
 
-ipcMain.on('quit', (event) => {
+ipcMain.on('quit', () => {
   for (const window of BrowserWindow.getAllWindows()) {
     window.destroy();
   }
   logger.info('Destroyed all windows');
 });
 
-ipcMain.on('reload', (event) => {
+ipcMain.on('reload', () => {
   const window = BrowserWindow.getFocusedWindow();
   window?.reload();
   logger.info('Reloaded window');
 });
 
-ipcMain.on('force-reload', (event) => {
+ipcMain.on('force-reload', () => {
   const window = BrowserWindow.getFocusedWindow();
   window?.webContents.reloadIgnoringCache();
   logger.info('Force reloaded window');
 });
 
-ipcMain.handle('load-settings', async (event) => {
+ipcMain.handle('load-settings', async () => {
   try {
     const contents = await fs.readFile(SETTINGS_PATH, { encoding: 'utf8' });
     const settings = JSON.parse(contents);
@@ -198,10 +198,9 @@ function createWindow() {
   const menu = Menu.buildFromTemplate(MENU_TEMPLATE);
   Menu.setApplicationMenu(menu);
 
-  const dir = path.dirname(__filename);
   const window = new BrowserWindow({
     webPreferences: {
-      preload: path.join(dir, 'preload.js'),
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
   if (isDevelopment) {
@@ -246,18 +245,18 @@ function createWindow() {
   });
 
   window.maximize();
-  /** Ugly hack needed because __dirname needs to be altered by webpack.
-   *  Also, using `loadFile` can be very slow to start up sometimes (~30s).
+  /** Using `loadFile` can be very slow to start up sometimes (~30s).
    *  https://github.com/electron/electron/issues/13829
    */
-  window.loadURL(`file://${path.join(dir, 'index.html')}`);
+  window.loadURL(`file://${path.join(__dirname, 'index.html')}`);
 }
 
-app.whenReady().then(() => {
+(async () => {
+  await app.whenReady();
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
-});
+})();

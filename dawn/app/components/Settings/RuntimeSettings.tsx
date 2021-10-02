@@ -1,15 +1,4 @@
-import * as React from 'react';
-import * as _ from 'lodash';
-import {
-  Callout,
-  EditableText,
-  FormGroup,
-  IconName,
-  Intent,
-  Tab,
-  Tabs,
-} from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
+import { LogLevel, BAUD_RATES } from '../../store/settings';
 import {
   EntityTable,
   NumericInput,
@@ -21,8 +10,17 @@ import {
   TextInput,
   validateNonempty,
 } from './Forms';
-import { useAppSelector } from '../../hooks';
-import { LogLevel, BAUD_RATES } from '../../store/settings';
+import {
+  Callout,
+  EditableText,
+  FormGroup,
+  IconName,
+  Intent,
+  Tab,
+  Tabs,
+} from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import * as React from 'react';
 
 const AdminSettings = () => (
   <>
@@ -356,6 +354,7 @@ const OtherSettings = () => (
       addLabel="Add option"
       emptyMessage="No options"
       render={([option, value], update) => [
+        // eslint-disable-next-line react/jsx-key
         <EditableText
           alwaysRenderInput
           className="monospace"
@@ -364,6 +363,7 @@ const OtherSettings = () => (
           onConfirm={(text) => update([text, value])}
           placeholder="Example: log-level"
         />,
+        // eslint-disable-next-line react/jsx-key
         <EditableText
           alwaysRenderInput
           className="monospace"
@@ -378,7 +378,6 @@ const OtherSettings = () => (
 
 // TODO: better validation
 export default function RuntimeSettings() {
-  const deviceNames = useAppSelector((state) => state.settings.runtime.deviceNames);
   return (
     <>
       <FormGroup
@@ -411,6 +410,7 @@ export default function RuntimeSettings() {
           addLabel="Add device name"
           emptyMessage="No device names"
           render={([name, uid], update) => [
+            // eslint-disable-next-line react/jsx-key
             <EditableText
               alwaysRenderInput
               className="monospace"
@@ -419,6 +419,7 @@ export default function RuntimeSettings() {
               onConfirm={(value) => update([value, uid])}
               placeholder="Example: left-motor"
             />,
+            // eslint-disable-next-line react/jsx-key
             <EditableText
               alwaysRenderInput
               className="monospace"

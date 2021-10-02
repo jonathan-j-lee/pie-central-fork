@@ -1,7 +1,8 @@
-import * as React from 'react';
-import { act, init, refresh, render, recvControl, screen } from './test-utils';
 import Scoreboard from '../../app/client/components/Scoreboard';
 import { MatchPhase } from '../../app/types';
+import { init, refresh, render, recvControl } from './test-utils';
+import { act, screen } from '@testing-library/react';
+import * as React from 'react';
 
 beforeEach(async () => {
   jest.useFakeTimers();
@@ -61,7 +62,7 @@ it('displays the time remaining', async () => {
   expect(screen.getByText(/^00:20.0$/)).toBeInTheDocument();
   await act(async () => {
     jest.advanceTimersByTime(200010);
-  })
+  });
   expect(screen.getByText(/^00:00.0$/)).toBeInTheDocument();
   recvControl({
     control: {

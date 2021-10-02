@@ -1,21 +1,18 @@
+import { Alliance, Fixture, FixtureUpdate } from '../../types';
+import { selectors as allianceSelectors } from './alliances';
 import { createAsyncThunk, createSlice, EntityState } from '@reduxjs/toolkit';
 import request from 'superagent';
-import { selectors as allianceSelectors } from './alliances';
-import { Alliance, Fixture, FixtureUpdate } from '../../types';
 
-export const fetch = createAsyncThunk(
-  'bracket/fetch',
-  async (arg, thunkAPI) => {
-    return (await request.get('/bracket')).body;
-  },
-);
+export const fetch = createAsyncThunk('bracket/fetch', async () => {
+  return (await request.get('/bracket')).body;
+});
 
 export const updateWinner = createAsyncThunk(
   'bracket/updateWiner',
   async (update: FixtureUpdate, thunkAPI) => {
     await request.put('/bracket').send(update);
     await thunkAPI.dispatch(fetch()).unwrap();
-  },
+  }
 );
 
 export const generate = createAsyncThunk(
@@ -27,20 +24,17 @@ export const generate = createAsyncThunk(
     }
     await req;
     await thunkAPI.dispatch(fetch()).unwrap();
-  },
+  }
 );
 
-export const remove = createAsyncThunk(
-  'bracket/remove',
-  async (arg, thunkAPI) => {
-    await request.delete('/bracket');
-  },
-);
+export const remove = createAsyncThunk('bracket/remove', async () => {
+  await request.delete('/bracket');
+});
 
 export function getFixtures(
   fixture: Fixture | null,
   fixtures: Fixture[],
-  alliances?: EntityState<Alliance>,
+  alliances?: EntityState<Alliance>
 ): Fixture | null {
   if (!fixture) {
     return null;
@@ -63,11 +57,10 @@ export function getFixtures(
 export default createSlice({
   name: 'bracket',
   initialState: null as Fixture | null,
-  reducers: {
-  },
+  reducers: {},
   extraReducers(builder) {
     builder
       .addCase(fetch.fulfilled, (state, action) => action.payload)
-      .addCase(remove.fulfilled, (state, action) => null);
-  }
+      .addCase(remove.fulfilled, () => null);
+  },
 });

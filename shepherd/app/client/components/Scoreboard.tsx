@@ -1,10 +1,15 @@
-import * as React from 'react';
-import { Card, H1, H2 } from '@blueprintjs/core';
-import Timer from './Timer';
+import {
+  AllianceColor,
+  GameState,
+  displayAllianceColor,
+  displayTeam,
+} from '../../types';
 import { useAppSelector, useBracket, useCurrentMatch } from '../hooks';
 import { selectors as allianceSelectors } from '../store/alliances';
 import { selectors as teamSelectors } from '../store/teams';
-import { AllianceColor, GameState, displayAllianceColor, displayTeam } from '../../types';
+import Timer from './Timer';
+import { Card, H1, H2 } from '@blueprintjs/core';
+import * as React from 'react';
 
 interface AllianceCardProps {
   game: GameState;

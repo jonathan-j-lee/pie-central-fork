@@ -1,4 +1,3 @@
-import * as React from 'react';
 import {
   Alert,
   Button,
@@ -9,6 +8,7 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import * as _ from 'lodash';
+import * as React from 'react';
 
 const toaster = Toaster.create({ position: Position.TOP });
 
@@ -47,7 +47,7 @@ function useAsyncCallback(
   callback: () => Promise<void>,
   success?: string,
   failure?: string,
-  finalize?: () => void,
+  finalize?: () => void
 ): [boolean, () => Promise<void>] {
   const [loading, setLoading] = React.useState(false);
   const execute = React.useCallback(async () => {
@@ -83,7 +83,7 @@ export function OutcomeButton(props: OutcomeButtonProps) {
     props.onClick,
     props.success,
     props.failure,
-    props.finalize,
+    props.finalize
   );
   return <Button {..._.omit(props, 'finalize')} loading={loading} onClick={onClick} />;
 }
@@ -102,7 +102,7 @@ export function AlertButton({
     props.onClick,
     props.success,
     props.failure,
-    props.finalize,
+    props.finalize
   );
   const [show, setShow] = React.useState(false);
   return (
@@ -120,7 +120,9 @@ export function AlertButton({
         onClose={() => setShow(false)}
         transitionDuration={transitionDuration}
       >
-        {warnings.map((warning, index) => <p key={index}>{warning}</p>)}
+        {warnings.map((warning, index) => (
+          <p key={index}>{warning}</p>
+        ))}
       </Alert>
       <Button
         {...props}

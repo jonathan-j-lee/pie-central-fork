@@ -1,4 +1,7 @@
-import * as React from 'react';
+import { useAppDispatch, useAppSelector } from '../hooks';
+import { logIn, logOut } from '../store/user';
+import { ConfirmButton } from './EntityButtons';
+import { notifySuccess, notifyFailure } from './Notification';
 import {
   Button,
   Callout,
@@ -9,10 +12,7 @@ import {
   InputGroup,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { ConfirmButton } from './EntityButtons';
-import { notifySuccess, notifyFailure } from './Notification';
-import { useAppDispatch, useAppSelector } from '../hooks';
-import { logIn, logOut } from '../store/user';
+import * as React from 'react';
 
 function LogInButton(props: { show: () => void }) {
   const dispatch = useAppDispatch();
@@ -56,7 +56,7 @@ export default function LogIn(props: { transitionDuration?: number }) {
       notifySuccess('Successfully logged in.');
       setError(null);
       setShow(false);
-    } catch(err) {
+    } catch (err) {
       setError(err);
     }
   }, [username, password, setShow, setError]);
