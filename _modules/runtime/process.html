@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html >
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>runtime.process</title>
+    
+          <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+          <link rel="stylesheet" href="../../_static/theme.css " type="text/css" />
+          <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
+      
+      <!-- sphinx script_files -->
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+
+      
+      <!-- bundled in js (rollup iife) -->
+      <!-- <script src="../../_static/theme-vendors.js"></script> -->
+      <script src="../../_static/theme.js" defer></script>
+    
+  <link rel="index" title="Index" href="../../genindex.html" />
+  <link rel="search" title="Search" href="../../search.html" /> 
+  </head>
+
+  <body>
+    <div id="app">
+    <div class="theme-container" :class="pageClasses"><navbar @toggle-sidebar="toggleSidebar">
+  <router-link to="../../index.html" class="home-link">
+    
+      <span class="site-name">Runtime</span>
+    
+  </router-link>
+
+  <div class="links">
+    <navlinks class="can-hide">
+
+
+
+    </navlinks>
+  </div>
+</navbar>
+
+      
+      <div class="sidebar-mask" @click="toggleSidebar(false)">
+      </div>
+        <sidebar @toggle-sidebar="toggleSidebar">
+          
+          <navlinks>
+            
+
+
+
+            
+          </navlinks><div id="searchbox" class="searchbox" role="search">
+  <div class="caption"><span class="caption-text">Quick search</span>
+    <div class="searchformwrapper">
+      <form class="search" action="../../search.html" method="get">
+        <input type="text" name="q" />
+        <input type="submit" value="Search" />
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div><div class="sidebar-links" role="navigation" aria-label="main navigation">
+  
+    <div class="sidebar-group">
+      <p class="caption">
+        <span class="caption-text"><a href="../../index.html#runtime-documentation">Contents:</a></span>
+      </p>
+      <ul class="">
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../../design.html" class="reference internal ">Design Goals</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../../architecture.html" class="reference internal ">Architecture</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../../ipc.html" class="reference internal ">IPC</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../../smart-devices.html" class="reference internal ">Smart Devices</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../../api-reference/index.html" class="reference internal ">API Reference</a>
+            
+
+            
+          </li>
+
+        
+      </ul>
+    </div>
+  
+</div>
+        </sidebar>
+
+      <page>
+          <div class="body-header" role="navigation" aria-label="navigation">
+  
+  <ul class="breadcrumbs">
+    <li><a href="../../index.html">Docs</a> &raquo;</li>
+    
+      <li><a href="../index.html">Module code</a> &raquo;</li>
+    
+    <li>runtime.process</li>
+  </ul>
+  
+
+  <ul class="page-nav">
+</ul>
+  
+</div>
+<hr>
+          <div class="content" role="main" v-pre>
+            
+  <h1>Source code for runtime.process</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Process and resource management.</span>
+
+<span class="sd">Wrapping other low-level modules, this module provides a high-level interface for</span>
+<span class="sd">managing processes, endpoints, and other resources. This module is intended for</span>
+<span class="sd">consumption by service handlers and tools implementing Runtime&#39;s business logic.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">abc</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">multiprocessing</span>
+<span class="kn">import</span> <span class="nn">signal</span>
+<span class="kn">import</span> <span class="nn">socket</span>
+<span class="kn">import</span> <span class="nn">struct</span>
+<span class="kn">import</span> <span class="nn">threading</span>
+<span class="kn">import</span> <span class="nn">types</span>
+<span class="kn">from</span> <span class="nn">concurrent.futures</span> <span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Any</span><span class="p">,</span>
+    <span class="n">AsyncContextManager</span><span class="p">,</span>
+    <span class="n">Awaitable</span><span class="p">,</span>
+    <span class="n">Callable</span><span class="p">,</span>
+    <span class="n">Collection</span><span class="p">,</span>
+    <span class="n">Mapping</span><span class="p">,</span>
+    <span class="n">NoReturn</span><span class="p">,</span>
+    <span class="n">Optional</span><span class="p">,</span>
+    <span class="n">Protocol</span><span class="p">,</span>
+    <span class="n">TypeVar</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">urllib.parse</span> <span class="kn">import</span> <span class="n">urlsplit</span><span class="p">,</span> <span class="n">urlunsplit</span>
+
+<span class="kn">import</span> <span class="nn">zmq</span>
+<span class="kn">import</span> <span class="nn">zmq.devices</span>
+
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">log</span><span class="p">,</span> <span class="n">remote</span>
+<span class="kn">from</span> <span class="nn">.buffer</span> <span class="kn">import</span> <span class="n">BufferStore</span>
+<span class="kn">from</span> <span class="nn">.exception</span> <span class="kn">import</span> <span class="n">EmergencyStopException</span>
+
+<span class="c1"># isort: unique-list</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Application&#39;</span><span class="p">,</span> <span class="s1">&#39;AsyncProcess&#39;</span><span class="p">,</span> <span class="s1">&#39;AsyncProcessType&#39;</span><span class="p">,</span> <span class="s1">&#39;run_process&#39;</span><span class="p">,</span> <span class="s1">&#39;spin&#39;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="AsyncProcessType"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.AsyncProcessType">[docs]</a><span class="k">class</span> <span class="nc">AsyncProcessType</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Abstract base type for subprocesses.</span>
+
+<span class="sd">    This interface contains a subset of :class:`asyncio.subprocess.Process` and follows</span>
+<span class="sd">    similar semantics.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="AsyncProcessType.wait"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.AsyncProcessType.wait">[docs]</a>    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">wait</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;Wait for the child process to terminate.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The exit code (:attr:`AsyncProcessType.returncode`).</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If the process is not yet started.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+<div class="viewcode-block" id="AsyncProcessType.terminate"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.AsyncProcessType.terminate">[docs]</a>    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">terminate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Stop the child process.</span>
+
+<span class="sd">        The behavior is platform-dependent. On POSIX systems, this method sends the</span>
+<span class="sd">        ``SIGTERM`` signal to the child process.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+<div class="viewcode-block" id="AsyncProcessType.kill"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.AsyncProcessType.kill">[docs]</a>    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">kill</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Forcefully kill the child process.</span>
+
+<span class="sd">        The behavior is platform-dependent. On POSIX systems, this method sends the</span>
+<span class="sd">        ``SIGKILL`` signal to the child process.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+    <span class="nd">@property</span>
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">pid</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;The process identifier (PID).&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="nd">@property</span>
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">def</span> <span class="nf">returncode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;The return (exit) code of a terminated process.</span>
+
+<span class="sd">        This attribute is ``None`` for processes that have not yet exited.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+
+<div class="viewcode-block" id="AsyncProcess"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.AsyncProcess">[docs]</a><span class="k">class</span> <span class="nc">AsyncProcess</span><span class="p">(</span><span class="n">multiprocessing</span><span class="o">.</span><span class="n">Process</span><span class="p">,</span> <span class="n">AsyncProcessType</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A subprocess with a callable as an entry point.</span>
+
+<span class="sd">    This class is the asynchronous version of :class:`multiprocessing.Process`, meaning</span>
+<span class="sd">    that the parent process can join the child process asynchronously. The</span>
+<span class="sd">    implementation works with :mod:`asyncio` natively by watching a file descriptor that</span>
+<span class="sd">    is ready to read once the process exits. This event-triggered approach does not need</span>
+<span class="sd">    a helper task/thread dedicated to blocking on :meth:`multiprocessing.Process.join`</span>
+<span class="sd">    or polling :meth:`multiprocessing.Process.is_alive`.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        args: Positional arguments to :class:`multiprocessing.Process`.</span>
+<span class="sd">        kwargs: Keyword arguments to :class:`multiprocessing.Process`. By default, this</span>
+<span class="sd">            is a daemon process.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;daemon&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exited</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">asyncio</span><span class="o">.</span><span class="n">Event</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">wait</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">exited</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;must start process before waiting&#39;</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">exited</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">returncode</span>
+
+    <span class="k">def</span> <span class="nf">_handle_exit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">remove_reader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sentinel</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">exited</span><span class="p">:</span>  <span class="c1"># pragma: no cover; ``start`` is always called first</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">exited</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="c1"># All the attributes of a ``multiprocessing.Process`` are apparently pickled</span>
+        <span class="c1"># with the &#39;spawn&#39; start method. Because ``asyncio.Event`` cannot be pickled (it</span>
+        <span class="c1"># is attached to the parent process&#39;s event loop), we must create the ``exited``</span>
+        <span class="c1"># event *after* the process is started.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exited</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">add_reader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sentinel</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_exit</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">returncode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">exitcode</span></div>
+
+
+<div class="viewcode-block" id="run_process"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.run_process">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">run_process</span><span class="p">(</span>
+    <span class="n">process</span><span class="p">:</span> <span class="n">AsyncProcessType</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">terminate_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Start and wait for a subprocess to exit.</span>
+
+<span class="sd">    If the task running this function is cancelled in the parent process while the child</span>
+<span class="sd">    process has not yet exited, this function will attempt to terminate the child. If</span>
+<span class="sd">    the child is not well-behaved and does not terminate by a timeout, this function</span>
+<span class="sd">    kills the child, guaranteeing no orphan process left behind.</span>
+
+<span class="sd">    Once the child is dead, this function also inspects the child&#39;s return code to</span>
+<span class="sd">    determine if it raised an emergency stop. If so, this function re-raises the</span>
+<span class="sd">    exception.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        process: The subprocess, which will be started if it is an instance of</span>
+<span class="sd">            :class:`AsyncProcess` and not yet alive.</span>
+<span class="sd">        terminate_timeout: Maximum duration (in seconds) to wait for termination.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The process exit code.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        EmergencyStopException: If the subprocess raised an emergency stop.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">process</span><span class="p">,</span> <span class="n">AsyncProcess</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">process</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+        <span class="n">process</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+    <span class="n">logger</span> <span class="o">=</span> <span class="n">log</span><span class="o">.</span><span class="n">get_logger</span><span class="p">()</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span>
+        <span class="n">process</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="n">process</span><span class="p">,</span> <span class="s1">&#39;name&#39;</span><span class="p">,</span> <span class="s1">&#39;(anonymous)&#39;</span><span class="p">),</span>
+        <span class="n">pid</span><span class="o">=</span><span class="n">process</span><span class="o">.</span><span class="n">pid</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">await</span> <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Process started&#39;</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">process</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+        <span class="k">await</span> <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Process exited normally&#39;</span><span class="p">,</span> <span class="n">exit_code</span><span class="o">=</span><span class="n">process</span><span class="o">.</span><span class="n">returncode</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">CancelledError</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">process</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">process</span><span class="o">.</span><span class="n">wait</span><span class="p">(),</span> <span class="n">terminate_timeout</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Terminated process&#39;</span><span class="p">,</span> <span class="n">exit_code</span><span class="o">=</span><span class="n">process</span><span class="o">.</span><span class="n">returncode</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">TimeoutError</span><span class="p">:</span>
+            <span class="n">process</span><span class="o">.</span><span class="n">kill</span><span class="p">()</span>
+            <span class="k">await</span> <span class="n">process</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+            <span class="k">await</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;Killed process&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">process</span><span class="o">.</span><span class="n">returncode</span> <span class="o">==</span> <span class="n">EmergencyStopException</span><span class="o">.</span><span class="n">EXIT_CODE</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">logger</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="s1">&#39;Received emergency stop&#39;</span><span class="p">,</span> <span class="n">exit_code</span><span class="o">=</span><span class="n">process</span><span class="o">.</span><span class="n">returncode</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="n">EmergencyStopException</span>
+    <span class="k">return</span> <span class="n">process</span><span class="o">.</span><span class="n">returncode</span></div>
+
+
+<span class="k">def</span> <span class="nf">resolve_address</span><span class="p">(</span><span class="n">address</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">peer</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;127.0.0.1&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Resolve &#39;*&#39; (all available interfaces in ZMQ) to a concrete address.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        address: ZMQ address (URL-like).</span>
+<span class="sd">        peer: The hostname to substitute.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The address with a concrete hostname (if the protocol requires it).</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; resolve_address(&#39;tcp://*:6000&#39;)</span>
+<span class="sd">        &#39;tcp://127.0.0.1:6000&#39;</span>
+<span class="sd">        &gt;&gt;&gt; resolve_address(&#39;tcp:// *:6000&#39;)</span>
+<span class="sd">        &#39;tcp:// *:6000&#39;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">components</span> <span class="o">=</span> <span class="n">urlsplit</span><span class="p">(</span><span class="n">address</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">components</span><span class="o">.</span><span class="n">scheme</span> <span class="o">==</span> <span class="s1">&#39;ipc&#39;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">address</span>
+    <span class="k">if</span> <span class="n">components</span><span class="o">.</span><span class="n">hostname</span> <span class="o">==</span> <span class="s1">&#39;*&#39;</span><span class="p">:</span>
+        <span class="n">components</span> <span class="o">=</span> <span class="n">components</span><span class="o">.</span><span class="n">_replace</span><span class="p">(</span><span class="n">netloc</span><span class="o">=</span><span class="n">components</span><span class="o">.</span><span class="n">netloc</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;*&#39;</span><span class="p">,</span> <span class="n">peer</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">urlunsplit</span><span class="p">(</span><span class="n">components</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">get_connection</span><span class="p">(</span><span class="n">bindings</span><span class="p">:</span> <span class="n">Collection</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Find an address to connect to from one or more bound addresses.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        bindings: ZMQ addresses the peer socket is bound to (URL-like).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A suitable address to connect to. Address with the ``ipc`` protocol are</span>
+<span class="sd">        prioritized over those that require the IP network stack. ``ipc`` is often</span>
+<span class="sd">        backed by UNIX domain sockets, which avoid the layering that TCP/IP requires.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If no bindings are provided.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; get_connection([&#39;tcp://*:6000&#39;])</span>
+<span class="sd">        &#39;tcp://127.0.0.1:6000&#39;</span>
+<span class="sd">        &gt;&gt;&gt; get_connection([&#39;tcp://*:6000&#39;, &#39;ipc:///tmp/rt.sock&#39;])</span>
+<span class="sd">        &#39;ipc:///tmp/rt.sock&#39;</span>
+<span class="sd">        &gt;&gt;&gt; get_connection([])</span>
+<span class="sd">        Traceback (most recent call last):</span>
+<span class="sd">          ...</span>
+<span class="sd">        ValueError: must provide at least one address</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">bindings</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;must provide at least one address&#39;</span><span class="p">)</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">address</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="s1">&#39;-inf&#39;</span><span class="p">)</span> <span class="k">if</span> <span class="n">address</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;ipc&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="s1">&#39;inf&#39;</span><span class="p">)</span>
+    <span class="n">address</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">resolve_address</span><span class="p">,</span> <span class="n">bindings</span><span class="p">),</span> <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">address</span>
+
+
+<div class="viewcode-block" id="spin"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.spin">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">spin</span><span class="p">(</span>
+    <span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Awaitable</span><span class="p">[</span><span class="n">Any</span><span class="p">]],</span>
+    <span class="o">/</span><span class="p">,</span>
+    <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NoReturn</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Periodically execute an async callback.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        func: Async callback.</span>
+<span class="sd">        args: Positonal arguments to the callback.</span>
+<span class="sd">        interval: Duration (in seconds) between calls. The callback is allows to run for</span>
+<span class="sd">            longer than the interval. The callback should implement any timeout logic</span>
+<span class="sd">            if cancellation is desired.</span>
+<span class="sd">        kwargs: Keyword arguments to the callback.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">interval</span><span class="p">),</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span></div>
+
+
+<span class="n">RT</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s1">&#39;RT&#39;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">enter_async_context</span><span class="p">(</span>
+    <span class="n">wrapped</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Awaitable</span><span class="p">[</span><span class="n">AsyncContextManager</span><span class="p">[</span><span class="n">RT</span><span class="p">]]],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Awaitable</span><span class="p">[</span><span class="n">RT</span><span class="p">]]:</span>
+    <span class="sd">&quot;&quot;&quot;Decorator that adds an async context manager to an async exit stack.&quot;&quot;&quot;</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">wrapped</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="bp">self</span><span class="p">:</span> <span class="s1">&#39;Application&#39;</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RT</span><span class="p">:</span>
+        <span class="n">resource</span> <span class="o">=</span> <span class="k">await</span> <span class="n">wrapped</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack</span><span class="o">.</span><span class="n">enter_async_context</span><span class="p">(</span><span class="n">resource</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">wrapper</span>
+
+
+<div class="viewcode-block" id="Application"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.Application">[docs]</a><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Application</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;An application opens and closes resources created from command-line options.</span>
+
+<span class="sd">    Generally, you create one :class:`Application` per ``asyncio.run`` main function,</span>
+<span class="sd">    like so::</span>
+
+<span class="sd">        &gt;&gt;&gt; async def main(**options):</span>
+<span class="sd">        ...     async with Application(&#39;my-app&#39;, options) as app:</span>
+<span class="sd">        ...         ...</span>
+
+<span class="sd">    An :class:`Application` produces :class:`remote.Endpoint` and :class:`remote.Router`</span>
+<span class="sd">    instances in common configurations. It also configures the :mod:`asyncio` loop and</span>
+<span class="sd">    logging framework, which are needed to make the messaging components work.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        name: The name of the application (preferably kebab case and unique across all</span>
+<span class="sd">            applications).</span>
+<span class="sd">        options: A map of option names to their values.</span>
+<span class="sd">        stack: The stack that the app&#39;s resources are pushed on.</span>
+<span class="sd">        endpoints: A map of endpoint names to endpoints.</span>
+<span class="sd">        logger: A logger instance (may not be bound).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">options</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+    <span class="n">stack</span><span class="p">:</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">AsyncExitStack</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">contextlib</span><span class="o">.</span><span class="n">AsyncExitStack</span><span class="p">)</span>
+    <span class="n">endpoints</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">remote</span><span class="o">.</span><span class="n">SocketNode</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">logger</span><span class="p">:</span> <span class="n">log</span><span class="o">.</span><span class="n">AsyncLogger</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">log</span><span class="o">.</span><span class="n">get_logger</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="fm">__aenter__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s1">&#39;Application&#39;</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">configure_loop</span><span class="p">()</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack</span><span class="o">.</span><span class="fm">__aenter__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack</span><span class="o">.</span><span class="n">push_async_callback</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_terminate_zmq_context</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">fmt</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;log_format&#39;</span><span class="p">],</span> <span class="n">level</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;log_level&#39;</span><span class="p">])</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="fm">__aexit__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">exc_type</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="ne">BaseException</span><span class="p">]],</span>
+        <span class="n">exc</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="ne">BaseException</span><span class="p">],</span>
+        <span class="n">traceback</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">TracebackType</span><span class="p">],</span>
+        <span class="o">/</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]:</span>
+        <span class="n">hide_exc</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack</span><span class="o">.</span><span class="fm">__aexit__</span><span class="p">(</span><span class="n">exc_type</span><span class="p">,</span> <span class="n">exc</span><span class="p">,</span> <span class="n">traceback</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">exc_type</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">exc_type</span><span class="p">,</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">CancelledError</span><span class="p">):</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Application is exiting&#39;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="n">hide_exc</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_terminate_zmq_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">zmq</span><span class="o">.</span><span class="n">asyncio</span><span class="o">.</span><span class="n">Context</span><span class="o">.</span><span class="n">instance</span><span class="p">()</span><span class="o">.</span><span class="n">term</span><span class="p">()</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;ZMQ context terminated&#39;</span><span class="p">)</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span> <span class="nf">executor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ThreadPoolExecutor</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;A thread pool executor for running synchronous tasks.&quot;&quot;&quot;</span>
+        <span class="c1"># pylint: disable=consider-using-with</span>
+        <span class="c1"># Closed by ``asyncio.AbstractEventLoop.shutdown_default_executor``</span>
+        <span class="k">return</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span>
+            <span class="n">max_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;thread_pool_workers&#39;</span><span class="p">],</span>
+            <span class="n">thread_name_prefix</span><span class="o">=</span><span class="s1">&#39;aioworker&#39;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_handle_exc</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">loop</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">AbstractEventLoop</span><span class="p">,</span>
+        <span class="n">ctx</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="o">/</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">context</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">exception</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;exception&#39;</span><span class="p">):</span>
+            <span class="n">context</span><span class="p">[</span><span class="s1">&#39;exc_info&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">exception</span>
+        <span class="k">if</span> <span class="n">future</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;future&#39;</span><span class="p">):</span>
+            <span class="n">context</span><span class="p">[</span><span class="s1">&#39;done&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">future</span><span class="o">.</span><span class="n">done</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">future</span><span class="p">,</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Task</span><span class="p">):</span>
+                <span class="n">context</span><span class="p">[</span><span class="s1">&#39;task_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">future</span><span class="o">.</span><span class="n">get_name</span><span class="p">()</span>
+        <span class="n">loop</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span>
+            <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">sync_bl</span><span class="o">.</span><span class="n">error</span><span class="p">,</span> <span class="n">ctx</span><span class="p">[</span><span class="s1">&#39;message&#39;</span><span class="p">],</span> <span class="o">**</span><span class="n">context</span><span class="p">),</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="Application.configure_loop"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.Application.configure_loop">[docs]</a>    <span class="k">def</span> <span class="nf">configure_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Configure the current :mod:`asyncio` loop and environment.</span>
+
+<span class="sd">        * Sets the debug flag, default executor, and exception handler, which logs</span>
+<span class="sd">          exceptions produced by event loop callbacks.</span>
+<span class="sd">        * Set the current task and thread names.</span>
+<span class="sd">        * If this method is called in the main thread, set signal handlers for</span>
+<span class="sd">          ``SIGINT`` and ``SIGTERM`` that cancel the current task.</span>
+
+<span class="sd">        Note:</span>
+<span class="sd">            This method assumes the current task is the main task run by</span>
+<span class="sd">            :func:`asyncio.run`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span>
+        <span class="n">loop</span><span class="o">.</span><span class="n">set_debug</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;debug&#39;</span><span class="p">])</span>
+        <span class="n">loop</span><span class="o">.</span><span class="n">set_default_executor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">executor</span><span class="p">)</span>
+        <span class="n">loop</span><span class="o">.</span><span class="n">set_exception_handler</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_handle_exc</span><span class="p">)</span>
+        <span class="n">current_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">current_thread</span><span class="p">()</span>
+        <span class="n">current_thread</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">-service&#39;</span>
+        <span class="n">current_task</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">current_task</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">current_task</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">current_task</span><span class="o">.</span><span class="n">set_name</span><span class="p">(</span><span class="s1">&#39;main&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">current_thread</span> <span class="ow">is</span> <span class="n">threading</span><span class="o">.</span><span class="n">main_thread</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">signum</span> <span class="ow">in</span> <span class="p">(</span><span class="n">signal</span><span class="o">.</span><span class="n">SIGINT</span><span class="p">,</span> <span class="n">signal</span><span class="o">.</span><span class="n">SIGTERM</span><span class="p">):</span>
+                <span class="c1"># ``asyncio.run`` will cancel all outstanding tasks and ensure they run</span>
+                <span class="c1"># to completion. Cancelling all tasks here, not just the main task,</span>
+                <span class="c1"># removes the outstanding tasks from ``asyncio.all_tasks`` and prevents</span>
+                <span class="c1"># ``asyncio.run`` from waiting on them.</span>
+                <span class="n">loop</span><span class="o">.</span><span class="n">add_signal_handler</span><span class="p">(</span>
+                    <span class="n">signum</span><span class="p">,</span>
+                    <span class="n">current_task</span><span class="o">.</span><span class="n">cancel</span><span class="p">,</span>
+                    <span class="sa">f</span><span class="s1">&#39;received signal </span><span class="si">{</span><span class="n">signum</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="n">signal</span><span class="o">.</span><span class="n">strsignal</span><span class="p">(</span><span class="n">signum</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+                <span class="p">)</span></div>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_health_cb</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s1">&#39;Health check&#39;</span><span class="p">,</span>
+            <span class="n">thread_count</span><span class="o">=</span><span class="n">threading</span><span class="o">.</span><span class="n">active_count</span><span class="p">(),</span>
+            <span class="n">task_count</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">all_tasks</span><span class="p">()),</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="Application.report_health"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.Application.report_health">[docs]</a>    <span class="k">def</span> <span class="nf">report_health</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="n">NoReturn</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;Schedule a task to periodically log the health of this process.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span>
+            <span class="n">spin</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_health_cb</span><span class="p">,</span> <span class="n">interval</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;health_check_interval&#39;</span><span class="p">]),</span>
+            <span class="n">name</span><span class="o">=</span><span class="s1">&#39;report-health&#39;</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="Application.make_log_forwarder"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.Application.make_log_forwarder">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">make_log_forwarder</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">zmq</span><span class="o">.</span><span class="n">devices</span><span class="o">.</span><span class="n">Device</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Make a threaded device that forwards ZMQ PUB-SUB messages emitted by loggers.</span>
+
+<span class="sd">        The device is subscribed to all messages. Both sockets bind to fixed addresses.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">forwarder</span> <span class="o">=</span> <span class="n">zmq</span><span class="o">.</span><span class="n">devices</span><span class="o">.</span><span class="n">ThreadDevice</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">FORWARDER</span><span class="p">,</span> <span class="n">zmq</span><span class="o">.</span><span class="n">SUB</span><span class="p">,</span> <span class="n">zmq</span><span class="o">.</span><span class="n">PUB</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">address</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;log_backend&#39;</span><span class="p">]:</span>
+            <span class="n">forwarder</span><span class="o">.</span><span class="n">bind_in</span><span class="p">(</span><span class="n">address</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">address</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;log_frontend&#39;</span><span class="p">]:</span>
+            <span class="n">forwarder</span><span class="o">.</span><span class="n">bind_out</span><span class="p">(</span><span class="n">address</span><span class="p">)</span>
+        <span class="n">forwarder</span><span class="o">.</span><span class="n">setsockopt_in</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">SUBSCRIBE</span><span class="p">,</span> <span class="sa">b</span><span class="s1">&#39;&#39;</span><span class="p">)</span>
+        <span class="n">forwarder</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">forwarder</span></div>
+
+<div class="viewcode-block" id="Application.make_log_publisher"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.Application.make_log_publisher">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">make_log_publisher</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">log</span><span class="o">.</span><span class="n">LogPublisher</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Make a client that connects to the log forwarder&#39;s backend socket.</span>
+
+<span class="sd">        The publisher will be installed in the processor chain.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># pylint: disable=unexpected-keyword-arg; dataclass not recognized</span>
+        <span class="n">node</span> <span class="o">=</span> <span class="n">remote</span><span class="o">.</span><span class="n">SocketNode</span><span class="p">(</span>
+            <span class="n">socket_type</span><span class="o">=</span><span class="n">zmq</span><span class="o">.</span><span class="n">PUB</span><span class="p">,</span>
+            <span class="n">connections</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="n">get_connection</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;log_backend&#39;</span><span class="p">])}),</span>
+        <span class="p">)</span>
+        <span class="n">publisher</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack</span><span class="o">.</span><span class="n">enter_async_context</span><span class="p">(</span><span class="n">log</span><span class="o">.</span><span class="n">LogPublisher</span><span class="p">(</span><span class="n">node</span><span class="p">))</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)</span>
+        <span class="n">log</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+            <span class="n">publisher</span><span class="p">,</span>
+            <span class="n">fmt</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;log_format&#39;</span><span class="p">],</span>
+            <span class="n">level</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;log_level&#39;</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">app</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s1">&#39;Log publisher configured&#39;</span><span class="p">,</span>
+            <span class="n">fmt</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;log_format&#39;</span><span class="p">],</span>
+            <span class="n">min_level</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;log_level&#39;</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">publisher</span></div>
+
+<div class="viewcode-block" id="Application.make_log_subscriber"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.Application.make_log_subscriber">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">make_log_subscriber</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="n">handler</span><span class="p">:</span> <span class="n">remote</span><span class="o">.</span><span class="n">Handler</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">remote</span><span class="o">.</span><span class="n">Service</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Make a service that connects to the log forwarder&#39;s frontend socket.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            handler: A remote call handler. The subscriber will call the handler&#39;s</span>
+<span class="sd">                methods when it receives a logged message. Each method should be named</span>
+<span class="sd">                after the log level it handles (*e.g.*, ``debug``) and take a single</span>
+<span class="sd">                positional argument: the event dictionary (see</span>
+<span class="sd">                :func:`runtime.log.configure` for details on the format).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># pylint: disable=unexpected-keyword-arg; dataclass not recognized</span>
+        <span class="n">min_level</span> <span class="o">=</span> <span class="n">log</span><span class="o">.</span><span class="n">get_level_num</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;log_level&#39;</span><span class="p">])</span>
+        <span class="n">subs</span> <span class="o">=</span> <span class="p">{</span><span class="n">level</span> <span class="k">for</span> <span class="n">level</span> <span class="ow">in</span> <span class="n">log</span><span class="o">.</span><span class="n">LEVELS</span> <span class="k">if</span> <span class="n">log</span><span class="o">.</span><span class="n">get_level_num</span><span class="p">(</span><span class="n">level</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">min_level</span><span class="p">}</span>
+        <span class="n">node</span> <span class="o">=</span> <span class="n">remote</span><span class="o">.</span><span class="n">SocketNode</span><span class="p">(</span>
+            <span class="n">socket_type</span><span class="o">=</span><span class="n">zmq</span><span class="o">.</span><span class="n">SUB</span><span class="p">,</span>
+            <span class="n">connections</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="n">get_connection</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;log_frontend&#39;</span><span class="p">])}),</span>
+            <span class="n">subscriptions</span><span class="o">=</span><span class="n">subs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_service</span><span class="p">(</span><span class="n">handler</span><span class="p">,</span> <span class="n">node</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">log</span><span class="o">.</span><span class="n">get_null_logger</span><span class="p">())</span></div>
+
+<div class="viewcode-block" id="Application.make_client"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.Application.make_client">[docs]</a>    <span class="nd">@enter_async_context</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">make_client</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">remote</span><span class="o">.</span><span class="n">Node</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">remote</span><span class="o">.</span><span class="n">Client</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Make and start a remote call client.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            node: The node the client should wrap. If not provided, this method</span>
+<span class="sd">                constructs and uses a node backed by a ``DEALER`` socket and connected</span>
+<span class="sd">                to the router frontend. By default, the socket&#39;s identity is the app</span>
+<span class="sd">                named suffixed by ``-client``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">-client&#39;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">node</span><span class="p">:</span>
+            <span class="c1"># pylint: disable=unexpected-keyword-arg; dataclass not recognized</span>
+            <span class="n">options</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;client_option&#39;</span><span class="p">])</span>
+            <span class="n">options</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">IDENTITY</span><span class="p">,</span> <span class="n">name</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+            <span class="n">connection</span> <span class="o">=</span> <span class="n">get_connection</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;router_frontend&#39;</span><span class="p">])</span>
+            <span class="n">node</span> <span class="o">=</span> <span class="n">remote</span><span class="o">.</span><span class="n">SocketNode</span><span class="p">(</span>
+                <span class="n">socket_type</span><span class="o">=</span><span class="n">zmq</span><span class="o">.</span><span class="n">DEALER</span><span class="p">,</span>
+                <span class="n">connections</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="n">connection</span><span class="p">}),</span>
+                <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">remote</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="Application.make_service"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.Application.make_service">[docs]</a>    <span class="nd">@enter_async_context</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">make_service</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">/</span><span class="p">,</span>
+        <span class="n">handler</span><span class="p">:</span> <span class="n">remote</span><span class="o">.</span><span class="n">Handler</span><span class="p">,</span>
+        <span class="n">node</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">remote</span><span class="o">.</span><span class="n">Node</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">logger</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">log</span><span class="o">.</span><span class="n">AsyncLogger</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">remote</span><span class="o">.</span><span class="n">Service</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Make and start a remote call service.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            handler: A remote call handler.</span>
+<span class="sd">            node: The node the service should wrap. If not provided, this method</span>
+<span class="sd">                constructs and uses a node backed by a ``DEALER`` socket and connected</span>
+<span class="sd">                to the router backend. By default, the socket&#39;s identity is the app name</span>
+<span class="sd">                suffixed by ``-service``.</span>
+<span class="sd">            logger: The logger passed to the service.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">-service&#39;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">node</span><span class="p">:</span>
+            <span class="c1"># pylint: disable=unexpected-keyword-arg; dataclass not recognized</span>
+            <span class="n">options</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;service_option&#39;</span><span class="p">])</span>
+            <span class="n">options</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">IDENTITY</span><span class="p">,</span> <span class="n">name</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+            <span class="n">node</span> <span class="o">=</span> <span class="n">remote</span><span class="o">.</span><span class="n">SocketNode</span><span class="p">(</span>
+                <span class="n">socket_type</span><span class="o">=</span><span class="n">zmq</span><span class="o">.</span><span class="n">DEALER</span><span class="p">,</span>
+                <span class="n">connections</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">({</span><span class="n">get_connection</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;router_backend&#39;</span><span class="p">])}),</span>
+                <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span>
+        <span class="k">return</span> <span class="n">remote</span><span class="o">.</span><span class="n">Service</span><span class="p">(</span>
+            <span class="n">node</span><span class="o">=</span><span class="n">node</span><span class="p">,</span>
+            <span class="n">handler</span><span class="o">=</span><span class="n">handler</span><span class="p">,</span>
+            <span class="n">concurrency</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;service_workers&#39;</span><span class="p">],</span>
+            <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">),</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="Application.make_update_client"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.Application.make_update_client">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">make_update_client</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">remote</span><span class="o">.</span><span class="n">Client</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Make a client for publishing Smart Device updates over UDP/IP multicast.</span>
+
+<span class="sd">        Since the message flow is unidirectional, notification messages are recommended.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">node</span> <span class="o">=</span> <span class="n">remote</span><span class="o">.</span><span class="n">DatagramNode</span><span class="o">.</span><span class="n">from_address</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;update_addr&#39;</span><span class="p">],</span> <span class="n">bind</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_client</span><span class="p">(</span><span class="n">node</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Application.make_update_service"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.Application.make_update_service">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">make_update_service</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="n">handler</span><span class="p">:</span> <span class="n">remote</span><span class="o">.</span><span class="n">Handler</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">remote</span><span class="o">.</span><span class="n">Service</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Make a service for receiving Smart Device updates over UDP/IP multicast.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            handler: A remote call handler with a bound method ``update``, which accepts</span>
+<span class="sd">                a single positional argument (an update object) and returns nothing.</span>
+
+<span class="sd">        Note:</span>
+<span class="sd">            The format of an update object is::</span>
+
+<span class="sd">                {</span>
+<span class="sd">                    &quot;&lt;gamepad-index&gt;&quot;: {</span>
+<span class="sd">                        &quot;lx&quot;: &lt;float: [-1, 1]&gt;,</span>
+<span class="sd">                        &quot;ly&quot;: &lt;float: [-1, 1]&gt;,</span>
+<span class="sd">                        &quot;rx&quot;: &lt;float: [-1, 1]&gt;,</span>
+<span class="sd">                        &quot;ry&quot;: &lt;float: [-1, 1]&gt;,</span>
+<span class="sd">                        &quot;btn&quot;: int,</span>
+<span class="sd">                    },</span>
+<span class="sd">                    ...</span>
+<span class="sd">                }</span>
+
+<span class="sd">            The ``[lr][xy]`` keys represent joystick positions, where ``l`` and ``r``</span>
+<span class="sd">            stand for left and right, respectively, and ``x`` and ``y`` are Cartesian</span>
+<span class="sd">            coordinates. The origin (0, 0) corresponds to the joystick in the resting</span>
+<span class="sd">            position. Each joystick is constrained within the unit circle.</span>
+
+<span class="sd">            ``btn`` is a bitmask where a &quot;1&quot; bit indicates the corresponding button is</span>
+<span class="sd">            pressed. Consult the device catalog for which buttons correspond to which</span>
+<span class="sd">            bits. (The first parameters correspond to the lower-order bits.)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">node</span> <span class="o">=</span> <span class="n">remote</span><span class="o">.</span><span class="n">DatagramNode</span><span class="o">.</span><span class="n">from_address</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;update_addr&#39;</span><span class="p">],</span> <span class="n">bind</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">membership</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;4sl&#39;</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">inet_aton</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">host</span><span class="p">),</span> <span class="n">socket</span><span class="o">.</span><span class="n">INADDR_ANY</span><span class="p">)</span>
+        <span class="n">node</span><span class="o">.</span><span class="n">options</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">SOL_SOCKET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SO_BROADCAST</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">IPPROTO_IP</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">IP_MULTICAST_TTL</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">IPPROTO_IP</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">IP_ADD_MEMBERSHIP</span><span class="p">,</span> <span class="n">membership</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_service</span><span class="p">(</span><span class="n">handler</span><span class="p">,</span> <span class="n">node</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Application.make_control_client"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.Application.make_control_client">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">make_control_client</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">remote</span><span class="o">.</span><span class="n">Client</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Make a client for sending gamepad (control) inputs.</span>
+
+<span class="sd">        Since the message flow is unidirectional, notification messages are recommended.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">node</span> <span class="o">=</span> <span class="n">remote</span><span class="o">.</span><span class="n">DatagramNode</span><span class="o">.</span><span class="n">from_address</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;control_addr&#39;</span><span class="p">],</span>
+            <span class="n">bind</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_client</span><span class="p">(</span><span class="n">node</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Application.make_control_service"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.Application.make_control_service">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">make_control_service</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="n">handler</span><span class="p">:</span> <span class="n">remote</span><span class="o">.</span><span class="n">Handler</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">remote</span><span class="o">.</span><span class="n">Service</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Make a service for receiving gamepad (control) inputs.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            handler: A remote call handler with a bound method ``update_gamepads``,</span>
+<span class="sd">                which accepts a single positional argument (an update object) and</span>
+<span class="sd">                returns nothing.</span>
+
+<span class="sd">        Note:</span>
+<span class="sd">            The format of an update object is::</span>
+
+<span class="sd">                {&quot;&lt;uid&gt;&quot;: {&quot;&lt;param-name&gt;&quot;: &lt;value&gt;}}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">node</span> <span class="o">=</span> <span class="n">remote</span><span class="o">.</span><span class="n">DatagramNode</span><span class="o">.</span><span class="n">from_address</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;control_addr&#39;</span><span class="p">],</span> <span class="n">bind</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_service</span><span class="p">(</span><span class="n">handler</span><span class="p">,</span> <span class="n">node</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Application.make_router"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.Application.make_router">[docs]</a>    <span class="nd">@enter_async_context</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">make_router</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">remote</span><span class="o">.</span><span class="n">Router</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Make a router for passing remote call requests and responses.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">remote</span><span class="o">.</span><span class="n">Router</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;router_frontend&#39;</span><span class="p">],</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;router_backend&#39;</span><span class="p">],</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="Application.make_buffer_manager"><a class="viewcode-back" href="../../api-reference/process.html#runtime.process.Application.make_buffer_manager">[docs]</a>    <span class="k">def</span> <span class="nf">make_buffer_manager</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">shared</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BufferStore</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Make a buffer manager.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            shared: :data:`True` if the buffers should be backed by shared memory,</span>
+<span class="sd">                :data:`False` for non-shared (private) memory.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">catalog</span> <span class="o">=</span> <span class="n">BufferStore</span><span class="o">.</span><span class="n">make_catalog</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;dev_catalog&#39;</span><span class="p">])</span>
+        <span class="n">buffers</span> <span class="o">=</span> <span class="n">BufferStore</span><span class="p">(</span><span class="n">catalog</span><span class="p">,</span> <span class="n">shared</span><span class="o">=</span><span class="n">shared</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">buffers</span><span class="p">)</span></div></div>
+</pre></div>
+
+          </div>
+          <div class="page-nav">
+            <div class="inner"><ul class="page-nav">
+</ul><div class="footer" role="contentinfo">
+      &#169; Copyright 2021, Pioneers in Engineering.
+    <br>
+    Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.2.0 with <a href="https://github.com/schettino72/sphinx_press_theme">Press Theme</a> 0.8.0.
+</div>
+            </div>
+          </div>
+      </page>
+    </div></div>
+    
+    
+  </body>
+</html>

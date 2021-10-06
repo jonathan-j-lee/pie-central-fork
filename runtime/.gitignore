@@ -1,4 +1,0 @@
-docs/build
-runtime/*.c
-runtime/*.cpp
-.pylint.d

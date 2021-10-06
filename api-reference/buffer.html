@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html >
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+      <title>runtime.buffer</title>
+    
+          <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+          <link rel="stylesheet" href="../_static/theme.css " type="text/css" />
+          <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+      
+      <!-- sphinx script_files -->
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+
+      
+      <!-- bundled in js (rollup iife) -->
+      <!-- <script src="../_static/theme-vendors.js"></script> -->
+      <script src="../_static/theme.js" defer></script>
+    
+  <link rel="index" title="Index" href="../genindex.html" />
+  <link rel="search" title="Search" href="../search.html" />
+  <link rel="next" title="runtime.exception" href="exception.html" />
+  <link rel="prev" title="runtime.api" href="api.html" /> 
+  </head>
+
+  <body>
+    <div id="app">
+    <div class="theme-container" :class="pageClasses"><navbar @toggle-sidebar="toggleSidebar">
+  <router-link to="../index.html" class="home-link">
+    
+      <span class="site-name">Runtime</span>
+    
+  </router-link>
+
+  <div class="links">
+    <navlinks class="can-hide">
+
+
+
+    </navlinks>
+  </div>
+</navbar>
+
+      
+      <div class="sidebar-mask" @click="toggleSidebar(false)">
+      </div>
+        <sidebar @toggle-sidebar="toggleSidebar">
+          
+          <navlinks>
+            
+
+
+
+            
+          </navlinks><div id="searchbox" class="searchbox" role="search">
+  <div class="caption"><span class="caption-text">Quick search</span>
+    <div class="searchformwrapper">
+      <form class="search" action="../search.html" method="get">
+        <input type="text" name="q" />
+        <input type="submit" value="Search" />
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div><div class="sidebar-links" role="navigation" aria-label="main navigation">
+  
+    <div class="sidebar-group">
+      <p class="caption">
+        <span class="caption-text"><a href="../index.html#runtime-documentation">Contents:</a></span>
+      </p>
+      <ul class="">
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../design.html" class="reference internal ">Design Goals</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../architecture.html" class="reference internal ">Architecture</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../ipc.html" class="reference internal ">IPC</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../smart-devices.html" class="reference internal ">Smart Devices</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="index.html" class="reference internal ">API Reference</a>
+            
+
+            
+          </li>
+
+        
+      </ul>
+    </div>
+  
+</div>
+        </sidebar>
+
+      <page>
+          <div class="body-header" role="navigation" aria-label="navigation">
+  
+  <ul class="breadcrumbs">
+    <li><a href="../index.html">Docs</a> &raquo;</li>
+    
+      <li><a href="index.html">API Reference</a> &raquo;</li>
+    
+    <li><code class="docutils literal notranslate"><span class="pre">runtime.buffer</span></code></li>
+  </ul>
+  
+
+  <ul class="page-nav">
+  <li class="prev">
+    <a href="api.html"
+       title="previous chapter">← <code class="docutils literal notranslate"><span class="pre">runtime.api</span></code></a>
+  </li>
+  <li class="next">
+    <a href="exception.html"
+       title="next chapter"><code class="docutils literal notranslate"><span class="pre">runtime.exception</span></code> →</a>
+  </li>
+</ul>
+  
+</div>
+<hr>
+          <div class="content" role="main" v-pre>
+            
+  <section id="module-runtime.buffer">
+<span id="runtime-buffer"></span><h1><code class="docutils literal notranslate"><span class="pre">runtime.buffer</span></code><a class="headerlink" href="#module-runtime.buffer" title="Permalink to this headline">¶</a></h1>
+<p>Peripheral data storage and sharing.</p>
+<p>Buffers are the primary interprocess communication (IPC) mechanism within Runtime. Each
+buffer is a C-style structure created with the <a class="reference external" href="https://docs.python.org/3/library/ctypes.html#module-ctypes" title="(in Python v3.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">ctypes</span></code></a> foreign function library
+and possibly backed by shared memory. Each buffer represents one Smart Device or other
+peripheral and contains parameters that can be read or written to.</p>
+<p>For extensibility reasons, this library contains no hardcoded information about specific
+peripherals. Instead, this library parses each peripheral’s parameter and memory layout
+specifications from a config file and generates the buffer types dynamically.</p>
+<p>Consumers should poll buffers for changes. There is no mechanism for event-based
+notifications.</p>
+<p>This library is synchronous. Since many operations acquire a mutex, buffer operations
+should run in an executor, so as not to block the event loop.</p>
+<dl class="py exception">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBufferError">
+<em class="property"><span class="pre">exception</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.buffer.</span></span><span class="sig-name descname"><span class="pre">DeviceBufferError</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">context</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#DeviceBufferError"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.DeviceBufferError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="exception.html#runtime.exception.RuntimeBaseException" title="runtime.exception.RuntimeBaseException"><code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.exception.RuntimeBaseException</span></code></a></p>
+<p>Error when interfacing with a buffer.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.buffer.Buffer">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.buffer.</span></span><span class="sig-name descname"><span class="pre">Buffer</span></span><a class="reference internal" href="../_modules/runtime/buffer.html#Buffer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.Buffer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.buffer.BaseStructure</span></code></p>
+<p>A structure for storing peripheral data.</p>
+<p>A buffer consists of two substructures: an <em>update block</em> for storing current
+parameter values (as read from the peripheral), and a <em>write block</em> for parameter
+values to be written to the peripheral.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.buffer.Buffer.params">
+<span class="sig-name descname"><span class="pre">params</span></span><a class="headerlink" href="#runtime.buffer.Buffer.params" title="Permalink to this definition">¶</a></dt>
+<dd><p>Maps param names to their descriptors.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>Mapping[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)">str</a>, <a class="reference internal" href="#runtime.buffer.Parameter" title="runtime.buffer.Parameter">runtime.buffer.Parameter</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.Buffer.attach">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">attach</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">buf</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#Buffer.attach"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.Buffer.attach" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a new buffer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>buf</strong> (<em>Optional</em><em>[</em><em>runtime.buffer.WriteableBuffer</em><em>]</em>) – A writeable Python buffer (not to be confused with <a class="reference internal" href="#runtime.buffer.Buffer" title="runtime.buffer.Buffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">Buffer</span></code></a>). If
+not provided, a <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytearray" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bytearray</span></code></a> with the correct size is allocated.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.Buffer.get">
+<span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">param</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#Buffer.get"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.Buffer.get" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read a parameter from the update block.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>param</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a>) – The parameter name.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The parameter value. Consult the catalog for each device’s parameters and
+their types.</p>
+</dd>
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#runtime.buffer.DeviceBufferError" title="runtime.buffer.DeviceBufferError"><strong>DeviceBufferError</strong></a> – If the parameter does not exist or is not readable.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.Buffer.make_type">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">make_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">extra_fields</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">attrs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#Buffer.make_type"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.Buffer.make_type" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a new buffer type (subclass).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a>) – Type name prefix (preferably kebab case).</p></li>
+<li><p><strong>params</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.10)"><em>list</em></a><em>[</em><a class="reference internal" href="#runtime.buffer.Parameter" title="runtime.buffer.Parameter"><em>runtime.buffer.Parameter</em></a><em>]</em>) – Parameter list.</p></li>
+<li><p><strong>extra_fields</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.10)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#type" title="(in Python v3.10)"><em>type</em></a><em>]</em>) – Extra <a class="reference external" href="https://docs.python.org/3/library/ctypes.html#module-ctypes" title="(in Python v3.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">ctypes</span></code></a> fields (name and types).</p></li>
+<li><p><strong>attrs</strong> (<em>Any</em>) – Additional class attributes.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.Buffer.open">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">open</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">create</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#Buffer.open"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.Buffer.open" title="Permalink to this definition">¶</a></dt>
+<dd><p>Open a new buffer backed by shared memory.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a>) – The shared memory object’s name.</p></li>
+<li><p><strong>create</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><em>bool</em></a>) – Whether to attempt to create a new shared memory object. If <code class="docutils literal notranslate"><span class="pre">True</span></code>
+but the object already exists, <a class="reference internal" href="#runtime.buffer.Buffer.open" title="runtime.buffer.Buffer.open"><code class="xref py py-meth docutils literal notranslate"><span class="pre">open()</span></code></a> silently attaches to the
+existing object.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A context manager that automatically closes the shared memory object when
+the exit handler runs. The object is <em>not</em> unlinked, meaning other processes
+may still access the object. To finally destroy the object, you must call
+<a class="reference internal" href="#runtime.buffer.Buffer.unlink" title="runtime.buffer.Buffer.unlink"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Buffer.unlink()</span></code></a> on this object’s name.</p>
+</dd>
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#runtime.buffer.DeviceBufferError" title="runtime.buffer.DeviceBufferError"><strong>DeviceBufferError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">create=False</span></code>, but the object does not exist.</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>When two processes attempt to create this buffer simultaneously, there is a
+small chance that the buffer that loses out yields its view before the other
+process initializes the mutex. This behavior is OK, since attempting to
+acquire an uninitialized mutex should raise a <code class="docutils literal notranslate"><span class="pre">SyncError</span></code> with EINVAL.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.Buffer.set">
+<span class="sig-name descname"><span class="pre">set</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">param</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#Buffer.set"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.Buffer.set" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set a parameter value in the update block.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>param</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a>) – The parameter name.</p></li>
+<li><p><strong>value</strong> (<em>Any</em>) – The parameter value. Consult the catalog for each device’s parameters
+and their types.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference internal" href="#runtime.buffer.DeviceBufferError" title="runtime.buffer.DeviceBufferError"><strong>DeviceBufferError</strong></a> – If the parameter does not exist or is not writeable.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.10)"><strong>TypeError</strong></a> – If the value is not the correct type.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.Buffer.transaction">
+<span class="sig-name descname"><span class="pre">transaction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#Buffer.transaction"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.Buffer.transaction" title="Permalink to this definition">¶</a></dt>
+<dd><p>Acquire the buffer’s mutex and check its valid bit.</p>
+<p>All methods already use this reentrant context manager to guarantee consistency,
+but this context manager may also be used to group transactions into a larger
+atomic transaction. This avoids acquiring and releasing the mutex repeatedly.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.Buffer.unlink">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">unlink</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#Buffer.unlink"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.Buffer.unlink" title="Permalink to this definition">¶</a></dt>
+<dd><p>Destroy a shared memory object.</p>
+<p>The exact behavior depends on the platform. See <code class="xref py py-meth docutils literal notranslate"><span class="pre">SharedMemory.unlink()</span></code>.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.Buffer.write">
+<span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">param</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#Buffer.write"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.Buffer.write" title="Permalink to this definition">¶</a></dt>
+<dd><p>Request writing a parameter to the device.</p>
+<p>Because the buffer is polled and the writes are batched during each cycle, it’s
+possible to overwrite a pending parameter write. This is a feature to reduce
+excessive writes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>param</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a>) – The parameter name.</p></li>
+<li><p><strong>value</strong> (<em>Any</em>) – The parameter value. Consult the catalog for each device’s parameters
+and their types.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference internal" href="#runtime.buffer.DeviceBufferError" title="runtime.buffer.DeviceBufferError"><strong>DeviceBufferError</strong></a> – If the parameter does not exist or is not writeable.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.10)"><strong>TypeError</strong></a> – If the value is not the correct type.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="runtime.buffer.Buffer.valid">
+<em class="property"><span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">valid</span></span><em class="property"><span class="pre">:</span> <a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><span class="pre">bool</span></a></em><a class="headerlink" href="#runtime.buffer.Buffer.valid" title="Permalink to this definition">¶</a></dt>
+<dd><p>Whether this buffer represents an active device.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.buffer.BufferStore">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.buffer.</span></span><span class="sig-name descname"><span class="pre">BufferStore</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">catalog</span></em>, <em class="sig-param"><span class="pre">buffers=&lt;factory&gt;</span></em>, <em class="sig-param"><span class="pre">stack=&lt;factory&gt;</span></em>, <em class="sig-param"><span class="pre">shared=True</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#BufferStore"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.BufferStore" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">collections.abc.Mapping</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.10)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Union</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a>]], <a class="reference internal" href="#runtime.buffer.Buffer" title="runtime.buffer.Buffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.buffer.Buffer</span></code></a>]</p>
+<p>Manage the lifecycle of a collection of buffers.</p>
+<p>Every device type has a unique name and every device has an integer identifier
+(UID) unique among its type. A type name and UID pair uniquely identifies a device
+globally. For Smart Devices, the UID encodes the type, so its UID alone specifies
+a buffer.</p>
+<p>A <a class="reference internal" href="#runtime.buffer.BufferStore" title="runtime.buffer.BufferStore"><code class="xref py py-class docutils literal notranslate"><span class="pre">BufferStore</span></code></a> maps type name and UID pairs to buffer instances. The store
+implements the context manager protocol for automatically closing all open buffers.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>catalog</strong> (<em>Mapping</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#type" title="(in Python v3.10)"><em>type</em></a><em>[</em><a class="reference internal" href="#runtime.buffer.Buffer" title="runtime.buffer.Buffer"><em>runtime.buffer.Buffer</em></a><em>]</em><em>]</em>) – A device catalog mapping unique type names to buffer types. The
+buffer types should be generated with the <a class="reference internal" href="#runtime.buffer.Buffer.make_type" title="runtime.buffer.Buffer.make_type"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Buffer.make_type()</span></code></a> factory.</p></li>
+<li><p><strong>buffers</strong> (<em>MutableMapping</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.10)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a><em>]</em><em>, </em><a class="reference internal" href="#runtime.buffer.Buffer" title="runtime.buffer.Buffer"><em>runtime.buffer.Buffer</em></a><em>]</em>) – A mapping from type name and UID pairs to buffer instances.</p></li>
+<li><p><strong>stack</strong> (<a class="reference external" href="https://docs.python.org/3/library/contextlib.html#contextlib.ExitStack" title="(in Python v3.10)"><em>contextlib.ExitStack</em></a>) – An exit stack for closing buffers.</p></li>
+<li><p><strong>shared</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><em>bool</em></a>) – Whether buffers should be created shared memory.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.BufferStore.get_or_open">
+<span class="sig-name descname"><span class="pre">get_or_open</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">create</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><span class="pre">bool</span></a></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#runtime.buffer.DeviceBuffer" title="runtime.buffer.DeviceBuffer"><span class="pre">runtime.buffer.DeviceBuffer</span></a></span></span><a class="reference internal" href="../_modules/runtime/buffer.html#BufferStore.get_or_open"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.BufferStore.get_or_open" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">get_or_open</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.10)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">create</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><span class="pre">bool</span></a></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#runtime.buffer.Buffer" title="runtime.buffer.Buffer"><span class="pre">runtime.buffer.Buffer</span></a></span></span></dt>
+<dd><p>Get a buffer, opening a new one if necessary.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>key</strong> – A buffer identifier.</p></li>
+<li><p><strong>create</strong> – Whether to create a new buffer if one does not already exist.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#KeyError" title="(in Python v3.10)"><strong>KeyError</strong></a> – The device ID or type name does not exist.</p></li>
+<li><p><a class="reference internal" href="#runtime.buffer.DeviceBufferError" title="runtime.buffer.DeviceBufferError"><strong>DeviceBufferError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">create=False</span></code>, but the buffer does not exist.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.BufferStore.make_catalog">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">make_catalog</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">catalog</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#BufferStore.make_catalog"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.BufferStore.make_catalog" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate buffer types from the raw peripheral specification.</p>
+<p>The raw peripheral specification follows this form:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;device_id&quot;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">int</span><span class="o">&gt;</span><span class="p">,</span>             <span class="c1"># For Smart Devices only</span>
+    <span class="s2">&quot;sub_interval&quot;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">float</span><span class="o">&gt;</span><span class="p">,</span>          <span class="c1"># Optional</span>
+    <span class="s2">&quot;write_interval&quot;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">float</span><span class="o">&gt;</span><span class="p">,</span>        <span class="c1"># Optional</span>
+    <span class="s2">&quot;heartbeat_interval&quot;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">float</span><span class="o">&gt;</span><span class="p">,</span>    <span class="c1"># Optional</span>
+    <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="c1"># Keyword arguments of ``Parameter``</span>
+        <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">str</span><span class="o">&gt;</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">str</span><span class="o">&gt;</span><span class="p">}</span>
+    <span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.BufferStore.normalize_key">
+<span class="sig-name descname"><span class="pre">normalize_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#BufferStore.normalize_key"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.BufferStore.normalize_key" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convert a Smart Device UID into the type name and UID format.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The type name and UID pair.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.BufferStore.unlink_all">
+<em class="property"><span class="pre">static</span> </em><span class="sig-name descname"><span class="pre">unlink_all</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shm_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">PosixPath('/dev/shm')</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#BufferStore.unlink_all"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.BufferStore.unlink_all" title="Permalink to this definition">¶</a></dt>
+<dd><p>Unlink all shared buffers owned by Runtime.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.buffer.</span></span><span class="sig-name descname"><span class="pre">DeviceBuffer</span></span><a class="reference internal" href="../_modules/runtime/buffer.html#DeviceBuffer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.DeviceBuffer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#runtime.buffer.Buffer" title="runtime.buffer.Buffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.buffer.Buffer</span></code></a></p>
+<p>A special buffer representing a Smart Device.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.sub_interval">
+<span class="sig-name descname"><span class="pre">sub_interval</span></span><a class="headerlink" href="#runtime.buffer.DeviceBuffer.sub_interval" title="Permalink to this definition">¶</a></dt>
+<dd><p>The default subscription interval in seconds.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)">float</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.write_interval">
+<span class="sig-name descname"><span class="pre">write_interval</span></span><a class="headerlink" href="#runtime.buffer.DeviceBuffer.write_interval" title="Permalink to this definition">¶</a></dt>
+<dd><p>The duration in seconds between device writes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)">float</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.heartbeat_interval">
+<span class="sig-name descname"><span class="pre">heartbeat_interval</span></span><a class="headerlink" href="#runtime.buffer.DeviceBuffer.heartbeat_interval" title="Permalink to this definition">¶</a></dt>
+<dd><p>The duration in seconds between heartbeat requests.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)">float</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.emit_dev_data">
+<span class="sig-name descname"><span class="pre">emit_dev_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#DeviceBuffer.emit_dev_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.DeviceBuffer.emit_dev_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make messages for containing device data for recently updated parameters.</p>
+<p>Calling this method will mark all parameters are not recently updated.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Yields</dt>
+<dd class="field-odd"><p><em>runtime.messaging.Message</em> – Zero or more messages containing device data.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.emit_dev_rw">
+<span class="sig-name descname"><span class="pre">emit_dev_rw</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#DeviceBuffer.emit_dev_rw"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.DeviceBuffer.emit_dev_rw" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make messages for reading and writing parameters.</p>
+<p>Calling this method will clear the pending parameter maps.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Yields</dt>
+<dd class="field-odd"><p><em>runtime.messaging.Message</em> – Zero or more messages, depending on how many
+parameters the consumer requested with <a class="reference internal" href="#runtime.buffer.DeviceBuffer.read" title="runtime.buffer.DeviceBuffer.read"><code class="xref py py-meth docutils literal notranslate"><span class="pre">read()</span></code></a> or <a class="reference internal" href="#runtime.buffer.Buffer.write" title="runtime.buffer.Buffer.write"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Buffer.write()</span></code></a>.
+If no parameters have been requested, since the last read, this method may
+yield no messages.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.emit_subscription">
+<span class="sig-name descname"><span class="pre">emit_subscription</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#DeviceBuffer.emit_subscription"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.DeviceBuffer.emit_subscription" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make messages containing device data for subscribed parameters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Yields</dt>
+<dd class="field-odd"><p><em>runtime.messaging.Message</em> – Zero or more messages containing device data.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.get_read">
+<span class="sig-name descname"><span class="pre">get_read</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#DeviceBuffer.get_read"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.DeviceBuffer.get_read" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the parameters that are to be read.</p>
+<p>Calling this method will clear the pending read map.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A collection of parameter names.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.get_update">
+<span class="sig-name descname"><span class="pre">get_update</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#DeviceBuffer.get_update"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.DeviceBuffer.get_update" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the parameters that were updated.</p>
+<p>Calling this method will clear the pending update map.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A map of parameter names to their corresponding values.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.get_write">
+<span class="sig-name descname"><span class="pre">get_write</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#DeviceBuffer.get_write"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.DeviceBuffer.get_write" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the parameters that were written.</p>
+<p>Calling this method will clear the pending write map.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A map of parameter names to their corresponding values.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.make_sub_req">
+<span class="sig-name descname"><span class="pre">make_sub_req</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interval</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#DeviceBuffer.make_sub_req"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.DeviceBuffer.make_sub_req" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a subscription request for some parameters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>params</strong> (<em>Optional</em><em>[</em><em>Collection</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a><em>]</em><em>]</em>) – A list of parameter names to subscribe to. Passing <code class="docutils literal notranslate"><span class="pre">None</span></code>
+specifies all parameters of this device type.</p></li>
+<li><p><strong>interval</strong> (<em>Optional</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)"><em>float</em></a><em>]</em>) – The duration between updates in seconds.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The subscription request message.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.make_sub_res">
+<span class="sig-name descname"><span class="pre">make_sub_res</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#DeviceBuffer.make_sub_res"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.DeviceBuffer.make_sub_res" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a subscription response for the parameters subscribed to.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The subscription response message.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.read">
+<span class="sig-name descname"><span class="pre">read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#DeviceBuffer.read"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.DeviceBuffer.read" title="Permalink to this definition">¶</a></dt>
+<dd><p>Request the device to return values for some parameters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>params</strong> (<em>Optional</em><em>[</em><em>Collection</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a><em>]</em><em>]</em>) – A list of parameter names to return values for. Passing <code class="docutils literal notranslate"><span class="pre">None</span></code>
+specifies all parameters of this device type.</p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#KeyError" title="(in Python v3.10)"><strong>KeyError</strong></a> – If an invalid parameter name is provided.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.update">
+<span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#DeviceBuffer.update"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.DeviceBuffer.update" title="Permalink to this definition">¶</a></dt>
+<dd><p>Digest a Smart Device message and update this buffer’s state accordingly.</p>
+<p>The message’s bitmaps and parameter values are copied into this buffer.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.interval">
+<em class="property"><span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">interval</span></span><em class="property"><span class="pre">:</span> <a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)"><span class="pre">float</span></a></em><a class="headerlink" href="#runtime.buffer.DeviceBuffer.interval" title="Permalink to this definition">¶</a></dt>
+<dd><p>The subscription interval in seconds.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.last_update">
+<em class="property"><span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">last_update</span></span><em class="property"><span class="pre">:</span> <a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)"><span class="pre">float</span></a></em><a class="headerlink" href="#runtime.buffer.DeviceBuffer.last_update" title="Permalink to this definition">¶</a></dt>
+<dd><p>The timestamp given by <a class="reference external" href="https://docs.python.org/3/library/time.html#time.time" title="(in Python v3.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">time.time()</span></code></a> of the last update.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.last_write">
+<em class="property"><span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">last_write</span></span><em class="property"><span class="pre">:</span> <a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)"><span class="pre">float</span></a></em><a class="headerlink" href="#runtime.buffer.DeviceBuffer.last_write" title="Permalink to this definition">¶</a></dt>
+<dd><p>The timestamp given by <a class="reference external" href="https://docs.python.org/3/library/time.html#time.time" title="(in Python v3.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">time.time()</span></code></a> of the last write.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.subscription">
+<em class="property"><span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">subscription</span></span><em class="property"><span class="pre">:</span> <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#frozenset" title="(in Python v3.10)"><span class="pre">frozenset</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#runtime.buffer.DeviceBuffer.subscription" title="Permalink to this definition">¶</a></dt>
+<dd><p>The names of parameters subscribed to.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceBuffer.uid">
+<em class="property"><span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">uid</span></span><em class="property"><span class="pre">:</span> <a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><span class="pre">int</span></a></em><a class="headerlink" href="#runtime.buffer.DeviceBuffer.uid" title="Permalink to this definition">¶</a></dt>
+<dd><p>Smart Device unique identifier.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceUID">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.buffer.</span></span><span class="sig-name descname"><span class="pre">DeviceUID</span></span><a class="reference internal" href="../_modules/runtime/buffer.html#DeviceUID"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.DeviceUID" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.buffer.BaseStructure</span></code></p>
+<p>A unique device identifier.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceUID.device_id">
+<span class="sig-name descname"><span class="pre">device_id</span></span><a class="headerlink" href="#runtime.buffer.DeviceUID.device_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>The device’s type ID. Consult the catalog for the full list.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceUID.year">
+<span class="sig-name descname"><span class="pre">year</span></span><a class="headerlink" href="#runtime.buffer.DeviceUID.year" title="Permalink to this definition">¶</a></dt>
+<dd><p>The year in which the device was created. <code class="docutils literal notranslate"><span class="pre">0x00</span></code> corresponds to
+the spring 2016 season, and increments for each season afterwards.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceUID.random">
+<span class="sig-name descname"><span class="pre">random</span></span><a class="headerlink" href="#runtime.buffer.DeviceUID.random" title="Permalink to this definition">¶</a></dt>
+<dd><p>The UID’s random bits to distinguish otherwise identical devices.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">uid</span> <span class="o">=</span> <span class="n">DeviceUID</span><span class="p">(</span><span class="mh">0xffff</span><span class="p">,</span> <span class="mh">0xee</span><span class="p">,</span> <span class="mh">0xc0debeef_deadbeef</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">int</span><span class="p">(</span><span class="n">uid</span><span class="p">)</span> <span class="o">==</span> <span class="mh">0xffff_ee_c0debeef_deadbeef</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">uid</span> <span class="o">=</span> <span class="n">DeviceUID</span><span class="o">.</span><span class="n">from_int</span><span class="p">(</span><span class="mh">0xffff_ee_c0debeef_deadbeef</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">hex</span><span class="p">(</span><span class="n">uid</span><span class="o">.</span><span class="n">device_id</span><span class="p">)</span>
+<span class="go">&#39;0xffff&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">hex</span><span class="p">(</span><span class="n">uid</span><span class="o">.</span><span class="n">year</span><span class="p">)</span>
+<span class="go">&#39;0xee&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">hex</span><span class="p">(</span><span class="n">uid</span><span class="o">.</span><span class="n">random</span><span class="p">)</span>
+<span class="go">&#39;0xc0debeefdeadbeef&#39;</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.DeviceUID.from_int">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">from_int</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">uid</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#DeviceUID.from_int"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.DeviceUID.from_int" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parse a device UID in integer format into its constituent fields.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.buffer.NullDevice">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.buffer.</span></span><span class="sig-name descname"><span class="pre">NullDevice</span></span><a class="headerlink" href="#runtime.buffer.NullDevice" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#runtime.buffer.DeviceBuffer" title="runtime.buffer.DeviceBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.buffer.DeviceBuffer</span></code></a></p>
+<p>A buffer type with no parameters.</p>
+<p>Useful for creating a non-null placeholder where a buffer is required.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.buffer.Parameter">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.buffer.</span></span><span class="sig-name descname"><span class="pre">Parameter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ctype</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lower</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-</span> <span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">upper</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">readable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">writeable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subscribed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#Parameter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.Parameter" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.NamedTuple" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NamedTuple</span></code></a></p>
+<p>A parameter descriptor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a>) – The parameter name.</p></li>
+<li><p><strong>ctype</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#type" title="(in Python v3.10)"><em>type</em></a>) – A <a class="reference external" href="https://docs.python.org/3/library/ctypes.html#module-ctypes" title="(in Python v3.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">ctypes</span></code></a> type.</p></li>
+<li><p><strong>id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – The parameter ID, a nonnegative integer.</p></li>
+<li><p><strong>lower</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)"><em>float</em></a>) – This parameter’s minimum valid value. For numeric parameters only.</p></li>
+<li><p><strong>upper</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)"><em>float</em></a>) – This parameter’s maximum valid value. For numeric parameters only.</p></li>
+<li><p><strong>readable</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><em>bool</em></a>) – Whether this parameter should be readable with <a class="reference internal" href="#runtime.buffer.Buffer.get" title="runtime.buffer.Buffer.get"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Buffer.get()</span></code></a>.</p></li>
+<li><p><strong>writeable</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><em>bool</em></a>) – Whether this parameter should be writeable with <a class="reference internal" href="#runtime.buffer.Buffer.write" title="runtime.buffer.Buffer.write"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Buffer.write()</span></code></a>.</p></li>
+<li><p><strong>subscribed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><em>bool</em></a>) – Whether this parameter should be subscribed to, by default. Only
+applicable for Smart Devices.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.Parameter.clamp">
+<span class="sig-name descname"><span class="pre">clamp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#Parameter.clamp"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.Parameter.clamp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Ensure a real value is between this parameter’s lower and upper limits.</p>
+<p>If the value is not within the bounds, this method will emit a warning.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)"><em>float</em></a>) – Candidate value.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A value between <code class="xref py py-attr docutils literal notranslate"><span class="pre">Parameter.lower</span></code> and <code class="xref py py-attr docutils literal notranslate"><span class="pre">Parameter.upper</span></code>. A value
+that exceeds the minimum or maximum will be clipped to that bound.</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">param</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="s1">&#39;param&#39;</span><span class="p">,</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_double</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">lower</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">upper</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">param</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="o">-</span><span class="mf">1.1</span><span class="p">)</span>
+<span class="go">-1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">param</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mf">1.1</span><span class="p">)</span>
+<span class="go">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">param</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="go">0</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.buffer.Parameter.parse_ctype">
+<em class="property"><span class="pre">static</span> </em><span class="sig-name descname"><span class="pre">parse_ctype</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">type_specifier</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/buffer.html#Parameter.parse_ctype"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.buffer.Parameter.parse_ctype" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parse a type specifier into the corresponding C type.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>type_specifier</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a>) – A description of the parameter’s type. Can be a the name of
+any simple <a class="reference external" href="https://docs.python.org/3/library/ctypes.html#module-ctypes" title="(in Python v3.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">ctypes</span></code></a> data type without the <code class="docutils literal notranslate"><span class="pre">c_</span></code> prefix. A vector
+type of <cite>n</cite> elements can also be specified by appending <code class="docutils literal notranslate"><span class="pre">[&lt;n&gt;]</span></code> to an
+existing type (resembling C array declaration syntax). Pointer types are
+not supported.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A <a class="reference external" href="https://docs.python.org/3/library/ctypes.html#module-ctypes" title="(in Python v3.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">ctypes</span></code></a>-compatible data type.</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">Parameter</span><span class="o">.</span><span class="n">parse_ctype</span><span class="p">(</span><span class="s1">&#39;bool&#39;</span><span class="p">)</span> <span class="ow">is</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_bool</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">Parameter</span><span class="o">.</span><span class="n">parse_ctype</span><span class="p">(</span><span class="s1">&#39;int32[64]&#39;</span><span class="p">)</span> <span class="ow">is</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_int32</span> <span class="o">*</span> <span class="mi">64</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">Parameter</span><span class="o">.</span><span class="n">parse_ctype</span><span class="p">(</span><span class="s1">&#39;uint64[8][8]&#39;</span><span class="p">)</span> <span class="ow">is</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_uint64</span> <span class="o">*</span> <span class="mi">8</span> <span class="o">*</span> <span class="mi">8</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="runtime.buffer.Parameter.default">
+<em class="property"><span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">default</span></span><em class="property"><span class="pre">:</span> <span class="pre">Any</span></em><a class="headerlink" href="#runtime.buffer.Parameter.default" title="Permalink to this definition">¶</a></dt>
+<dd><p>The default value when initializing this parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The default value of <a class="reference internal" href="#runtime.buffer.Parameter.platform_type" title="runtime.buffer.Parameter.platform_type"><code class="xref py py-attr docutils literal notranslate"><span class="pre">Parameter.platform_type</span></code></a>.</p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><a class="reference internal" href="#runtime.buffer.DeviceBufferError" title="runtime.buffer.DeviceBufferError"><strong>DeviceBufferError</strong></a> – If this parameter is not a simple <code class="xref py py-mod docutils literal notranslate"><span class="pre">ctype</span></code>.</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">Parameter</span><span class="p">(</span><span class="s1">&#39;param&#39;</span><span class="p">,</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_double</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">default</span>
+<span class="go">0.0</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Parameter</span><span class="p">(</span><span class="s1">&#39;param&#39;</span><span class="p">,</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_int8</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">default</span>
+<span class="go">0</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Parameter</span><span class="p">(</span><span class="s1">&#39;param&#39;</span><span class="p">,</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_bool</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">default</span>
+<span class="go">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Parameter</span><span class="p">(</span><span class="s1">&#39;param&#39;</span><span class="p">,</span> <span class="n">ctypes</span><span class="o">.</span><span class="n">c_bool</span> <span class="o">*</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">default</span>
+<span class="gt">Traceback (most recent call last):</span>
+  <span class="c">...</span>
+<span class="gr">runtime.buffer.DeviceBufferError</span>: <span class="n">vector parameters have no default</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="runtime.buffer.Parameter.platform_type">
+<em class="property"><span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">platform_type</span></span><em class="property"><span class="pre">:</span> <a class="reference external" href="https://docs.python.org/3/library/functions.html#type" title="(in Python v3.10)"><span class="pre">type</span></a></em><a class="headerlink" href="#runtime.buffer.Parameter.platform_type" title="Permalink to this definition">¶</a></dt>
+<dd><p>A C type that has the correct width to hold this parameter’s values.</p>
+<p>The type widths of Runtime’s platform and the peripheral’s platform may not
+match. This method performs the necessary conversion to allocate the correct
+amount of buffer space.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A type exactly as wide as the values (bytes) emitted by the peripheral.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+          </div>
+          <div class="page-nav">
+            <div class="inner"><ul class="page-nav">
+  <li class="prev">
+    <a href="api.html"
+       title="previous chapter">← <code class="docutils literal notranslate"><span class="pre">runtime.api</span></code></a>
+  </li>
+  <li class="next">
+    <a href="exception.html"
+       title="next chapter"><code class="docutils literal notranslate"><span class="pre">runtime.exception</span></code> →</a>
+  </li>
+</ul><div class="footer" role="contentinfo">
+      &#169; Copyright 2021, Pioneers in Engineering.
+    <br>
+    Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.2.0 with <a href="https://github.com/schettino72/sphinx_press_theme">Press Theme</a> 0.8.0.
+</div>
+            </div>
+          </div>
+      </page>
+    </div></div>
+    
+    
+  </body>
+</html>

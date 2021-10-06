@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html >
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>runtime.log</title>
+    
+          <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+          <link rel="stylesheet" href="../../_static/theme.css " type="text/css" />
+          <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
+      
+      <!-- sphinx script_files -->
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+
+      
+      <!-- bundled in js (rollup iife) -->
+      <!-- <script src="../../_static/theme-vendors.js"></script> -->
+      <script src="../../_static/theme.js" defer></script>
+    
+  <link rel="index" title="Index" href="../../genindex.html" />
+  <link rel="search" title="Search" href="../../search.html" /> 
+  </head>
+
+  <body>
+    <div id="app">
+    <div class="theme-container" :class="pageClasses"><navbar @toggle-sidebar="toggleSidebar">
+  <router-link to="../../index.html" class="home-link">
+    
+      <span class="site-name">Runtime</span>
+    
+  </router-link>
+
+  <div class="links">
+    <navlinks class="can-hide">
+
+
+
+    </navlinks>
+  </div>
+</navbar>
+
+      
+      <div class="sidebar-mask" @click="toggleSidebar(false)">
+      </div>
+        <sidebar @toggle-sidebar="toggleSidebar">
+          
+          <navlinks>
+            
+
+
+
+            
+          </navlinks><div id="searchbox" class="searchbox" role="search">
+  <div class="caption"><span class="caption-text">Quick search</span>
+    <div class="searchformwrapper">
+      <form class="search" action="../../search.html" method="get">
+        <input type="text" name="q" />
+        <input type="submit" value="Search" />
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div><div class="sidebar-links" role="navigation" aria-label="main navigation">
+  
+    <div class="sidebar-group">
+      <p class="caption">
+        <span class="caption-text"><a href="../../index.html#runtime-documentation">Contents:</a></span>
+      </p>
+      <ul class="">
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../../design.html" class="reference internal ">Design Goals</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../../architecture.html" class="reference internal ">Architecture</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../../ipc.html" class="reference internal ">IPC</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../../smart-devices.html" class="reference internal ">Smart Devices</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../../api-reference/index.html" class="reference internal ">API Reference</a>
+            
+
+            
+          </li>
+
+        
+      </ul>
+    </div>
+  
+</div>
+        </sidebar>
+
+      <page>
+          <div class="body-header" role="navigation" aria-label="navigation">
+  
+  <ul class="breadcrumbs">
+    <li><a href="../../index.html">Docs</a> &raquo;</li>
+    
+      <li><a href="../index.html">Module code</a> &raquo;</li>
+    
+    <li>runtime.log</li>
+  </ul>
+  
+
+  <ul class="page-nav">
+</ul>
+  
+</div>
+<hr>
+          <div class="content" role="main" v-pre>
+            
+  <h1>Source code for runtime.log</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Logging configuration.</span>
+
+<span class="sd">This module largely wraps the :mod:`structlog` framework to provide flexible structured</span>
+<span class="sd">logging for Runtime services. A chain of &quot;processors&quot; (callables) filters or transforms</span>
+<span class="sd">events produced by log statements.</span>
+
+<span class="sd">To the greatest extent possible, this module favors native :mod:`structlog`</span>
+<span class="sd">functionality over integration with the standard :mod:`logging` module for `performance</span>
+<span class="sd">reasons &lt;https://www.structlog.org/en/stable/performance.html&gt;`_. :mod:`structlog` also</span>
+<span class="sd">provides an async interface that :mod:`logging` does not.</span>
+
+
+<span class="sd">Note:</span>
+<span class="sd">    :mod:`structlog` also has a notion of *bound* and *unbound* loggers. An *unbound*</span>
+<span class="sd">    logger is a proxy that borrows its configuration from the global configuration set</span>
+<span class="sd">    by :func:`runtime.log.configure`. Once a logger is bound by calling</span>
+<span class="sd">    :meth:`structlog.BoundLogggerBase.bind`, the global configuration is copied into the</span>
+<span class="sd">    logger&#39;s local state and frozen. Further changes in the global configuration no</span>
+<span class="sd">    longer affect the bound logger.</span>
+
+<span class="sd">    Because unbound loggers are proxies that perform some introspection on every call,</span>
+<span class="sd">    prefer bound loggers, which are much more performant because their methods are</span>
+<span class="sd">    concrete.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">MutableMapping</span><span class="p">,</span> <span class="n">NoReturn</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span> <span class="nn">orjson</span> <span class="k">as</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">structlog</span>
+<span class="kn">import</span> <span class="nn">structlog.processors</span>
+<span class="kn">from</span> <span class="nn">structlog.stdlib</span> <span class="kn">import</span> <span class="n">AsyncBoundLogger</span> <span class="k">as</span> <span class="n">AsyncLogger</span>
+<span class="kn">from</span> <span class="nn">structlog.stdlib</span> <span class="kn">import</span> <span class="n">BoundLogger</span> <span class="k">as</span> <span class="n">Logger</span>
+
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">remote</span>
+<span class="kn">from</span> <span class="nn">.exception</span> <span class="kn">import</span> <span class="n">RuntimeBaseException</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;AsyncLogger&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;LEVELS&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;LogPublisher&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;Logger&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;configure&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;get_level_num&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;get_logger&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;get_null_logger&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<span class="n">Event</span> <span class="o">=</span> <span class="n">MutableMapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+<span class="n">ProcessorReturnType</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">Event</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">]</span>
+<span class="n">Processor</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Event</span><span class="p">],</span> <span class="n">ProcessorReturnType</span><span class="p">]</span>
+<span class="n">LEVELS</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;debug&#39;</span><span class="p">,</span> <span class="s1">&#39;info&#39;</span><span class="p">,</span> <span class="s1">&#39;warn&#39;</span><span class="p">,</span> <span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="s1">&#39;critical&#39;</span><span class="p">]</span>
+<span class="sd">&quot;&quot;&quot;Log severity levels, in ascending order of severity.</span>
+
+<span class="sd">These levels correspond to those used by the built-in :mod:`logging` library:</span>
+
+<span class="sd">============ ================================= =========================================</span>
+<span class="sd">Level        Description                       Example</span>
+<span class="sd">============ ================================= =========================================</span>
+<span class="sd">``debug``    Frequent, low-level tracing.      A Smart Device message is received.</span>
+<span class="sd">``info``     Normal operation (default level). A Smart Device connects.</span>
+<span class="sd">``warn``     Unusual or anomalous events.      Referencing a nonexistent device.</span>
+<span class="sd">``error``    Failure mode.                     A subprocess returns a nonzero exit code.</span>
+<span class="sd">``critical`` Cannot continue running.          Emergency stop.</span>
+<span class="sd">============ ================================= =========================================</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">drop</span><span class="p">(</span><span class="n">_logger</span><span class="p">:</span> <span class="n">AsyncLogger</span><span class="p">,</span> <span class="n">_method</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">_event</span><span class="p">:</span> <span class="n">Event</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NoReturn</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;A simple :mod:`structlog` processor to drop all events.&quot;&quot;&quot;</span>
+    <span class="k">raise</span> <span class="n">structlog</span><span class="o">.</span><span class="n">DropEvent</span>
+
+
+<span class="n">get_logger</span> <span class="o">=</span> <span class="n">remote</span><span class="o">.</span><span class="n">get_logger</span>
+<span class="sd">&quot;&quot;&quot;Get an unbound async-compatible logger.</span>
+
+<span class="sd">Parameters:</span>
+<span class="sd">    factory_args: Positional arguments passed to the logger factory.</span>
+<span class="sd">    context: Contextual variables added to every event produced by this logger.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="get_null_logger"><a class="viewcode-back" href="../../api-reference/log.html#runtime.log.get_null_logger">[docs]</a><span class="k">def</span> <span class="nf">get_null_logger</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">AsyncLogger</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Get an async-compatible logger that drops all events unconditionally.</span>
+
+<span class="sd">    Useful for objects that emit unimportant or noisy log events. :class:`LogPublisher`</span>
+<span class="sd">    also uses a null logger internally, since using a real logger would result in a</span>
+<span class="sd">    feedback loop.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">get_logger</span><span class="p">(</span><span class="n">processors</span><span class="o">=</span><span class="p">[</span><span class="n">drop</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="LogPublisher"><a class="viewcode-back" href="../../api-reference/log.html#runtime.log.LogPublisher">[docs]</a><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">LogPublisher</span><span class="p">(</span><span class="n">remote</span><span class="o">.</span><span class="n">Client</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A client for publishing log events over a network.</span>
+
+<span class="sd">    A :class:`LogPublisher` instance is a threadsafe :mod:`structlog` processor</span>
+<span class="sd">    (callable). The processor feeds incoming events into an internal queue, which a</span>
+<span class="sd">    worker task drains. For each event, the worker issues a notification call, where the</span>
+<span class="sd">    method name is the log level and the only argument is the event dictionary.</span>
+
+<span class="sd">    The worker and queue are not initialized until the async context is entered. The</span>
+<span class="sd">    worker is attached to the context&#39;s running loop.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        send_queue_capacity: The maximum size of the event queue. A nonpositive capacity</span>
+<span class="sd">            indicates the queue size should be unbounded. When the queue is full, any</span>
+<span class="sd">            additional events are dropped.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">send_queue_capacity</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">512</span>
+    <span class="n">send_queue</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Event</span><span class="p">]]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">loop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">asyncio</span><span class="o">.</span><span class="n">AbstractEventLoop</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__post_init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">get_null_logger</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_logger</span><span class="p">:</span> <span class="n">AsyncLogger</span><span class="p">,</span> <span class="n">method</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">Event</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Event</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">loop</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_queue</span> <span class="ow">and</span> <span class="n">event</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;transmit&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="c1"># Since later processors can mutate the event dictionary, we feed a copy</span>
+            <span class="c1"># into the queue.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">loop</span><span class="o">.</span><span class="n">call_soon_threadsafe</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">send_queue</span><span class="o">.</span><span class="n">put_nowait</span><span class="p">,</span>
+                <span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">event</span><span class="p">)),</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">event</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="fm">__aenter__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s1">&#39;LogPublisher&#39;</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__aenter__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">send_queue</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">send_queue_capacity</span><span class="p">)</span>
+        <span class="n">worker</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_send_forever</span><span class="p">(),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;log-publish&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack</span><span class="o">.</span><span class="n">callback</span><span class="p">(</span><span class="n">worker</span><span class="o">.</span><span class="n">cancel</span><span class="p">,</span> <span class="s1">&#39;log publisher worker cancelled&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_send_forever</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NoReturn</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_queue</span><span class="p">:</span>  <span class="c1"># pragma: no cover; always initialized by `__aenter__`</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;queue is not initialized&#39;</span><span class="p">)</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">method</span><span class="p">,</span> <span class="n">event</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+            <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">TimeoutError</span><span class="p">):</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">call</span><span class="p">[</span><span class="n">method</span><span class="p">](</span><span class="n">event</span><span class="p">,</span> <span class="n">notification</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="get_level_num"><a class="viewcode-back" href="../../api-reference/log.html#runtime.log.get_level_num">[docs]</a><span class="nd">@functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">get_level_num</span><span class="p">(</span><span class="n">level_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Translate a :mod:`logging` level name into its numeric value.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        level_name: A case-insensitive name, such as ``&#39;DEBUG&#39;``.</span>
+<span class="sd">        default: The numeric level to return if the name is invalid.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; get_level_num(&#39;INFO&#39;)</span>
+<span class="sd">        20</span>
+<span class="sd">        &gt;&gt;&gt; assert get_level_num(&#39;DNE&#39;) == logging.DEBUG == 10</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">level</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">logging</span><span class="p">,</span> <span class="n">level_name</span><span class="o">.</span><span class="n">upper</span><span class="p">(),</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">level</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="k">else</span> <span class="n">default</span></div>
+
+
+<span class="k">def</span> <span class="nf">_filter_by_level</span><span class="p">(</span><span class="n">level</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Processor</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Build a :mod:`structlog` processor to filter events by log level (severity).&quot;&quot;&quot;</span>
+    <span class="n">min_level</span> <span class="o">=</span> <span class="n">get_level_num</span><span class="p">(</span><span class="n">level</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">processor</span><span class="p">(</span>
+        <span class="n">_logger</span><span class="p">:</span> <span class="n">AsyncLogger</span><span class="p">,</span>
+        <span class="n">method</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">event</span><span class="p">:</span> <span class="n">ProcessorReturnType</span><span class="p">,</span>
+        <span class="o">/</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ProcessorReturnType</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">get_level_num</span><span class="p">(</span><span class="n">method</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">min_level</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">structlog</span><span class="o">.</span><span class="n">DropEvent</span>
+        <span class="k">return</span> <span class="n">event</span>
+
+    <span class="k">return</span> <span class="n">processor</span>
+
+
+<span class="k">def</span> <span class="nf">_add_exc_context</span><span class="p">(</span><span class="n">_logger</span><span class="p">:</span> <span class="n">AsyncLogger</span><span class="p">,</span> <span class="n">_method</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">Event</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Event</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;A processor to add the context of a :class:`RuntimeBaseException` to the event.</span>
+
+<span class="sd">    When the keys of the exception context clash with those of the event, the event&#39;s</span>
+<span class="sd">    entries take priority.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">exception</span> <span class="o">=</span> <span class="n">event</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;exc_info&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">exception</span><span class="p">,</span> <span class="n">RuntimeBaseException</span><span class="p">):</span>
+        <span class="n">event</span> <span class="o">=</span> <span class="n">exception</span><span class="o">.</span><span class="n">context</span> <span class="o">|</span> <span class="n">event</span>
+    <span class="k">return</span> <span class="n">event</span>
+
+
+<div class="viewcode-block" id="configure"><a class="viewcode-back" href="../../api-reference/log.html#runtime.log.configure">[docs]</a><span class="k">def</span> <span class="nf">configure</span><span class="p">(</span>
+    <span class="n">publisher</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">LogPublisher</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">/</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">fmt</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;json&#39;</span><span class="p">,</span> <span class="s1">&#39;pretty&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;json&#39;</span><span class="p">,</span>
+    <span class="n">level</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;INFO&#39;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Configure :mod:`structlog` with the desired log format and filtering.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        publisher: A publisher added into the processor chain just before rendering.</span>
+<span class="sd">        fmt: The format of events written to standard output.</span>
+<span class="sd">        level: The minimum log level (inclusive) that should be processed. Severities</span>
+<span class="sd">            are compared using :func:`runtime.log.get_level_num`.</span>
+
+<span class="sd">    For development, we recommend the ``&#39;pretty&#39;`` log format, which is human-readable</span>
+<span class="sd">    and renders exception tracebacks but cannot be parsed:</span>
+
+<span class="sd">    .. code-block:: text</span>
+
+<span class="sd">        2021-06-29T21:01:22.301992Z [info     ] Router connected to endpoint</span>
+<span class="sd">        2021-06-29T21:01:22.304771Z [info     ] Health check                   threads=4</span>
+<span class="sd">        Traceback (most recent call last):</span>
+<span class="sd">          File &quot;/usr/lib/python3.9/asyncio/tasks.py&quot;, line 492, in wait_for</span>
+<span class="sd">            fut.result()</span>
+<span class="sd">        asyncio.exceptions.CancelledError</span>
+
+<span class="sd">    In production, we recommend the ``&#39;json&#39;`` format, which produces events in</span>
+<span class="sd">    `jsonlines &lt;https://jsonlines.org/&gt;`_ format (required entries shown):</span>
+
+<span class="sd">    .. code-block:: json</span>
+
+<span class="sd">        {&quot;event&quot;:&quot;Started&quot;,&quot;level&quot;:&quot;info&quot;,&quot;timestamp&quot;:&quot;2021-06-29T21:04:15.507057Z&quot;}</span>
+<span class="sd">        {&quot;event&quot;:&quot;Started&quot;,&quot;level&quot;:&quot;info&quot;,&quot;timestamp&quot;:&quot;2021-06-29T21:04:15.510914Z&quot;}</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logging</span><span class="o">.</span><span class="n">captureWarnings</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">renderers</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Processor</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">publisher</span><span class="p">]</span> <span class="k">if</span> <span class="n">publisher</span> <span class="k">else</span> <span class="p">[]</span>
+    <span class="n">logger_factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">structlog</span><span class="o">.</span><span class="n">PrintLogger</span><span class="p">,</span> <span class="n">structlog</span><span class="o">.</span><span class="n">BytesLogger</span><span class="p">]]</span>
+    <span class="k">if</span> <span class="n">fmt</span> <span class="o">==</span> <span class="s1">&#39;pretty&#39;</span><span class="p">:</span>
+        <span class="n">renderers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">structlog</span><span class="o">.</span><span class="n">processors</span><span class="o">.</span><span class="n">ExceptionPrettyPrinter</span><span class="p">())</span>
+        <span class="n">renderers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">structlog</span><span class="o">.</span><span class="n">dev</span><span class="o">.</span><span class="n">ConsoleRenderer</span><span class="p">(</span><span class="n">pad_event</span><span class="o">=</span><span class="mi">40</span><span class="p">))</span>
+        <span class="n">logger_factory</span> <span class="o">=</span> <span class="n">structlog</span><span class="o">.</span><span class="n">PrintLogger</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">renderers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">structlog</span><span class="o">.</span><span class="n">processors</span><span class="o">.</span><span class="n">JSONRenderer</span><span class="p">(</span><span class="n">serializer</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">))</span>
+        <span class="n">logger_factory</span> <span class="o">=</span> <span class="n">structlog</span><span class="o">.</span><span class="n">BytesLogger</span>
+
+    <span class="n">structlog</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+        <span class="n">cache_logger_on_first_use</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">wrapper_class</span><span class="o">=</span><span class="n">AsyncLogger</span><span class="p">,</span>
+        <span class="n">processors</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">structlog</span><span class="o">.</span><span class="n">threadlocal</span><span class="o">.</span><span class="n">merge_threadlocal_context</span><span class="p">,</span>
+            <span class="n">structlog</span><span class="o">.</span><span class="n">processors</span><span class="o">.</span><span class="n">add_log_level</span><span class="p">,</span>
+            <span class="n">_filter_by_level</span><span class="p">(</span><span class="n">level</span><span class="p">),</span>
+            <span class="n">_add_exc_context</span><span class="p">,</span>
+            <span class="n">structlog</span><span class="o">.</span><span class="n">processors</span><span class="o">.</span><span class="n">format_exc_info</span><span class="p">,</span>
+            <span class="n">structlog</span><span class="o">.</span><span class="n">processors</span><span class="o">.</span><span class="n">TimeStamper</span><span class="p">(</span><span class="n">fmt</span><span class="o">=</span><span class="s1">&#39;iso&#39;</span><span class="p">),</span>
+            <span class="o">*</span><span class="n">renderers</span><span class="p">,</span>
+        <span class="p">],</span>
+        <span class="n">logger_factory</span><span class="o">=</span><span class="n">logger_factory</span><span class="p">,</span>
+    <span class="p">)</span></div>
+</pre></div>
+
+          </div>
+          <div class="page-nav">
+            <div class="inner"><ul class="page-nav">
+</ul><div class="footer" role="contentinfo">
+      &#169; Copyright 2021, Pioneers in Engineering.
+    <br>
+    Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.2.0 with <a href="https://github.com/schettino72/sphinx_press_theme">Press Theme</a> 0.8.0.
+</div>
+            </div>
+          </div>
+      </page>
+    </div></div>
+    
+    
+  </body>
+</html>

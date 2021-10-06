@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html >
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+      <title>Design Goals</title>
+    
+          <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+          <link rel="stylesheet" href="_static/theme.css " type="text/css" />
+          <link rel="stylesheet" href="_static/css/custom.css" type="text/css" />
+      
+      <!-- sphinx script_files -->
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+
+      
+      <!-- bundled in js (rollup iife) -->
+      <!-- <script src="_static/theme-vendors.js"></script> -->
+      <script src="_static/theme.js" defer></script>
+    
+  <link rel="index" title="Index" href="genindex.html" />
+  <link rel="search" title="Search" href="search.html" />
+  <link rel="next" title="Architecture" href="architecture.html" />
+  <link rel="prev" title="Runtime Documentation" href="index.html" /> 
+  </head>
+
+  <body>
+    <div id="app">
+    <div class="theme-container" :class="pageClasses"><navbar @toggle-sidebar="toggleSidebar">
+  <router-link to="index.html" class="home-link">
+    
+      <span class="site-name">Runtime</span>
+    
+  </router-link>
+
+  <div class="links">
+    <navlinks class="can-hide">
+
+
+
+    </navlinks>
+  </div>
+</navbar>
+
+      
+      <div class="sidebar-mask" @click="toggleSidebar(false)">
+      </div>
+        <sidebar @toggle-sidebar="toggleSidebar">
+          
+          <navlinks>
+            
+
+
+
+            
+          </navlinks><div id="searchbox" class="searchbox" role="search">
+  <div class="caption"><span class="caption-text">Quick search</span>
+    <div class="searchformwrapper">
+      <form class="search" action="search.html" method="get">
+        <input type="text" name="q" />
+        <input type="submit" value="Search" />
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div><div class="sidebar-links" role="navigation" aria-label="main navigation">
+  
+    <div class="sidebar-group">
+      <p class="caption">
+        <span class="caption-text"><a href="index.html#runtime-documentation">Contents:</a></span>
+      </p>
+      <ul class="current">
+        
+          <li class="toctree-l1 current">
+            
+              <a href="#" class="reference internal current">Design Goals</a>
+            
+
+            
+              <ul>
+                
+                  <li class="toctree-l2"><a href="#context" class="reference internal">Context</a></li>
+                
+                  <li class="toctree-l2"><a href="#features" class="reference internal">Features</a></li>
+                
+                  <li class="toctree-l2"><a href="#requirements" class="reference internal">Requirements</a></li>
+                
+              </ul>
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="architecture.html" class="reference internal ">Architecture</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="ipc.html" class="reference internal ">IPC</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="smart-devices.html" class="reference internal ">Smart Devices</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="api-reference/index.html" class="reference internal ">API Reference</a>
+            
+
+            
+          </li>
+
+        
+      </ul>
+    </div>
+  
+</div>
+        </sidebar>
+
+      <page>
+          <div class="body-header" role="navigation" aria-label="navigation">
+  
+  <ul class="breadcrumbs">
+    <li><a href="index.html">Docs</a> &raquo;</li>
+    
+    <li>Design Goals</li>
+  </ul>
+  
+
+  <ul class="page-nav">
+  <li class="prev">
+    <a href="index.html"
+       title="previous chapter">← Runtime Documentation</a>
+  </li>
+  <li class="next">
+    <a href="architecture.html"
+       title="next chapter">Architecture →</a>
+  </li>
+</ul>
+  
+</div>
+<hr>
+          <div class="content" role="main" v-pre>
+            
+  <section id="design-goals">
+<h1>Design Goals<a class="headerlink" href="#design-goals" title="Permalink to this headline">¶</a></h1>
+<section id="context">
+<h2>Context<a class="headerlink" href="#context" title="Permalink to this headline">¶</a></h2>
+<p><a class="reference external" href="https://pioneers.berkeley.edu/">Pioneers in Engineering (PiE)</a> is a nonprofit run by students of the University of California, Berkeley to promote STEM education.
+PiE’s primary outreach is a twelve-week robotics competition among about 20 Bay Area high schools every spring.
+The competition is analogous to <a class="reference external" href="https://www.firstinspires.org/robotics/frc">FRC</a> or <a class="reference external" href="https://www.vexrobotics.com/v5/competition">VEX</a>, but with a much lower barrier to entry (both financially and technically) and stronger support and mentorship.</p>
+<p>During the PiE robotics season, each high school’s team designs and builds a robot to accomplish the objectives of that season’s game.
+Each team is comprised of five to ten high school students, at least one high school teacher sponsor, and one or two mentors who are UC Berkeley students.
+Each team also receives a base kit developed by PiE staff that assembles into a minimal four-wheeled robot.
+Teams gradually extend their base robots with parts “purchased” from PiE with a mock currency.</p>
+<p>The “brain” of each robot is a Raspberry Pi running Linux that controls up to about 10 <a class="reference external" href="smart-devices.html">Smart Devices</a>.
+Using an API PiE provides, students write and upload Python code to the Pi to control the robot.
+Runtime is the application running on the Pi to manage the Smart Devices, execute the student’s code, and communicate with the robot’s frontend.</p>
+<p>Teams compete in 2 vs. 2 matches that pit the blue alliance against the gold alliance.
+An alliance wins if it collectively scores the most points.
+Matches are played in two periods.
+During the autonomous period, robots must rely on sensors instead of player control to navigate the field.
+Teleop (teleoperation) follows autonomous and allows players to control their robots using a gamepad (Xbox controller).</p>
+<p>Some games have coding challenges that allow students to exercise their algorithmic skills.
+Usually, these challenges are of the competitive programming flavor and are not relevant for controlling the robot.
+For example, counting the ways to make change using different coin denominations is a challenge with a representative difficulty.
+Challenges are optional but may reward successful teams with score bonuses or powerups.</p>
+</section>
+<section id="features">
+<h2>Features<a class="headerlink" href="#features" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>Read, write, and store Smart Device (SD) data.</p></li>
+<li><p>Provide a student API for students to read/write SD and gamepad data.</p></li>
+<li><p>Provide a control API for clients to start/stop execution of student code.</p></li>
+<li><p>Execute a student-written <code class="docutils literal notranslate"><span class="pre">main</span></code> function at a constant interval during play.</p></li>
+<li><p>Accept gamepad inputs from the student during teleop.</p></li>
+<li><p>Publish log and Smart Device data to the frontend.</p></li>
+</ul>
+<dl class="simple">
+<dt>Out-of-scope:</dt><dd><ul class="simple">
+<li><p>A GUI, which is provided by a separate frontend (Dawn).
+Runtime itself is a command line application.</p></li>
+<li><p>Game mechanics.
+All game logic and interfaces are centralized in field control to eliminate coordinated cross-project updates every season, which can introduce incompatibility.
+For this reason, Dawn, whose scope is limited to robot control, also implements no game mechanics.</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="requirements">
+<h2>Requirements<a class="headerlink" href="#requirements" title="Permalink to this headline">¶</a></h2>
+<ol class="arabic simple">
+<li><p><strong>Performance</strong>: Optimize for latency on the critical path from moving a joystick to actuation.
+Poor performance during teleop can make the robot seem unresponsive and result in a frustrating student experience.</p></li>
+<li><p><strong>Safety</strong>: Motors and other powerful electronics can pose a physical/electrical hazard and require a reliable emergency stop.</p></li>
+<li><p><strong>Robustness</strong>: Many PiE students are programming novices who may write buggy code that Runtime should run to the best of its ability.
+Some faults, like referencing a nonexistent device, should not halt execution and should emit a warning instead of crashing.
+Likewise, features like hotplugging reduce the likelihood that students forfeit a match because of a hardware issue outside their control.</p></li>
+<li><p><strong>Debugging</strong>: Tracing and profiling are essential.
+Performance options should be tunable.</p></li>
+<li><p><strong>Modularity</strong>: The control stack should be flexible enough to support the following use cases:</p>
+<ul class="simple">
+<li><p><strong>Development</strong>: A team works on a physical robot over a LAN created by a PiE-provided router.</p></li>
+<li><p><strong>Simulation (local)</strong>: Dawn spawns a simulator instance that feeds virtual SD data to Runtime, which still runs on a physical robot’s Pi.</p></li>
+<li><p><strong>Simulation (cloud)</strong>: A team uses a Runtime instance hosted in the cloud to simulate their robot.
+No hardware is required.</p></li>
+<li><p><strong>Competition</strong>: Four robots compete on a field.
+Each robot is connected over a staff-managed router to a field control station running Dawn.
+A field control station supervises the robots.</p></li>
+</ul>
+</li>
+<li><p><strong>Ease-of-use</strong>: Students have a range of programming experience.
+Keep the API simple, but provide enough high-level tools (<em>e.g.</em>, PID) to free up student creativity on tackling the game’s challenges.</p></li>
+<li><p><strong>Backwards compatibility</strong>: Avoid breaking changes to promote hardware reuse and reduce software update frequency.
+This is especially relevant for SDs, which can only be updated through flashing.</p></li>
+</ol>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Securing Runtime is impossible because the Raspberry Pi’s Micro SD card is editable and already in students’ possession.
+The competition itself is held on private LANs.
+In theory, one team could sabotage another by programming its robot to send bad packets to its peers, but high school students are unlikely to perform such an attack.</p>
+</div>
+</section>
+</section>
+
+
+          </div>
+          <div class="page-nav">
+            <div class="inner"><ul class="page-nav">
+  <li class="prev">
+    <a href="index.html"
+       title="previous chapter">← Runtime Documentation</a>
+  </li>
+  <li class="next">
+    <a href="architecture.html"
+       title="next chapter">Architecture →</a>
+  </li>
+</ul><div class="footer" role="contentinfo">
+      &#169; Copyright 2021, Pioneers in Engineering.
+    <br>
+    Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.2.0 with <a href="https://github.com/schettino72/sphinx_press_theme">Press Theme</a> 0.8.0.
+</div>
+            </div>
+          </div>
+      </page>
+    </div></div>
+    
+    
+  </body>
+</html>

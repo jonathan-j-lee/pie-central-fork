@@ -1,3 +1,0 @@
-[submodule "smart-devices/cobs-c"]
-	path = smart-devices/cobs-c
-	url = https://github.com/cmcqueen/cobs-c.git

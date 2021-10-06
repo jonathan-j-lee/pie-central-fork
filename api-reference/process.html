@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html >
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+      <title>runtime.process</title>
+    
+          <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+          <link rel="stylesheet" href="../_static/theme.css " type="text/css" />
+          <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+      
+      <!-- sphinx script_files -->
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+
+      
+      <!-- bundled in js (rollup iife) -->
+      <!-- <script src="../_static/theme-vendors.js"></script> -->
+      <script src="../_static/theme.js" defer></script>
+    
+  <link rel="index" title="Index" href="../genindex.html" />
+  <link rel="search" title="Search" href="../search.html" />
+  <link rel="next" title="runtime.remote" href="remote.html" />
+  <link rel="prev" title="runtime.messaging" href="messaging.html" /> 
+  </head>
+
+  <body>
+    <div id="app">
+    <div class="theme-container" :class="pageClasses"><navbar @toggle-sidebar="toggleSidebar">
+  <router-link to="../index.html" class="home-link">
+    
+      <span class="site-name">Runtime</span>
+    
+  </router-link>
+
+  <div class="links">
+    <navlinks class="can-hide">
+
+
+
+    </navlinks>
+  </div>
+</navbar>
+
+      
+      <div class="sidebar-mask" @click="toggleSidebar(false)">
+      </div>
+        <sidebar @toggle-sidebar="toggleSidebar">
+          
+          <navlinks>
+            
+
+
+
+            
+          </navlinks><div id="searchbox" class="searchbox" role="search">
+  <div class="caption"><span class="caption-text">Quick search</span>
+    <div class="searchformwrapper">
+      <form class="search" action="../search.html" method="get">
+        <input type="text" name="q" />
+        <input type="submit" value="Search" />
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div><div class="sidebar-links" role="navigation" aria-label="main navigation">
+  
+    <div class="sidebar-group">
+      <p class="caption">
+        <span class="caption-text"><a href="../index.html#runtime-documentation">Contents:</a></span>
+      </p>
+      <ul class="">
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../design.html" class="reference internal ">Design Goals</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../architecture.html" class="reference internal ">Architecture</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../ipc.html" class="reference internal ">IPC</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../smart-devices.html" class="reference internal ">Smart Devices</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="index.html" class="reference internal ">API Reference</a>
+            
+
+            
+          </li>
+
+        
+      </ul>
+    </div>
+  
+</div>
+        </sidebar>
+
+      <page>
+          <div class="body-header" role="navigation" aria-label="navigation">
+  
+  <ul class="breadcrumbs">
+    <li><a href="../index.html">Docs</a> &raquo;</li>
+    
+      <li><a href="index.html">API Reference</a> &raquo;</li>
+    
+    <li><code class="docutils literal notranslate"><span class="pre">runtime.process</span></code></li>
+  </ul>
+  
+
+  <ul class="page-nav">
+  <li class="prev">
+    <a href="messaging.html"
+       title="previous chapter">← <code class="docutils literal notranslate"><span class="pre">runtime.messaging</span></code></a>
+  </li>
+  <li class="next">
+    <a href="remote.html"
+       title="next chapter"><code class="docutils literal notranslate"><span class="pre">runtime.remote</span></code> →</a>
+  </li>
+</ul>
+  
+</div>
+<hr>
+          <div class="content" role="main" v-pre>
+            
+  <section id="module-runtime.process">
+<span id="runtime-process"></span><h1><code class="docutils literal notranslate"><span class="pre">runtime.process</span></code><a class="headerlink" href="#module-runtime.process" title="Permalink to this headline">¶</a></h1>
+<p>Process and resource management.</p>
+<p>Wrapping other low-level modules, this module provides a high-level interface for
+managing processes, endpoints, and other resources. This module is intended for
+consumption by service handlers and tools implementing Runtime’s business logic.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.process.Application">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.process.</span></span><span class="sig-name descname"><span class="pre">Application</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">name</span></em>, <em class="sig-param"><span class="pre">options</span></em>, <em class="sig-param"><span class="pre">stack=&lt;factory&gt;</span></em>, <em class="sig-param"><span class="pre">endpoints=&lt;factory&gt;</span></em>, <em class="sig-param"><span class="pre">logger=&lt;factory&gt;</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#Application"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.Application" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>An application opens and closes resources created from command-line options.</p>
+<p>Generally, you create one <a class="reference internal" href="#runtime.process.Application" title="runtime.process.Application"><code class="xref py py-class docutils literal notranslate"><span class="pre">Application</span></code></a> per <code class="docutils literal notranslate"><span class="pre">asyncio.run</span></code> main function,
+like so:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">async</span> <span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="o">**</span><span class="n">options</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">async</span> <span class="k">with</span> <span class="n">Application</span><span class="p">(</span><span class="s1">&#39;my-app&#39;</span><span class="p">,</span> <span class="n">options</span><span class="p">)</span> <span class="k">as</span> <span class="n">app</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="o">...</span>
+</pre></div>
+</div>
+<p>An <a class="reference internal" href="#runtime.process.Application" title="runtime.process.Application"><code class="xref py py-class docutils literal notranslate"><span class="pre">Application</span></code></a> produces <code class="xref py py-class docutils literal notranslate"><span class="pre">remote.Endpoint</span></code> and <code class="xref py py-class docutils literal notranslate"><span class="pre">remote.Router</span></code>
+instances in common configurations. It also configures the <a class="reference external" href="https://docs.python.org/3/library/asyncio.html#module-asyncio" title="(in Python v3.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">asyncio</span></code></a> loop and
+logging framework, which are needed to make the messaging components work.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a>) – The name of the application (preferably kebab case and unique across all
+applications).</p></li>
+<li><p><strong>options</strong> (<em>Mapping</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a><em>, </em><em>Any</em><em>]</em>) – A map of option names to their values.</p></li>
+<li><p><strong>stack</strong> (<a class="reference external" href="https://docs.python.org/3/library/contextlib.html#contextlib.AsyncExitStack" title="(in Python v3.10)"><em>contextlib.AsyncExitStack</em></a>) – The stack that the app’s resources are pushed on.</p></li>
+<li><p><strong>endpoints</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.10)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a><em>, </em><a class="reference internal" href="remote.html#runtime.remote.SocketNode" title="runtime.remote.SocketNode"><em>runtime.remote.SocketNode</em></a><em>]</em>) – A map of endpoint names to endpoints.</p></li>
+<li><p><strong>logger</strong> (<a class="reference external" href="https://structlog.org/en/21.1.0/api.html#structlog.stdlib.AsyncBoundLogger" title="(in structlog v21.1.0)"><em>structlog.stdlib.AsyncBoundLogger</em></a>) – A logger instance (may not be bound).</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.Application.configure_loop">
+<span class="sig-name descname"><span class="pre">configure_loop</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#Application.configure_loop"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.Application.configure_loop" title="Permalink to this definition">¶</a></dt>
+<dd><p>Configure the current <a class="reference external" href="https://docs.python.org/3/library/asyncio.html#module-asyncio" title="(in Python v3.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">asyncio</span></code></a> loop and environment.</p>
+<ul class="simple">
+<li><p>Sets the debug flag, default executor, and exception handler, which logs
+exceptions produced by event loop callbacks.</p></li>
+<li><p>Set the current task and thread names.</p></li>
+<li><p>If this method is called in the main thread, set signal handlers for
+<code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> and <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> that cancel the current task.</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This method assumes the current task is the main task run by
+<a class="reference external" href="https://docs.python.org/3/library/asyncio-task.html#asyncio.run" title="(in Python v3.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">asyncio.run()</span></code></a>.</p>
+</div>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.Application.make_buffer_manager">
+<span class="sig-name descname"><span class="pre">make_buffer_manager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shared</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#Application.make_buffer_manager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.Application.make_buffer_manager" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a buffer manager.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>shared</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><em>bool</em></a>) – <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.10)"><code class="xref py py-data docutils literal notranslate"><span class="pre">True</span></code></a> if the buffers should be backed by shared memory,
+<a class="reference external" href="https://docs.python.org/3/library/constants.html#False" title="(in Python v3.10)"><code class="xref py py-data docutils literal notranslate"><span class="pre">False</span></code></a> for non-shared (private) memory.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.Application.make_client">
+<em class="property"><span class="pre">async</span> </em><span class="sig-name descname"><span class="pre">make_client</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">node</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#Application.make_client"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.Application.make_client" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make and start a remote call client.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>node</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="remote.html#runtime.remote.Node" title="runtime.remote.Node"><em>runtime.remote.Node</em></a><em>]</em>) – The node the client should wrap. If not provided, this method
+constructs and uses a node backed by a <code class="docutils literal notranslate"><span class="pre">DEALER</span></code> socket and connected
+to the router frontend. By default, the socket’s identity is the app
+named suffixed by <code class="docutils literal notranslate"><span class="pre">-client</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.Application.make_control_client">
+<em class="property"><span class="pre">async</span> </em><span class="sig-name descname"><span class="pre">make_control_client</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#Application.make_control_client"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.Application.make_control_client" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a client for sending gamepad (control) inputs.</p>
+<p>Since the message flow is unidirectional, notification messages are recommended.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.Application.make_control_service">
+<em class="property"><span class="pre">async</span> </em><span class="sig-name descname"><span class="pre">make_control_service</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handler</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#Application.make_control_service"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.Application.make_control_service" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a service for receiving gamepad (control) inputs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>handler</strong> (<a class="reference internal" href="remote.html#runtime.remote.Handler" title="runtime.remote.Handler"><em>runtime.remote.Handler</em></a>) – A remote call handler with a bound method <code class="docutils literal notranslate"><span class="pre">update_gamepads</span></code>,
+which accepts a single positional argument (an update object) and
+returns nothing.</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The format of an update object is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="s2">&quot;&lt;uid&gt;&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;&lt;param-name&gt;&quot;</span><span class="p">:</span> <span class="o">&lt;</span><span class="n">value</span><span class="o">&gt;</span><span class="p">}}</span>
+</pre></div>
+</div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.Application.make_log_forwarder">
+<em class="property"><span class="pre">async</span> </em><span class="sig-name descname"><span class="pre">make_log_forwarder</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#Application.make_log_forwarder"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.Application.make_log_forwarder" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a threaded device that forwards ZMQ PUB-SUB messages emitted by loggers.</p>
+<p>The device is subscribed to all messages. Both sockets bind to fixed addresses.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.Application.make_log_publisher">
+<em class="property"><span class="pre">async</span> </em><span class="sig-name descname"><span class="pre">make_log_publisher</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#Application.make_log_publisher"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.Application.make_log_publisher" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a client that connects to the log forwarder’s backend socket.</p>
+<p>The publisher will be installed in the processor chain.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.Application.make_log_subscriber">
+<em class="property"><span class="pre">async</span> </em><span class="sig-name descname"><span class="pre">make_log_subscriber</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handler</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#Application.make_log_subscriber"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.Application.make_log_subscriber" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a service that connects to the log forwarder’s frontend socket.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>handler</strong> (<a class="reference internal" href="remote.html#runtime.remote.Handler" title="runtime.remote.Handler"><em>runtime.remote.Handler</em></a>) – A remote call handler. The subscriber will call the handler’s
+methods when it receives a logged message. Each method should be named
+after the log level it handles (<em>e.g.</em>, <code class="docutils literal notranslate"><span class="pre">debug</span></code>) and take a single
+positional argument: the event dictionary (see
+<a class="reference internal" href="log.html#runtime.log.configure" title="runtime.log.configure"><code class="xref py py-func docutils literal notranslate"><span class="pre">runtime.log.configure()</span></code></a> for details on the format).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.Application.make_router">
+<em class="property"><span class="pre">async</span> </em><span class="sig-name descname"><span class="pre">make_router</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#Application.make_router"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.Application.make_router" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a router for passing remote call requests and responses.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.Application.make_service">
+<em class="property"><span class="pre">async</span> </em><span class="sig-name descname"><span class="pre">make_service</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handler</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#Application.make_service"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.Application.make_service" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make and start a remote call service.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>handler</strong> (<a class="reference internal" href="remote.html#runtime.remote.Handler" title="runtime.remote.Handler"><em>runtime.remote.Handler</em></a>) – A remote call handler.</p></li>
+<li><p><strong>node</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="remote.html#runtime.remote.Node" title="runtime.remote.Node"><em>runtime.remote.Node</em></a><em>]</em>) – The node the service should wrap. If not provided, this method
+constructs and uses a node backed by a <code class="docutils literal notranslate"><span class="pre">DEALER</span></code> socket and connected
+to the router backend. By default, the socket’s identity is the app name
+suffixed by <code class="docutils literal notranslate"><span class="pre">-service</span></code>.</p></li>
+<li><p><strong>logger</strong> (<em>Optional</em><em>[</em><a class="reference external" href="https://structlog.org/en/21.1.0/api.html#structlog.stdlib.AsyncBoundLogger" title="(in structlog v21.1.0)"><em>structlog.stdlib.AsyncBoundLogger</em></a><em>]</em>) – The logger passed to the service.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.Application.make_update_client">
+<em class="property"><span class="pre">async</span> </em><span class="sig-name descname"><span class="pre">make_update_client</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#Application.make_update_client"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.Application.make_update_client" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a client for publishing Smart Device updates over UDP/IP multicast.</p>
+<p>Since the message flow is unidirectional, notification messages are recommended.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.Application.make_update_service">
+<em class="property"><span class="pre">async</span> </em><span class="sig-name descname"><span class="pre">make_update_service</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handler</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#Application.make_update_service"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.Application.make_update_service" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a service for receiving Smart Device updates over UDP/IP multicast.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>handler</strong> (<a class="reference internal" href="remote.html#runtime.remote.Handler" title="runtime.remote.Handler"><em>runtime.remote.Handler</em></a>) – A remote call handler with a bound method <code class="docutils literal notranslate"><span class="pre">update</span></code>, which accepts
+a single positional argument (an update object) and returns nothing.</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The format of an update object is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;&lt;gamepad-index&gt;&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;lx&quot;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">float</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">&gt;</span><span class="p">,</span>
+        <span class="s2">&quot;ly&quot;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">float</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">&gt;</span><span class="p">,</span>
+        <span class="s2">&quot;rx&quot;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">float</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">&gt;</span><span class="p">,</span>
+        <span class="s2">&quot;ry&quot;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">float</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">&gt;</span><span class="p">,</span>
+        <span class="s2">&quot;btn&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="o">...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">[lr][xy]</span></code> keys represent joystick positions, where <code class="docutils literal notranslate"><span class="pre">l</span></code> and <code class="docutils literal notranslate"><span class="pre">r</span></code>
+stand for left and right, respectively, and <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code> are Cartesian
+coordinates. The origin (0, 0) corresponds to the joystick in the resting
+position. Each joystick is constrained within the unit circle.</p>
+<p><code class="docutils literal notranslate"><span class="pre">btn</span></code> is a bitmask where a “1” bit indicates the corresponding button is
+pressed. Consult the device catalog for which buttons correspond to which
+bits. (The first parameters correspond to the lower-order bits.)</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.Application.report_health">
+<span class="sig-name descname"><span class="pre">report_health</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#Application.report_health"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.Application.report_health" title="Permalink to this definition">¶</a></dt>
+<dd><p>Schedule a task to periodically log the health of this process.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="runtime.process.Application.executor">
+<em class="property"><span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">executor</span></span><em class="property"><span class="pre">:</span> <span class="pre">concurrent.futures.thread.ThreadPoolExecutor</span></em><a class="headerlink" href="#runtime.process.Application.executor" title="Permalink to this definition">¶</a></dt>
+<dd><p>A thread pool executor for running synchronous tasks.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.process.AsyncProcess">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.process.</span></span><span class="sig-name descname"><span class="pre">AsyncProcess</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#AsyncProcess"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.AsyncProcess" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">multiprocessing.context.Process</span></code>, <a class="reference internal" href="#runtime.process.AsyncProcessType" title="runtime.process.AsyncProcessType"><code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.process.AsyncProcessType</span></code></a></p>
+<p>A subprocess with a callable as an entry point.</p>
+<p>This class is the asynchronous version of <a class="reference external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.Process" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">multiprocessing.Process</span></code></a>, meaning
+that the parent process can join the child process asynchronously. The
+implementation works with <a class="reference external" href="https://docs.python.org/3/library/asyncio.html#module-asyncio" title="(in Python v3.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">asyncio</span></code></a> natively by watching a file descriptor that
+is ready to read once the process exits. This event-triggered approach does not need
+a helper task/thread dedicated to blocking on <a class="reference external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.Process.join" title="(in Python v3.10)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">multiprocessing.Process.join()</span></code></a>
+or polling <a class="reference external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.Process.is_alive" title="(in Python v3.10)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">multiprocessing.Process.is_alive()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>args</strong> (<em>Any</em>) – Positional arguments to <a class="reference external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.Process" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">multiprocessing.Process</span></code></a>.</p></li>
+<li><p><strong>kwargs</strong> (<em>Any</em>) – Keyword arguments to <a class="reference external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.Process" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">multiprocessing.Process</span></code></a>. By default, this
+is a daemon process.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.process.AsyncProcessType">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.process.</span></span><span class="sig-name descname"><span class="pre">AsyncProcessType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#AsyncProcessType"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.AsyncProcessType" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Protocol" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a></p>
+<p>Abstract base type for subprocesses.</p>
+<p>This interface contains a subset of <code class="xref py py-class docutils literal notranslate"><span class="pre">asyncio.subprocess.Process</span></code> and follows
+similar semantics.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.AsyncProcessType.kill">
+<em class="property"><span class="pre">abstract</span> </em><span class="sig-name descname"><span class="pre">kill</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#AsyncProcessType.kill"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.AsyncProcessType.kill" title="Permalink to this definition">¶</a></dt>
+<dd><p>Forcefully kill the child process.</p>
+<p>The behavior is platform-dependent. On POSIX systems, this method sends the
+<code class="docutils literal notranslate"><span class="pre">SIGKILL</span></code> signal to the child process.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.AsyncProcessType.terminate">
+<em class="property"><span class="pre">abstract</span> </em><span class="sig-name descname"><span class="pre">terminate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#AsyncProcessType.terminate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.AsyncProcessType.terminate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Stop the child process.</p>
+<p>The behavior is platform-dependent. On POSIX systems, this method sends the
+<code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> signal to the child process.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.process.AsyncProcessType.wait">
+<em class="property"><span class="pre">abstract</span> <span class="pre">async</span> </em><span class="sig-name descname"><span class="pre">wait</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#AsyncProcessType.wait"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.AsyncProcessType.wait" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait for the child process to terminate.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The exit code (<a class="reference internal" href="#runtime.process.AsyncProcessType.returncode" title="runtime.process.AsyncProcessType.returncode"><code class="xref py py-attr docutils literal notranslate"><span class="pre">AsyncProcessType.returncode</span></code></a>).</p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.10)"><strong>ValueError</strong></a> – If the process is not yet started.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="runtime.process.AsyncProcessType.pid">
+<em class="property"><span class="pre">abstract</span> <span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">pid</span></span><em class="property"><span class="pre">:</span> <span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#runtime.process.AsyncProcessType.pid" title="Permalink to this definition">¶</a></dt>
+<dd><p>The process identifier (PID).</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="runtime.process.AsyncProcessType.returncode">
+<em class="property"><span class="pre">abstract</span> <span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">returncode</span></span><em class="property"><span class="pre">:</span> <span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#runtime.process.AsyncProcessType.returncode" title="Permalink to this definition">¶</a></dt>
+<dd><p>The return (exit) code of a terminated process.</p>
+<p>This attribute is <code class="docutils literal notranslate"><span class="pre">None</span></code> for processes that have not yet exited.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="runtime.process.run_process">
+<em class="property"><span class="pre">async</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.process.</span></span><span class="sig-name descname"><span class="pre">run_process</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">process</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">terminate_timeout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#run_process"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.run_process" title="Permalink to this definition">¶</a></dt>
+<dd><p>Start and wait for a subprocess to exit.</p>
+<p>If the task running this function is cancelled in the parent process while the child
+process has not yet exited, this function will attempt to terminate the child. If
+the child is not well-behaved and does not terminate by a timeout, this function
+kills the child, guaranteeing no orphan process left behind.</p>
+<p>Once the child is dead, this function also inspects the child’s return code to
+determine if it raised an emergency stop. If so, this function re-raises the
+exception.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>process</strong> (<a class="reference internal" href="#runtime.process.AsyncProcessType" title="runtime.process.AsyncProcessType"><em>runtime.process.AsyncProcessType</em></a>) – The subprocess, which will be started if it is an instance of
+<a class="reference internal" href="#runtime.process.AsyncProcess" title="runtime.process.AsyncProcess"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncProcess</span></code></a> and not yet alive.</p></li>
+<li><p><strong>terminate_timeout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)"><em>float</em></a>) – Maximum duration (in seconds) to wait for termination.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The process exit code.</p>
+</dd>
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><p><a class="reference internal" href="exception.html#runtime.exception.EmergencyStopException" title="runtime.exception.EmergencyStopException"><strong>EmergencyStopException</strong></a> – If the subprocess raised an emergency stop.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="runtime.process.spin">
+<em class="property"><span class="pre">async</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.process.</span></span><span class="sig-name descname"><span class="pre">spin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">func</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interval</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/process.html#spin"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.process.spin" title="Permalink to this definition">¶</a></dt>
+<dd><p>Periodically execute an async callback.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>func</strong> (<em>Callable</em><em>[</em><em>[</em><em>...</em><em>]</em><em>, </em><em>Awaitable</em><em>[</em><em>Any</em><em>]</em><em>]</em>) – Async callback.</p></li>
+<li><p><strong>args</strong> (<em>Any</em>) – Positonal arguments to the callback.</p></li>
+<li><p><strong>interval</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)"><em>float</em></a>) – Duration (in seconds) between calls. The callback is allows to run for
+longer than the interval. The callback should implement any timeout logic
+if cancellation is desired.</p></li>
+<li><p><strong>kwargs</strong> (<em>Any</em>) – Keyword arguments to the callback.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+          </div>
+          <div class="page-nav">
+            <div class="inner"><ul class="page-nav">
+  <li class="prev">
+    <a href="messaging.html"
+       title="previous chapter">← <code class="docutils literal notranslate"><span class="pre">runtime.messaging</span></code></a>
+  </li>
+  <li class="next">
+    <a href="remote.html"
+       title="next chapter"><code class="docutils literal notranslate"><span class="pre">runtime.remote</span></code> →</a>
+  </li>
+</ul><div class="footer" role="contentinfo">
+      &#169; Copyright 2021, Pioneers in Engineering.
+    <br>
+    Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.2.0 with <a href="https://github.com/schettino72/sphinx_press_theme">Press Theme</a> 0.8.0.
+</div>
+            </div>
+          </div>
+      </page>
+    </div></div>
+    
+    
+  </body>
+</html>

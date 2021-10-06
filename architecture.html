@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html >
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+      <title>Architecture</title>
+    
+          <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+          <link rel="stylesheet" href="_static/theme.css " type="text/css" />
+          <link rel="stylesheet" href="_static/css/custom.css" type="text/css" />
+      
+      <!-- sphinx script_files -->
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+
+      
+      <!-- bundled in js (rollup iife) -->
+      <!-- <script src="_static/theme-vendors.js"></script> -->
+      <script src="_static/theme.js" defer></script>
+    
+  <link rel="index" title="Index" href="genindex.html" />
+  <link rel="search" title="Search" href="search.html" />
+  <link rel="next" title="IPC" href="ipc.html" />
+  <link rel="prev" title="Design Goals" href="design.html" /> 
+  </head>
+
+  <body>
+    <div id="app">
+    <div class="theme-container" :class="pageClasses"><navbar @toggle-sidebar="toggleSidebar">
+  <router-link to="index.html" class="home-link">
+    
+      <span class="site-name">Runtime</span>
+    
+  </router-link>
+
+  <div class="links">
+    <navlinks class="can-hide">
+
+
+
+    </navlinks>
+  </div>
+</navbar>
+
+      
+      <div class="sidebar-mask" @click="toggleSidebar(false)">
+      </div>
+        <sidebar @toggle-sidebar="toggleSidebar">
+          
+          <navlinks>
+            
+
+
+
+            
+          </navlinks><div id="searchbox" class="searchbox" role="search">
+  <div class="caption"><span class="caption-text">Quick search</span>
+    <div class="searchformwrapper">
+      <form class="search" action="search.html" method="get">
+        <input type="text" name="q" />
+        <input type="submit" value="Search" />
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div><div class="sidebar-links" role="navigation" aria-label="main navigation">
+  
+    <div class="sidebar-group">
+      <p class="caption">
+        <span class="caption-text"><a href="index.html#runtime-documentation">Contents:</a></span>
+      </p>
+      <ul class="current">
+        
+          <li class="toctree-l1 ">
+            
+              <a href="design.html" class="reference internal ">Design Goals</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 current">
+            
+              <a href="#" class="reference internal current">Architecture</a>
+            
+
+            
+              <ul>
+                
+                  <li class="toctree-l2"><a href="#control-stack" class="reference internal">Control Stack</a></li>
+                
+                  <li class="toctree-l2"><a href="#clients" class="reference internal">Clients</a></li>
+                
+                  <li class="toctree-l2"><a href="#process-model" class="reference internal">Process Model</a></li>
+                
+                  <li class="toctree-l2"><a href="#network-topology" class="reference internal">Network Topology</a></li>
+                
+                  <li class="toctree-l2"><a href="#faq" class="reference internal">FAQ</a></li>
+                
+              </ul>
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="ipc.html" class="reference internal ">IPC</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="smart-devices.html" class="reference internal ">Smart Devices</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="api-reference/index.html" class="reference internal ">API Reference</a>
+            
+
+            
+          </li>
+
+        
+      </ul>
+    </div>
+  
+</div>
+        </sidebar>
+
+      <page>
+          <div class="body-header" role="navigation" aria-label="navigation">
+  
+  <ul class="breadcrumbs">
+    <li><a href="index.html">Docs</a> &raquo;</li>
+    
+    <li>Architecture</li>
+  </ul>
+  
+
+  <ul class="page-nav">
+  <li class="prev">
+    <a href="design.html"
+       title="previous chapter">← Design Goals</a>
+  </li>
+  <li class="next">
+    <a href="ipc.html"
+       title="next chapter">IPC →</a>
+  </li>
+</ul>
+  
+</div>
+<hr>
+          <div class="content" role="main" v-pre>
+            
+  <section id="architecture">
+<h1>Architecture<a class="headerlink" href="#architecture" title="Permalink to this headline">¶</a></h1>
+<section id="control-stack">
+<h2>Control Stack<a class="headerlink" href="#control-stack" title="Permalink to this headline">¶</a></h2>
+<div class="figure" id="id1" style="text-align: center"><p><img  src="_images/tikz-bcc42c063fb997cda7113ef1a73fa0e7e640431f.svg" alt="Figure made with TikZ" /></p>
+<p><span class="caption-text">Control Stack</span></p>
+</div></section>
+<section id="clients">
+<h2>Clients<a class="headerlink" href="#clients" title="Permalink to this headline">¶</a></h2>
+<p>The frontend for the PiE robotics kit, students use Dawn to write code in its text editor, view console output and SD data, and control their robots during teleop.
+Dawn and Runtime are the minimal components needed to control a robot.</p>
+<p>Shepherd is the field control application, which commands each robot to start/stop, monitors each robot’s health, tallies up points scored in each match, and implements game mechanics like powerup selection and the match timer.
+Shepherd’s frontend is a progressive web app (PWA) with pages for the scoreboard, match schedule, staff-facing match administration dashboard, and game mechanic clients for each alliance.</p>
+<p>The Simulator is essentially a physics engine that models robots interacting with each other and the field.
+It connects to Runtime to send and receive synthetic data for VSDs.
+The Simulator’s frontend, another PWA, allows students to view the environment and customize their virtual robot’s structure.
+To closely approximate competition conditions, the Simulator delegates student code execution to Runtime instead of duplicating functionality.
+Runtime’s student API is agnostic to the underlying hardware, whether physical or virtual.</p>
+</section>
+<section id="process-model">
+<h2>Process Model<a class="headerlink" href="#process-model" title="Permalink to this headline">¶</a></h2>
+<p>Runtime is structured as a distributed multiprocess application.
+The processes communicate with each other either over shared memory buffers or over TCP/UDP/UNIX sockets.
+Some sockets use ZeroMQ (ZMQ), a messaging library that extends plain BSD sockets.
+Each process is a microservice that responds to RPC requests.</p>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">server</span></code></dt><dd><ul class="simple">
+<li><p>Routes remote procedure calls (RPC).</p></li>
+<li><p>Publishes aggregated log data collected from each process.</p></li>
+<li><p>Manages Runtime’s resources, such as other processes.</p></li>
+<li><p>Publishes Smart Device data.</p></li>
+<li><p>Receives gamepad inputs.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">server</span></code> essentially acts as a broker between other Runtime processes and Runtime’s clients.
+This process is the “fixed” component of the architecture by binding to well-known addresses that all other processes/clients connect to.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">device</span></code></dt><dd><ul class="simple">
+<li><p>Detects hotplugged devices in a helper thread.</p></li>
+<li><p>Opens serial connections to each device.</p></li>
+<li><p>Decode inbound Smart Device packets and writes updates into buffers.</p></li>
+<li><p>Read buffers and encode outbound packets.</p></li>
+</ul>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">executor</span></code>, <code class="docutils literal notranslate"><span class="pre">challenge</span></code></dt><dd><ul class="simple">
+<li><p>Executes synchronous student code in the main thread, using alarms to time out execution.</p></li>
+<li><p>Executes asynchronous student code in a helper thread.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">executor</span></code> runs autonomous and teleop code and <code class="docutils literal notranslate"><span class="pre">challenge</span></code> runs coding challenges, but are otherwise identical.</p>
+</dd>
+</dl>
+</section>
+<section id="network-topology">
+<h2>Network Topology<a class="headerlink" href="#network-topology" title="Permalink to this headline">¶</a></h2>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This guide will only detail IPC at the transport layer.
+For information on IPC formats and semantics, see <a class="reference external" href="ipc.html">IPC at the application layer</a>.</p>
+</div>
+<p>All bound sockets are shown in the following table:</p>
+<table class="compact-table colwidths-given docutils align-default" id="id2">
+<caption><span class="caption-text">Runtime Sockets</span><a class="headerlink" href="#id2" title="Permalink to this table">¶</a></caption>
+<colgroup>
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Transport</p></th>
+<th class="head"><p>Port/Path</p></th>
+<th class="head"><p>Binding Process</p></th>
+<th class="head"><p>ZMQ Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>TCP</p></td>
+<td><p>6000</p></td>
+<td rowspan="2"><p><code class="docutils literal notranslate"><span class="pre">server</span></code></p></td>
+<td rowspan="2"><p><code class="docutils literal notranslate"><span class="pre">ROUTER</span></code></p></td>
+<td rowspan="3"><p>Clients issue synchronous
+RPC requests to the TCP
+frontend, which the backend
+routes. Sockets connecting
+to either end should have
+the <code class="docutils literal notranslate"><span class="pre">REQ</span></code> type.</p></td>
+</tr>
+<tr class="row-odd"><td><p>UNIX</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/tmp/rt-rpc.sock</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>UNIX</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/tmp/rt-srv.sock</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">server</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ROUTER</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>TCP</p></td>
+<td><p>6001</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">server</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PUB</span></code></p></td>
+<td rowspan="2"><p>The <code class="docutils literal notranslate"><span class="pre">PUB</span></code> frontend
+publishes log records
+collected on the <code class="docutils literal notranslate"><span class="pre">SUB</span></code>
+backend.</p></td>
+</tr>
+<tr class="row-even"><td><p>UNIX</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/tmp/rt-log.sock</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">server</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SUB</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>UDP</p></td>
+<td><p>6002</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">server</span></code></p></td>
+<td><p>None</p></td>
+<td><p>Clients send gamepad
+inputs.</p></td>
+</tr>
+<tr class="row-even"><td><p>UDP</p></td>
+<td><p>6003</p></td>
+<td><p>Client</p></td>
+<td><p>None</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">server</span></code> publishes Smart
+Device data over IP
+multicast.</p></td>
+</tr>
+<tr class="row-odd"><td><p>TCP</p></td>
+<td><p>6005</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+<td><p>None</p></td>
+<td><p>A plain TCP connection for
+virtual Smart Devices.
+Drop-in replacement for
+serial.</p></td>
+</tr>
+</tbody>
+</table>
+<p>The connections opened by each process are shown in the following diagram for one client:</p>
+<div class="figure" id="id3" style="text-align: center"><p><img  src="_images/tikz-88c00a83b229053be20df6f0007b49664bf19534.svg" alt="Figure made with TikZ" /></p>
+<p><span class="caption-text">Socket Diagram</span></p>
+</div><ul class="simple">
+<li><p>The two pairs of sockets in the center are <a class="reference external" href="https://pyzmq.readthedocs.io/en/latest/devices.html">ZMQ devices</a> that have a frontend that clients connect to and a backend that services connect to.
+These devices may run in helper threads in the <code class="docutils literal notranslate"><span class="pre">server</span></code> process, meaning the <code class="docutils literal notranslate"><span class="pre">server</span></code> process may communicate with itself.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">ROUTER</span></code>-<code class="docutils literal notranslate"><span class="pre">ROUTER</span></code> device routes an incoming RPC request to the appropriate service and returns the response to the client.
+For ZMQ to route a message, the sender prefixes the message with the destination socket’s identity, a globally unique binary string.
+For that reason, the RPC request and response must include the client’s identity.</p></li>
+<li><p>Surprisingly, each socket connected to the backend has the <code class="docutils literal notranslate"><span class="pre">REQ</span></code>, not <code class="docutils literal notranslate"><span class="pre">REP</span></code> type, and the backend socket is not a <code class="docutils literal notranslate"><span class="pre">DEALER</span></code>.
+Each service must send the first message to the backend to inform the device of its ZMQ identity, which is the process name.
+This design is based on a <a class="reference external" href="https://zguide.zeromq.org/docs/chapter3/#A-Load-Balancing-Message-Broker">load-balancing pattern</a> from the ZMQ guide.</p></li>
+<li><p>Each process also has a second <code class="docutils literal notranslate"><span class="pre">REQ</span></code> socket connected to the frontend, allowing every service to call every other service without requiring point-to-point connections.
+The routing device should prevent requests from cycling indefinitely.</p></li>
+<li><p>Following a fan-in, fan-out pattern, the <code class="docutils literal notranslate"><span class="pre">PUB</span></code>-<code class="docutils literal notranslate"><span class="pre">SUB</span></code> device simply forwards log records collected on the backend to any number of clients subscribed to the frontend.</p></li>
+<li><p>Unlike most connections, clients connect directly to the <code class="docutils literal notranslate"><span class="pre">device</span></code> service to simulate a VSD.
+(The sockets are shown in red.)</p></li>
+<li><p>To subscribe to Smart Device updates, the client binds to multicast group <code class="docutils literal notranslate"><span class="pre">224.1.1.1</span></code>, which Runtime connects to.</p></li>
+</ul>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">REQ</span></code> and <code class="docutils literal notranslate"><span class="pre">REP</span></code> sockets are stateful and will raise an exception if they do not strictly follow an alternating send/receive I/O pattern.
+<code class="docutils literal notranslate"><span class="pre">REQ</span></code> must start with send, <code class="docutils literal notranslate"><span class="pre">REP</span></code> must start with receive.
+If a service fails while processing a request and restarts, the client will wait for a response that will never arrive and lock itself in the mute state.
+The solution is to timeout the client’s receive operation.</p></li>
+<li><p>When the transport allows it (<em>i.e.</em>, is duplex), a ZMQ subscriber will notify <a class="reference external" href="https://github.com/zeromq/libzmq/issues/3611">its publishers</a> which topics the publishers should filter preemptively to cut down on network traffic.</p></li>
+<li><p>A publisher overwhelming a slow subscriber will back up the publisher’s send queue.</p></li>
+</ul>
+</div>
+</section>
+<section id="faq">
+<h2>FAQ<a class="headerlink" href="#faq" title="Permalink to this headline">¶</a></h2>
+<dl>
+<dt>Why use multiple processes instead of multiple threads?</dt><dd><ul>
+<li><p>Some Python implementations, including CPython, use a global interpreter lock (GIL), which prevents multiple OS threads from running in parallel even when multiple physical cores are available.
+This behavior is essentially time-multiplexing.</p>
+<p>Although multiprocessing complicates data sharing and incurs a heavier context switching performance penalty, each process has its own interpreter and avoids GIL contention.
+Extension modules that do not access Python objects may also release the GIL.
+With shared memory, the IPC latency for Smart Device data is essentially nonexistent.</p>
+</li>
+<li><p>A microservice architecture provides increased resilience, scalability, and modularity.
+Processes can be tested and restarted in isolation.</p></li>
+<li><p>Messaging over sockets instead of an in-memory data structure shared among threads (like a queue) allows other tools to intergrate with Runtime.</p></li>
+</ul>
+</dd>
+<dt>Why is true parallelism necessary at all? Runtime is heavily I/O-bound anyway.</dt><dd><p>This is true, but having all of Runtime’s functionality sharing the CPU time of a single core is still undesirable.
+First, a slow operation like reading a large packet can block the event loop slightly, increasing the latency of all other tasks.
+Obviously, compute-bound tasks should be delegated to a thread pool, but a delayed event loop is still a possible single point of failure.
+Second, Runtime should treat student code as possibly very inefficient in the worst case, and therefore, compute-bound.</p>
+</dd>
+<dt>Why not delegate blocking tasks to a process pool?</dt><dd><p>Process pools are best suited for compute-heavy jobs where fine-grained control over workers is not needed.
+This precludes student code execution, since jobs cannot be canceled by the parent process or interrupted by an alarm in a worker process’s main thread.</p>
+</dd>
+<dt>Why prefer ZMQ over plain sockets?</dt><dd><ul class="simple">
+<li><p>ZMQ exposes an interface based on multipart messages instead of TCP’s bytestreams, which frees us from dealing with low-level framing.</p></li>
+<li><p>High-level messaging patterns, like publish-subscribe, and identity-based routing make it easy to build scalable network topologies that are agnostic to the underlying transports.</p></li>
+<li><p>Limited persistence and asynchronous delivery guarantee requests go through even if a peer is temporarily disconnected.
+For example, if a peer is temporarily down, ZMQ can retry a connection attempt instead of reporting “connection refused” as TCP does.
+As its name implies, ZMQ provides the benefits of a message queue without a broker, a possible central point of failure.</p></li>
+</ul>
+</dd>
+<dt>Why use so many separate TCP connections?</dt><dd><p>TCP is ubiquitous and works well with ZMQ.
+Because each connection is long-lived, TCP handshakes rarely occur and the only long-term overhead is keep-alive packet traffic.
+Rejected alternatives:</p>
+<ul class="simple">
+<li><p>Multiplexed TCP: Not supported by ZMQ, and suffers from head-of-line blocking.
+One blocked channel with dropped or out-of-order packets will unnecessarily block all other channels.</p></li>
+<li><p>SCTP: Supports multiple streams and is message-based.
+However, some OSs lack native implementations and poorly built network middleware may block SCTP traffic.</p></li>
+<li><p>QUIC: QUIC supports multiple streams using UDP but, like SCTP, is not yet a mature, stable protocol.</p></li>
+<li><p>UDP-only: Reliable transmission is required for some functionality.
+For example, student-logged messages must appear in Dawn’s console.</p></li>
+<li><p>Consolidate the log socket pair with the RPC pair: Runtime would need to explicitly publish logs to all of its peers, which is an antipattern.
+The correct model for unidirectional asynchronous data flow is publish-subscribe.</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+</section>
+
+
+          </div>
+          <div class="page-nav">
+            <div class="inner"><ul class="page-nav">
+  <li class="prev">
+    <a href="design.html"
+       title="previous chapter">← Design Goals</a>
+  </li>
+  <li class="next">
+    <a href="ipc.html"
+       title="next chapter">IPC →</a>
+  </li>
+</ul><div class="footer" role="contentinfo">
+      &#169; Copyright 2021, Pioneers in Engineering.
+    <br>
+    Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.2.0 with <a href="https://github.com/schettino72/sphinx_press_theme">Press Theme</a> 0.8.0.
+</div>
+            </div>
+          </div>
+      </page>
+    </div></div>
+    
+    
+  </body>
+</html>

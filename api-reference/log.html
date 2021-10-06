@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html >
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+      <title>runtime.log</title>
+    
+          <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+          <link rel="stylesheet" href="../_static/theme.css " type="text/css" />
+          <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+      
+      <!-- sphinx script_files -->
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+
+      
+      <!-- bundled in js (rollup iife) -->
+      <!-- <script src="../_static/theme-vendors.js"></script> -->
+      <script src="../_static/theme.js" defer></script>
+    
+  <link rel="index" title="Index" href="../genindex.html" />
+  <link rel="search" title="Search" href="../search.html" />
+  <link rel="next" title="runtime.messaging" href="messaging.html" />
+  <link rel="prev" title="runtime.exception" href="exception.html" /> 
+  </head>
+
+  <body>
+    <div id="app">
+    <div class="theme-container" :class="pageClasses"><navbar @toggle-sidebar="toggleSidebar">
+  <router-link to="../index.html" class="home-link">
+    
+      <span class="site-name">Runtime</span>
+    
+  </router-link>
+
+  <div class="links">
+    <navlinks class="can-hide">
+
+
+
+    </navlinks>
+  </div>
+</navbar>
+
+      
+      <div class="sidebar-mask" @click="toggleSidebar(false)">
+      </div>
+        <sidebar @toggle-sidebar="toggleSidebar">
+          
+          <navlinks>
+            
+
+
+
+            
+          </navlinks><div id="searchbox" class="searchbox" role="search">
+  <div class="caption"><span class="caption-text">Quick search</span>
+    <div class="searchformwrapper">
+      <form class="search" action="../search.html" method="get">
+        <input type="text" name="q" />
+        <input type="submit" value="Search" />
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div><div class="sidebar-links" role="navigation" aria-label="main navigation">
+  
+    <div class="sidebar-group">
+      <p class="caption">
+        <span class="caption-text"><a href="../index.html#runtime-documentation">Contents:</a></span>
+      </p>
+      <ul class="">
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../design.html" class="reference internal ">Design Goals</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../architecture.html" class="reference internal ">Architecture</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../ipc.html" class="reference internal ">IPC</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../smart-devices.html" class="reference internal ">Smart Devices</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="index.html" class="reference internal ">API Reference</a>
+            
+
+            
+          </li>
+
+        
+      </ul>
+    </div>
+  
+</div>
+        </sidebar>
+
+      <page>
+          <div class="body-header" role="navigation" aria-label="navigation">
+  
+  <ul class="breadcrumbs">
+    <li><a href="../index.html">Docs</a> &raquo;</li>
+    
+      <li><a href="index.html">API Reference</a> &raquo;</li>
+    
+    <li><code class="docutils literal notranslate"><span class="pre">runtime.log</span></code></li>
+  </ul>
+  
+
+  <ul class="page-nav">
+  <li class="prev">
+    <a href="exception.html"
+       title="previous chapter">← <code class="docutils literal notranslate"><span class="pre">runtime.exception</span></code></a>
+  </li>
+  <li class="next">
+    <a href="messaging.html"
+       title="next chapter"><code class="docutils literal notranslate"><span class="pre">runtime.messaging</span></code> →</a>
+  </li>
+</ul>
+  
+</div>
+<hr>
+          <div class="content" role="main" v-pre>
+            
+  <section id="module-runtime.log">
+<span id="runtime-log"></span><h1><code class="docutils literal notranslate"><span class="pre">runtime.log</span></code><a class="headerlink" href="#module-runtime.log" title="Permalink to this headline">¶</a></h1>
+<p>Logging configuration.</p>
+<p>This module largely wraps the <a class="reference external" href="https://structlog.org/en/21.1.0/api.html#module-structlog" title="(in structlog v21.1.0)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">structlog</span></code></a> framework to provide flexible structured
+logging for Runtime services. A chain of “processors” (callables) filters or transforms
+events produced by log statements.</p>
+<p>To the greatest extent possible, this module favors native <a class="reference external" href="https://structlog.org/en/21.1.0/api.html#module-structlog" title="(in structlog v21.1.0)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">structlog</span></code></a>
+functionality over integration with the standard <a class="reference external" href="https://docs.python.org/3/library/logging.html#module-logging" title="(in Python v3.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">logging</span></code></a> module for <a class="reference external" href="https://www.structlog.org/en/stable/performance.html">performance
+reasons</a>. <a class="reference external" href="https://structlog.org/en/21.1.0/api.html#module-structlog" title="(in structlog v21.1.0)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">structlog</span></code></a> also
+provides an async interface that <a class="reference external" href="https://docs.python.org/3/library/logging.html#module-logging" title="(in Python v3.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">logging</span></code></a> does not.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference external" href="https://structlog.org/en/21.1.0/api.html#module-structlog" title="(in structlog v21.1.0)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">structlog</span></code></a> also has a notion of <em>bound</em> and <em>unbound</em> loggers. An <em>unbound</em>
+logger is a proxy that borrows its configuration from the global configuration set
+by <a class="reference internal" href="#runtime.log.configure" title="runtime.log.configure"><code class="xref py py-func docutils literal notranslate"><span class="pre">runtime.log.configure()</span></code></a>. Once a logger is bound by calling
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">structlog.BoundLogggerBase.bind()</span></code>, the global configuration is copied into the
+logger’s local state and frozen. Further changes in the global configuration no
+longer affect the bound logger.</p>
+<p>Because unbound loggers are proxies that perform some introspection on every call,
+prefer bound loggers, which are much more performant because their methods are
+concrete.</p>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.log.AsyncLogger">
+<span class="sig-prename descclassname"><span class="pre">runtime.log.</span></span><span class="sig-name descname"><span class="pre">AsyncLogger</span></span><a class="headerlink" href="#runtime.log.AsyncLogger" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <a class="reference external" href="https://structlog.org/en/21.1.0/api.html#structlog.stdlib.AsyncBoundLogger" title="(in structlog v21.1.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">structlog.stdlib.AsyncBoundLogger</span></code></a></p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.log.LogPublisher">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.log.</span></span><span class="sig-name descname"><span class="pre">LogPublisher</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">node</span></em>, <em class="sig-param"><span class="pre">concurrency=1</span></em>, <em class="sig-param"><span class="pre">logger=&lt;factory&gt;</span></em>, <em class="sig-param"><span class="pre">requests=&lt;factory&gt;</span></em>, <em class="sig-param"><span class="pre">send_queue_capacity=512</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/log.html#LogPublisher"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.log.LogPublisher" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="remote.html#runtime.remote.Client" title="runtime.remote.Client"><code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.remote.Client</span></code></a></p>
+<p>A client for publishing log events over a network.</p>
+<p>A <a class="reference internal" href="#runtime.log.LogPublisher" title="runtime.log.LogPublisher"><code class="xref py py-class docutils literal notranslate"><span class="pre">LogPublisher</span></code></a> instance is a threadsafe <a class="reference external" href="https://structlog.org/en/21.1.0/api.html#module-structlog" title="(in structlog v21.1.0)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">structlog</span></code></a> processor
+(callable). The processor feeds incoming events into an internal queue, which a
+worker task drains. For each event, the worker issues a notification call, where the
+method name is the log level and the only argument is the event dictionary.</p>
+<p>The worker and queue are not initialized until the async context is entered. The
+worker is attached to the context’s running loop.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>send_queue_capacity</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – The maximum size of the event queue. A nonpositive capacity
+indicates the queue size should be unbounded. When the queue is full, any
+additional events are dropped.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.log.Logger">
+<span class="sig-prename descclassname"><span class="pre">runtime.log.</span></span><span class="sig-name descname"><span class="pre">Logger</span></span><a class="headerlink" href="#runtime.log.Logger" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <a class="reference external" href="https://structlog.org/en/21.1.0/api.html#structlog.stdlib.BoundLogger" title="(in structlog v21.1.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">structlog.stdlib.BoundLogger</span></code></a></p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="runtime.log.configure">
+<span class="sig-prename descclassname"><span class="pre">runtime.log.</span></span><span class="sig-name descname"><span class="pre">configure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">publisher</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fmt</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'json'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'INFO'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/log.html#configure"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.log.configure" title="Permalink to this definition">¶</a></dt>
+<dd><p>Configure <a class="reference external" href="https://structlog.org/en/21.1.0/api.html#module-structlog" title="(in structlog v21.1.0)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">structlog</span></code></a> with the desired log format and filtering.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>publisher</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="#runtime.log.LogPublisher" title="runtime.log.LogPublisher"><em>runtime.log.LogPublisher</em></a><em>]</em>) – A publisher added into the processor chain just before rendering.</p></li>
+<li><p><strong>fmt</strong> (<em>Literal</em><em>[</em><em>'json'</em><em>, </em><em>'pretty'</em><em>]</em>) – The format of events written to standard output.</p></li>
+<li><p><strong>level</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a>) – The minimum log level (inclusive) that should be processed. Severities
+are compared using <a class="reference internal" href="#runtime.log.get_level_num" title="runtime.log.get_level_num"><code class="xref py py-func docutils literal notranslate"><span class="pre">runtime.log.get_level_num()</span></code></a>.</p></li>
+</ul>
+</dd>
+</dl>
+<p>For development, we recommend the <code class="docutils literal notranslate"><span class="pre">'pretty'</span></code> log format, which is human-readable
+and renders exception tracebacks but cannot be parsed:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>2021-06-29T21:01:22.301992Z [info     ] Router connected to endpoint
+2021-06-29T21:01:22.304771Z [info     ] Health check                   threads=4
+Traceback (most recent call last):
+  File &quot;/usr/lib/python3.9/asyncio/tasks.py&quot;, line 492, in wait_for
+    fut.result()
+asyncio.exceptions.CancelledError
+</pre></div>
+</div>
+<p>In production, we recommend the <code class="docutils literal notranslate"><span class="pre">'json'</span></code> format, which produces events in
+<a class="reference external" href="https://jsonlines.org/">jsonlines</a> format (required entries shown):</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="nt">&quot;event&quot;</span><span class="p">:</span><span class="s2">&quot;Started&quot;</span><span class="p">,</span><span class="nt">&quot;level&quot;</span><span class="p">:</span><span class="s2">&quot;info&quot;</span><span class="p">,</span><span class="nt">&quot;timestamp&quot;</span><span class="p">:</span><span class="s2">&quot;2021-06-29T21:04:15.507057Z&quot;</span><span class="p">}</span>
+<span class="p">{</span><span class="nt">&quot;event&quot;</span><span class="p">:</span><span class="s2">&quot;Started&quot;</span><span class="p">,</span><span class="nt">&quot;level&quot;</span><span class="p">:</span><span class="s2">&quot;info&quot;</span><span class="p">,</span><span class="nt">&quot;timestamp&quot;</span><span class="p">:</span><span class="s2">&quot;2021-06-29T21:04:15.510914Z&quot;</span><span class="p">}</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="runtime.log.get_level_num">
+<span class="sig-prename descclassname"><span class="pre">runtime.log.</span></span><span class="sig-name descname"><span class="pre">get_level_num</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">level_name</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/log.html#get_level_num"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.log.get_level_num" title="Permalink to this definition">¶</a></dt>
+<dd><p>Translate a <a class="reference external" href="https://docs.python.org/3/library/logging.html#module-logging" title="(in Python v3.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">logging</span></code></a> level name into its numeric value.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>level_name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a>) – A case-insensitive name, such as <code class="docutils literal notranslate"><span class="pre">'DEBUG'</span></code>.</p></li>
+<li><p><strong>default</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – The numeric level to return if the name is invalid.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">get_level_num</span><span class="p">(</span><span class="s1">&#39;INFO&#39;</span><span class="p">)</span>
+<span class="go">20</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">get_level_num</span><span class="p">(</span><span class="s1">&#39;DNE&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span> <span class="o">==</span> <span class="mi">10</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="runtime.log.get_logger">
+<span class="sig-prename descclassname"><span class="pre">runtime.log.</span></span><span class="sig-name descname"><span class="pre">get_logger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">factory_args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">context</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/remote.html#get_logger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.log.get_logger" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get an unbound async-compatible logger.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>factory_args</strong> (<em>Any</em>) – Positional arguments passed to the logger factory.</p></li>
+<li><p><strong>context</strong> (<em>Any</em>) – Contextual variables added to every event produced by this logger.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="runtime.log.get_null_logger">
+<span class="sig-prename descclassname"><span class="pre">runtime.log.</span></span><span class="sig-name descname"><span class="pre">get_null_logger</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/log.html#get_null_logger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.log.get_null_logger" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get an async-compatible logger that drops all events unconditionally.</p>
+<p>Useful for objects that emit unimportant or noisy log events. <a class="reference internal" href="#runtime.log.LogPublisher" title="runtime.log.LogPublisher"><code class="xref py py-class docutils literal notranslate"><span class="pre">LogPublisher</span></code></a>
+also uses a null logger internally, since using a real logger would result in a
+feedback loop.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="runtime.log.LEVELS">
+<span class="sig-prename descclassname"><span class="pre">runtime.log.</span></span><span class="sig-name descname"><span class="pre">LEVELS</span></span><em class="property"><span class="pre">:</span> <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.10)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></em><em class="property"> <span class="pre">=</span> <span class="pre">['debug',</span> <span class="pre">'info',</span> <span class="pre">'warn',</span> <span class="pre">'error',</span> <span class="pre">'critical']</span></em><a class="headerlink" href="#runtime.log.LEVELS" title="Permalink to this definition">¶</a></dt>
+<dd><p>Log severity levels, in ascending order of severity.</p>
+<p>These levels correspond to those used by the built-in <a class="reference external" href="https://docs.python.org/3/library/logging.html#module-logging" title="(in Python v3.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">logging</span></code></a> library:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 38%" />
+<col style="width: 48%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Level</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>Example</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">debug</span></code></p></td>
+<td><p>Frequent, low-level tracing.</p></td>
+<td><p>A Smart Device message is received.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">info</span></code></p></td>
+<td><p>Normal operation (default level).</p></td>
+<td><p>A Smart Device connects.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">warn</span></code></p></td>
+<td><p>Unusual or anomalous events.</p></td>
+<td><p>Referencing a nonexistent device.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">error</span></code></p></td>
+<td><p>Failure mode.</p></td>
+<td><p>A subprocess returns a nonzero exit code.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">critical</span></code></p></td>
+<td><p>Cannot continue running.</p></td>
+<td><p>Emergency stop.</p></td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</section>
+
+
+          </div>
+          <div class="page-nav">
+            <div class="inner"><ul class="page-nav">
+  <li class="prev">
+    <a href="exception.html"
+       title="previous chapter">← <code class="docutils literal notranslate"><span class="pre">runtime.exception</span></code></a>
+  </li>
+  <li class="next">
+    <a href="messaging.html"
+       title="next chapter"><code class="docutils literal notranslate"><span class="pre">runtime.messaging</span></code> →</a>
+  </li>
+</ul><div class="footer" role="contentinfo">
+      &#169; Copyright 2021, Pioneers in Engineering.
+    <br>
+    Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.2.0 with <a href="https://github.com/schettino72/sphinx_press_theme">Press Theme</a> 0.8.0.
+</div>
+            </div>
+          </div>
+      </page>
+    </div></div>
+    
+    
+  </body>
+</html>

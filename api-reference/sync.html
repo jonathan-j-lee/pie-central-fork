@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html >
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+      <title>runtime.sync</title>
+    
+          <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+          <link rel="stylesheet" href="../_static/theme.css " type="text/css" />
+          <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+      
+      <!-- sphinx script_files -->
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+
+      
+      <!-- bundled in js (rollup iife) -->
+      <!-- <script src="../_static/theme-vendors.js"></script> -->
+      <script src="../_static/theme.js" defer></script>
+    
+  <link rel="index" title="Index" href="../genindex.html" />
+  <link rel="search" title="Search" href="../search.html" />
+  <link rel="prev" title="runtime.service" href="service.html" /> 
+  </head>
+
+  <body>
+    <div id="app">
+    <div class="theme-container" :class="pageClasses"><navbar @toggle-sidebar="toggleSidebar">
+  <router-link to="../index.html" class="home-link">
+    
+      <span class="site-name">Runtime</span>
+    
+  </router-link>
+
+  <div class="links">
+    <navlinks class="can-hide">
+
+
+
+    </navlinks>
+  </div>
+</navbar>
+
+      
+      <div class="sidebar-mask" @click="toggleSidebar(false)">
+      </div>
+        <sidebar @toggle-sidebar="toggleSidebar">
+          
+          <navlinks>
+            
+
+
+
+            
+          </navlinks><div id="searchbox" class="searchbox" role="search">
+  <div class="caption"><span class="caption-text">Quick search</span>
+    <div class="searchformwrapper">
+      <form class="search" action="../search.html" method="get">
+        <input type="text" name="q" />
+        <input type="submit" value="Search" />
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div><div class="sidebar-links" role="navigation" aria-label="main navigation">
+  
+    <div class="sidebar-group">
+      <p class="caption">
+        <span class="caption-text"><a href="../index.html#runtime-documentation">Contents:</a></span>
+      </p>
+      <ul class="">
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../design.html" class="reference internal ">Design Goals</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../architecture.html" class="reference internal ">Architecture</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../ipc.html" class="reference internal ">IPC</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../smart-devices.html" class="reference internal ">Smart Devices</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="index.html" class="reference internal ">API Reference</a>
+            
+
+            
+          </li>
+
+        
+      </ul>
+    </div>
+  
+</div>
+        </sidebar>
+
+      <page>
+          <div class="body-header" role="navigation" aria-label="navigation">
+  
+  <ul class="breadcrumbs">
+    <li><a href="../index.html">Docs</a> &raquo;</li>
+    
+      <li><a href="index.html">API Reference</a> &raquo;</li>
+    
+    <li><code class="docutils literal notranslate"><span class="pre">runtime.sync</span></code></li>
+  </ul>
+  
+
+  <ul class="page-nav">
+  <li class="prev">
+    <a href="service.html"
+       title="previous chapter">← <code class="docutils literal notranslate"><span class="pre">runtime.service</span></code></a>
+  </li>
+</ul>
+  
+</div>
+<hr>
+          <div class="content" role="main" v-pre>
+            
+  <section id="module-runtime.sync">
+<span id="runtime-sync"></span><h1><code class="docutils literal notranslate"><span class="pre">runtime.sync</span></code><a class="headerlink" href="#module-runtime.sync" title="Permalink to this headline">¶</a></h1>
+<p>Synchronization primitives using <code class="docutils literal notranslate"><span class="pre">pthread</span></code> bindings.</p>
+<p>Unlike the primitives available in <a class="reference external" href="https://docs.python.org/3/library/threading.html#module-threading" title="(in Python v3.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">threading</span></code></a> and <a class="reference external" href="https://docs.python.org/3/library/multiprocessing.html#module-multiprocessing" title="(in Python v3.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">multiprocessing</span></code></a>, this
+module’s primitives can be created from any buffer, including shared memory, and do not
+need to be passed through <a class="reference external" href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.Process" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">multiprocessing.Process</span></code></a> to be shared. This module is
+intended for consumption by <a class="reference internal" href="buffer.html#module-runtime.buffer" title="runtime.buffer"><code class="xref py py-mod docutils literal notranslate"><span class="pre">runtime.buffer</span></code></a>.</p>
+<p class="rubric">References</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">pthreads</span></code> documentation:</dt><dd><p><a class="reference external" href="https://pubs.opengroup.org/onlinepubs/009695399/basedefs/pthread.h.html">https://pubs.opengroup.org/onlinepubs/009695399/basedefs/pthread.h.html</a></p>
+</dd>
+</dl>
+<dl class="py exception">
+<dt class="sig sig-object py" id="runtime.sync.SyncError">
+<em class="property"><span class="pre">exception</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.sync.</span></span><span class="sig-name descname"><span class="pre">SyncError</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">errno</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">context</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.sync.SyncError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="exception.html#runtime.exception.RuntimeBaseException" title="runtime.exception.RuntimeBaseException"><code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.exception.RuntimeBaseException</span></code></a></p>
+<p>Synchronization error.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>errno</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – A standard error symbol returned by <code class="docutils literal notranslate"><span class="pre">pthread</span></code> (see <a class="reference external" href="https://docs.python.org/3/library/errno.html#module-errno" title="(in Python v3.10)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">errno</span></code></a>
+for the list).</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.sync.SyncError.suppress">
+<em class="property"><span class="pre">static</span> </em><span class="sig-name descname"><span class="pre">suppress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">errnos</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.sync.SyncError.suppress" title="Permalink to this definition">¶</a></dt>
+<dd><p>Suppress a synchronization error.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>errnos</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – A list of error numbers to ignore.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A context manager suppressing a <code class="docutils literal notranslate"><span class="pre">SyncError</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>ContextManager[<a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.10)">None</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.sync.Mutex">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.sync.</span></span><span class="sig-name descname"><span class="pre">Mutex</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">buf</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shared</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><span class="pre">bool</span></a></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recursive</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><span class="pre">bool</span></a></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.sync.Mutex" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>A mutex to enforce mutual exclusion among OS threads.</p>
+<p>This mutex supports the context manager protocol to acquire and release
+automatically. This usage is preferred over manually calling <a class="reference internal" href="#runtime.sync.Mutex.acquire" title="runtime.sync.Mutex.acquire"><code class="xref py py-meth docutils literal notranslate"><span class="pre">acquire()</span></code></a> and
+<a class="reference internal" href="#runtime.sync.Mutex.release" title="runtime.sync.Mutex.release"><code class="xref py py-meth docutils literal notranslate"><span class="pre">release()</span></code></a>, since failing to release the mutex can starve its waiters. Entering
+the context uses the default acquisition strategy, which is a timed lock.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>buf</strong> – An optional writeable buffer backing this mutex. Must be at least
+<a class="reference internal" href="#runtime.sync.Mutex.SIZE" title="runtime.sync.Mutex.SIZE"><code class="xref py py-attr docutils literal notranslate"><span class="pre">Mutex.SIZE</span></code></a> bytes large. Any extra bytes after the first
+<a class="reference internal" href="#runtime.sync.Mutex.SIZE" title="runtime.sync.Mutex.SIZE"><code class="xref py py-attr docutils literal notranslate"><span class="pre">Mutex.SIZE</span></code></a> will remain unused. If not provided, this mutex will use
+statically allocated memory that cannot be shared.</p></li>
+<li><p><strong>shared</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><em>bool</em></a>) – Whether this mutex is to be shared among processes.</p></li>
+<li><p><strong>recursive</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><em>bool</em></a>) – Whether this mutex may be successfully reacquired. Every
+acquisition increments an internal counter, which is decremented by every
+release. The mutex is only released once the counter reaches zero.
+Attempting to re-acquire a nonrecursive mutex will raise a <a class="reference internal" href="#runtime.sync.SyncError" title="runtime.sync.SyncError"><code class="xref py py-exc docutils literal notranslate"><span class="pre">SyncError</span></code></a>
+with <a class="reference external" href="https://docs.python.org/3/library/errno.html#errno.EDEADLK" title="(in Python v3.10)"><code class="xref py py-data docutils literal notranslate"><span class="pre">errno.EDEADLK</span></code></a> as the error code. Attempting to re-release an
+unlocked mutex will also raise a <a class="reference internal" href="#runtime.sync.SyncError" title="runtime.sync.SyncError"><code class="xref py py-exc docutils literal notranslate"><span class="pre">SyncError</span></code></a> with <a class="reference external" href="https://docs.python.org/3/library/errno.html#errno.EPERM" title="(in Python v3.10)"><code class="xref py py-data docutils literal notranslate"><span class="pre">errno.EPERM</span></code></a>
+as the error code.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.sync.Mutex.SIZE">
+<span class="sig-name descname"><span class="pre">SIZE</span></span><a class="headerlink" href="#runtime.sync.Mutex.SIZE" title="Permalink to this definition">¶</a></dt>
+<dd><p>The size of a mutex (in bytes).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>Final[<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.sync.Mutex.acquire">
+<span class="sig-name descname"><span class="pre">acquire</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.sync.Mutex.acquire" title="Permalink to this definition">¶</a></dt>
+<dd><p>Attempt to acquire the mutex.</p>
+<p>This method selects an acquisition strategy from the value of <code class="docutils literal notranslate"><span class="pre">timeout</span></code>:</p>
+<ol class="arabic simple">
+<li><p>When <code class="docutils literal notranslate"><span class="pre">timeout=None</span></code>, this method will acquire the mutex with no timeout.
+Because this strategy can block indefinitely and starve the waiter, it is not
+recommended.</p></li>
+<li><p>When <code class="docutils literal notranslate"><span class="pre">timeout=0</span></code>, this method will attempt to acquire the mutex using
+<a class="reference external" href="https://pubs.opengroup.org/onlinepubs/009695399/functions/pthread_mutex_lock.html">try-lock</a>.</p></li>
+<li><p>When <code class="docutils literal notranslate"><span class="pre">timeout</span> <span class="pre">&gt;</span> <span class="pre">0</span></code>, this method performs a <a class="reference external" href="https://pubs.opengroup.org/onlinepubs/009695399/functions/pthread_mutex_timedlock.html">timed lock</a>.</p></li>
+</ol>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>timeout</strong> (<em>Optional</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)"><em>float</em></a><em>]</em>) – Maximum duration (in seconds) to wait to acquire
+the mutex.</p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.10)"><strong>ValueError</strong></a> – If the timeout is strictly negative.</p></li>
+<li><p><a class="reference internal" href="#runtime.sync.SyncError" title="runtime.sync.SyncError"><strong>SyncError</strong></a> – If the mutex acquisition fails.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.sync.Mutex.destroy">
+<span class="sig-name descname"><span class="pre">destroy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#runtime.sync.Mutex.destroy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Destroy the mutex.</p>
+<p>After calling this method, the mutex becomes unusable until <a class="reference internal" href="#runtime.sync.Mutex.initialize" title="runtime.sync.Mutex.initialize"><code class="xref py py-meth docutils literal notranslate"><span class="pre">initialize()</span></code></a>
+is called again.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.sync.Mutex.initialize">
+<span class="sig-name descname"><span class="pre">initialize</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#runtime.sync.Mutex.initialize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initialize the mutex.</p>
+<p>The mutex is not usuable until <a class="reference internal" href="#runtime.sync.Mutex.initialize" title="runtime.sync.Mutex.initialize"><code class="xref py py-meth docutils literal notranslate"><span class="pre">initialize()</span></code></a> is called. Only initialize
+this mutex once across all waiters. Initializing the mutex multiple times
+without calling <a class="reference internal" href="#runtime.sync.Mutex.destroy" title="runtime.sync.Mutex.destroy"><code class="xref py py-meth docutils literal notranslate"><span class="pre">destroy()</span></code></a> is undefined behavior.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.sync.Mutex.release">
+<span class="sig-name descname"><span class="pre">release</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#runtime.sync.Mutex.release" title="Permalink to this definition">¶</a></dt>
+<dd><p>Attempt to release the mutex.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#runtime.sync.SyncError" title="runtime.sync.SyncError"><strong>SyncError</strong></a> – If the mutex release fails.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+          </div>
+          <div class="page-nav">
+            <div class="inner"><ul class="page-nav">
+  <li class="prev">
+    <a href="service.html"
+       title="previous chapter">← <code class="docutils literal notranslate"><span class="pre">runtime.service</span></code></a>
+  </li>
+</ul><div class="footer" role="contentinfo">
+      &#169; Copyright 2021, Pioneers in Engineering.
+    <br>
+    Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.2.0 with <a href="https://github.com/schettino72/sphinx_press_theme">Press Theme</a> 0.8.0.
+</div>
+            </div>
+          </div>
+      </page>
+    </div></div>
+    
+    
+  </body>
+</html>

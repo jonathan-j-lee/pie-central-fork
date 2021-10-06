@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html >
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>runtime.service.device</title>
+    
+          <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+          <link rel="stylesheet" href="../../../_static/theme.css " type="text/css" />
+          <link rel="stylesheet" href="../../../_static/css/custom.css" type="text/css" />
+      
+      <!-- sphinx script_files -->
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+
+      
+      <!-- bundled in js (rollup iife) -->
+      <!-- <script src="../../../_static/theme-vendors.js"></script> -->
+      <script src="../../../_static/theme.js" defer></script>
+    
+  <link rel="index" title="Index" href="../../../genindex.html" />
+  <link rel="search" title="Search" href="../../../search.html" /> 
+  </head>
+
+  <body>
+    <div id="app">
+    <div class="theme-container" :class="pageClasses"><navbar @toggle-sidebar="toggleSidebar">
+  <router-link to="../../../index.html" class="home-link">
+    
+      <span class="site-name">Runtime</span>
+    
+  </router-link>
+
+  <div class="links">
+    <navlinks class="can-hide">
+
+
+
+    </navlinks>
+  </div>
+</navbar>
+
+      
+      <div class="sidebar-mask" @click="toggleSidebar(false)">
+      </div>
+        <sidebar @toggle-sidebar="toggleSidebar">
+          
+          <navlinks>
+            
+
+
+
+            
+          </navlinks><div id="searchbox" class="searchbox" role="search">
+  <div class="caption"><span class="caption-text">Quick search</span>
+    <div class="searchformwrapper">
+      <form class="search" action="../../../search.html" method="get">
+        <input type="text" name="q" />
+        <input type="submit" value="Search" />
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div><div class="sidebar-links" role="navigation" aria-label="main navigation">
+  
+    <div class="sidebar-group">
+      <p class="caption">
+        <span class="caption-text"><a href="../../../index.html#runtime-documentation">Contents:</a></span>
+      </p>
+      <ul class="">
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../../../design.html" class="reference internal ">Design Goals</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../../../architecture.html" class="reference internal ">Architecture</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../../../ipc.html" class="reference internal ">IPC</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../../../smart-devices.html" class="reference internal ">Smart Devices</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../../../api-reference/index.html" class="reference internal ">API Reference</a>
+            
+
+            
+          </li>
+
+        
+      </ul>
+    </div>
+  
+</div>
+        </sidebar>
+
+      <page>
+          <div class="body-header" role="navigation" aria-label="navigation">
+  
+  <ul class="breadcrumbs">
+    <li><a href="../../../index.html">Docs</a> &raquo;</li>
+    
+      <li><a href="../../index.html">Module code</a> &raquo;</li>
+    
+    <li>runtime.service.device</li>
+  </ul>
+  
+
+  <ul class="page-nav">
+</ul>
+  
+</div>
+<hr>
+          <div class="content" role="main" v-pre>
+            
+  <h1>Source code for runtime.service.device</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Smart device management.&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">abc</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">glob</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Any</span><span class="p">,</span>
+    <span class="n">AsyncIterator</span><span class="p">,</span>
+    <span class="n">ClassVar</span><span class="p">,</span>
+    <span class="n">Collection</span><span class="p">,</span>
+    <span class="n">Iterable</span><span class="p">,</span>
+    <span class="n">NoReturn</span><span class="p">,</span>
+    <span class="n">Optional</span><span class="p">,</span>
+    <span class="n">Union</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">urllib.parse</span> <span class="kn">import</span> <span class="n">urlsplit</span>
+
+<span class="kn">import</span> <span class="nn">serial</span>
+<span class="kn">import</span> <span class="nn">serial_asyncio</span> <span class="k">as</span> <span class="nn">aioserial</span>
+<span class="kn">import</span> <span class="nn">uvloop</span>
+<span class="kn">from</span> <span class="nn">serial.tools</span> <span class="kn">import</span> <span class="n">list_ports</span>
+
+<span class="kn">from</span> <span class="nn">..</span> <span class="kn">import</span> <span class="n">log</span><span class="p">,</span> <span class="n">process</span><span class="p">,</span> <span class="n">remote</span>
+<span class="kn">from</span> <span class="nn">..buffer</span> <span class="kn">import</span> <span class="n">BufferStore</span><span class="p">,</span> <span class="n">DeviceBuffer</span><span class="p">,</span> <span class="n">DeviceUID</span><span class="p">,</span> <span class="n">NullDevice</span>
+<span class="kn">from</span> <span class="nn">..exception</span> <span class="kn">import</span> <span class="n">RuntimeBaseException</span>
+<span class="kn">from</span> <span class="nn">..messaging</span> <span class="kn">import</span> <span class="n">ErrorCode</span><span class="p">,</span> <span class="n">Message</span><span class="p">,</span> <span class="n">MessageError</span><span class="p">,</span> <span class="n">MessageType</span>
+
+<span class="n">HAS_UDEV</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">pyudev</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>  <span class="c1"># pragma: no cover; platform-dependent</span>
+    <span class="n">HAS_UDEV</span> <span class="o">=</span> <span class="kc">False</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;DeviceError&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;PollingObserver&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;SmartDeviceClient&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;SmartDeviceManager&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;target&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="DeviceError"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.DeviceError">[docs]</a><span class="k">class</span> <span class="nc">DeviceError</span><span class="p">(</span><span class="n">RuntimeBaseException</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;General device error.&quot;&quot;&quot;</span></div>
+
+
+<span class="k">class</span> <span class="nc">SmartDeviceObserver</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABC</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Watch for recently connected Smart Devices.&quot;&quot;&quot;</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_ports</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="n">Path</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;Retrieve a set of serial ports of recently connected devices.&quot;&quot;&quot;</span>
+
+
+<span class="k">if</span> <span class="n">HAS_UDEV</span><span class="p">:</span>  <span class="c1"># pragma: no cover; platform-dependent</span>
+    <span class="n">__all__</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;EventObserver&#39;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="EventObserver"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.EventObserver">[docs]</a>    <span class="nd">@dataclass</span>
+    <span class="k">class</span> <span class="nc">EventObserver</span><span class="p">(</span><span class="n">SmartDeviceObserver</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Detect Smart Devices using Linux&#39;s udev.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            devices: A queue of batches of detected devices. The devices are batched to</span>
+<span class="sd">                reduce expensive calls to :func:`list_ports.comports`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">devices</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">pyudev</span><span class="o">.</span><span class="n">Device</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+            <span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="mi">128</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">context</span><span class="p">:</span> <span class="n">pyudev</span><span class="o">.</span><span class="n">Context</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">pyudev</span><span class="o">.</span><span class="n">Context</span><span class="p">)</span>
+        <span class="n">monitor</span><span class="p">:</span> <span class="n">pyudev</span><span class="o">.</span><span class="n">Monitor</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="n">SUBSYSTEM</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;usb&#39;</span>
+        <span class="n">DEVICE_TYPE</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;usb_interface&#39;</span>
+        <span class="n">VENDOR_ID</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mh">0x2341</span>
+        <span class="n">PRODUCT_ID</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mh">0x8037</span>
+
+        <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">monitor</span> <span class="o">=</span> <span class="n">pyudev</span><span class="o">.</span><span class="n">Monitor</span><span class="o">.</span><span class="n">from_netlink</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">monitor</span><span class="o">.</span><span class="n">filter_by</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">SUBSYSTEM</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">DEVICE_TYPE</span><span class="p">)</span>
+
+<div class="viewcode-block" id="EventObserver.is_sensor"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.EventObserver.is_sensor">[docs]</a>        <span class="nd">@classmethod</span>
+        <span class="k">def</span> <span class="nf">is_sensor</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">pyudev</span><span class="o">.</span><span class="n">Device</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+            <span class="sd">&quot;&quot;&quot;Determine whether a udev device is a Smart Sensor.&quot;&quot;&quot;</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">vendor_id</span><span class="p">,</span> <span class="n">product_id</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">device</span><span class="o">.</span><span class="n">properties</span><span class="p">[</span><span class="s1">&#39;PRODUCT&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)</span>
+                <span class="n">vid</span><span class="p">,</span> <span class="n">pid</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">vendor_id</span><span class="p">,</span> <span class="n">base</span><span class="o">=</span><span class="mi">16</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">product_id</span><span class="p">,</span> <span class="n">base</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">vid</span> <span class="o">==</span> <span class="bp">cls</span><span class="o">.</span><span class="n">VENDOR_ID</span> <span class="ow">and</span> <span class="n">pid</span> <span class="o">==</span> <span class="bp">cls</span><span class="o">.</span><span class="n">PRODUCT_ID</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+                <span class="k">return</span> <span class="kc">False</span></div>
+
+<div class="viewcode-block" id="EventObserver.handle_devices"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.EventObserver.handle_devices">[docs]</a>        <span class="k">def</span> <span class="nf">handle_devices</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="n">devices</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">pyudev</span><span class="o">.</span><span class="n">Device</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="sd">&quot;&quot;&quot;Callback for handling newly connected devices.&quot;&quot;&quot;</span>
+            <span class="n">valid_devices</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">device</span> <span class="ow">in</span> <span class="n">devices</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_sensor</span><span class="p">(</span><span class="n">device</span><span class="p">)</span> <span class="ow">and</span> <span class="n">device</span><span class="o">.</span><span class="n">action</span> <span class="ow">in</span> <span class="p">{</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;add&#39;</span><span class="p">}:</span>
+                    <span class="n">valid_devices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">valid_devices</span><span class="p">:</span>
+                <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">QueueFull</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="o">.</span><span class="n">put_nowait</span><span class="p">(</span><span class="n">valid_devices</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="EventObserver.start"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.EventObserver.start">[docs]</a>        <span class="k">async</span> <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="sd">&quot;&quot;&quot;Begin monitoring udev events and register initially connected devices.&quot;&quot;&quot;</span>
+            <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">add_reader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">monitor</span><span class="o">.</span><span class="n">fileno</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_on_event</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">monitor</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+            <span class="n">devices</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">list_devices</span><span class="p">,</span>
+                <span class="n">subsystem</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">SUBSYSTEM</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">handle_devices</span><span class="p">(</span><span class="n">devices</span><span class="p">)</span></div>
+
+        <span class="k">def</span> <span class="nf">_on_event</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="sd">&quot;&quot;&quot;Callback when new udev events are available.&quot;&quot;&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">handle_devices</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">monitor</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="kc">None</span><span class="p">))</span>
+
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">get_ports</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="n">Path</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">monitor</span><span class="o">.</span><span class="n">started</span><span class="p">:</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+            <span class="n">devices</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+            <span class="n">ports</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span><span class="n">list_ports</span><span class="o">.</span><span class="n">comports</span><span class="p">,</span> <span class="n">include_links</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">paths</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">port</span> <span class="ow">in</span> <span class="n">ports</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">port</span><span class="o">.</span><span class="n">location</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">port</span><span class="o">.</span><span class="n">location</span> <span class="ow">in</span> <span class="n">device</span><span class="o">.</span><span class="n">sys_path</span> <span class="k">for</span> <span class="n">device</span> <span class="ow">in</span> <span class="n">devices</span><span class="p">):</span>
+                    <span class="n">paths</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">port</span><span class="o">.</span><span class="n">device</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">paths</span></div>
+
+
+<div class="viewcode-block" id="PollingObserver"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.PollingObserver">[docs]</a><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">PollingObserver</span><span class="p">(</span><span class="n">SmartDeviceObserver</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Detect Smart Devices by polling the filesystem.</span>
+
+<span class="sd">    This observer exists for portability on systems without udev.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">patterns</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s1">&#39;/dev/ttyACM*&#39;</span><span class="p">})</span>
+    <span class="n">interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">ports</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">set</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">patterns</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">patterns</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_ports</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="n">Path</span><span class="p">]:</span>
+        <span class="n">ports</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">pattern</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">patterns</span><span class="p">:</span>
+            <span class="n">paths</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span><span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">,</span> <span class="n">pattern</span><span class="p">)</span>
+            <span class="n">ports</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">Path</span><span class="p">,</span> <span class="n">paths</span><span class="p">))</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">interval</span><span class="p">)</span>
+        <span class="n">new_ports</span> <span class="o">=</span> <span class="n">ports</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">ports</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ports</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ports</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">ports</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">new_ports</span></div>
+
+
+<span class="k">def</span> <span class="nf">make_observer</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">SmartDeviceObserver</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Make an observer suitable for this platform.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">EventObserver</span><span class="p">()</span> <span class="k">if</span> <span class="n">HAS_UDEV</span> <span class="k">else</span> <span class="n">PollingObserver</span><span class="p">()</span>
+
+
+<span class="nd">@dataclass</span>  <span class="c1"># type: ignore[misc]</span>
+<span class="k">class</span> <span class="nc">SmartDevice</span><span class="p">(</span><span class="n">abc</span><span class="o">.</span><span class="n">ABC</span><span class="p">):</span>  <span class="c1"># https://github.com/python/mypy/issues/5374</span>
+    <span class="sd">&quot;&quot;&quot;A sensor or actuator that uses the Smart Device protocol.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        reader: Stream reader.</span>
+<span class="sd">        writer: Stream writer.</span>
+<span class="sd">        buffer: Device buffer, which is initialized once the device type is discovered.</span>
+<span class="sd">        hb_requests: Maps the IDs of in-flight heartbeat requests to events set once the</span>
+<span class="sd">            response arrives.</span>
+<span class="sd">        read_queue: A queue of messages read from the device.</span>
+<span class="sd">        write_queue: A queue of messages waiting to be written to the device.</span>
+<span class="sd">        logger: A logger instance bound to device context data.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">reader</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">StreamReader</span>
+    <span class="n">writer</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">StreamWriter</span>
+    <span class="n">buffer</span><span class="p">:</span> <span class="n">DeviceBuffer</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">NullDevice</span><span class="o">.</span><span class="n">attach</span><span class="p">)</span>
+    <span class="n">requests</span><span class="p">:</span> <span class="n">remote</span><span class="o">.</span><span class="n">RequestTracker</span><span class="p">[</span><span class="n">Message</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">remote</span><span class="o">.</span><span class="n">RequestTracker</span><span class="p">(</span><span class="n">upper</span><span class="o">=</span><span class="mi">256</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">read_queue</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">[</span><span class="n">Message</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="mi">1024</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">write_queue</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">[</span><span class="n">Message</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="mi">1024</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">logger</span><span class="p">:</span> <span class="n">log</span><span class="o">.</span><span class="n">AsyncLogger</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">log</span><span class="o">.</span><span class="n">get_logger</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">read_messages</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NoReturn</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Read inbound messages indefinitely.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            serial.SerialException: If the serial transport becomes unavailable.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">buf</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">reader</span><span class="o">.</span><span class="n">readuntil</span><span class="p">(</span><span class="n">separator</span><span class="o">=</span><span class="n">Message</span><span class="o">.</span><span class="n">DELIM</span><span class="p">)</span>
+                <span class="n">buf_view</span> <span class="o">=</span> <span class="nb">memoryview</span><span class="p">(</span><span class="n">buf</span><span class="p">)[:</span> <span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="n">Message</span><span class="o">.</span><span class="n">DELIM</span><span class="p">)]</span>
+                <span class="n">message</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span><span class="n">Message</span><span class="o">.</span><span class="n">decode</span><span class="p">,</span> <span class="n">buf_view</span><span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">read_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Read message&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">MessageError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;Message read error&#39;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="n">exc</span><span class="p">)</span>
+                <span class="n">status</span> <span class="o">=</span> <span class="n">exc</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;status&#39;</span><span class="p">,</span> <span class="n">ErrorCode</span><span class="o">.</span><span class="n">GENERIC_ERROR</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">write_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">Message</span><span class="o">.</span><span class="n">make_error</span><span class="p">(</span><span class="n">ErrorCode</span><span class="p">[</span><span class="n">status</span><span class="p">]))</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">write_messages</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NoReturn</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Write outbound messages indefinitely.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            serial.SerialException: If the serial transport becomes unavailable.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">generic_error</span> <span class="o">=</span> <span class="n">Message</span><span class="o">.</span><span class="n">make_error</span><span class="p">(</span><span class="n">ErrorCode</span><span class="o">.</span><span class="n">GENERIC_ERROR</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+        <span class="n">write_buf</span> <span class="o">=</span> <span class="nb">memoryview</span><span class="p">(</span><span class="nb">bytearray</span><span class="p">(</span><span class="n">Message</span><span class="o">.</span><span class="n">MAX_ENCODING_SIZE</span><span class="p">))</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">message</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">write_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+                <span class="n">size</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">encode_into_buf</span><span class="p">,</span> <span class="n">write_buf</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">write_buf</span><span class="p">[:</span><span class="n">size</span><span class="p">])</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">Message</span><span class="o">.</span><span class="n">DELIM</span><span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Wrote message&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">MessageError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;Message write error&#39;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="n">exc</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">generic_error</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">Message</span><span class="o">.</span><span class="n">DELIM</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">heartbeat</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">heartbeat_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">block</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Message</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;Send a heartbeat request.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            heartbeat_id: A one-byte heartbeat identifier. If not provided, a unique ID</span>
+<span class="sd">                is randomly generated.</span>
+<span class="sd">            timeout: The duration in seconds to wait for the response to return.</span>
+<span class="sd">            block: Whether to wait for the heartbeat response.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If the heartbeat ID is not unique. Either a non-unique ID was</span>
+<span class="sd">                provided, or the ID generator could not produce a unique ID.</span>
+<span class="sd">            asyncio.TimeoutError: If the timeout is exhausted.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">requests</span><span class="o">.</span><span class="n">new_request</span><span class="p">(</span><span class="n">heartbeat_id</span><span class="p">)</span> <span class="k">as</span> <span class="p">(</span><span class="n">request_id</span><span class="p">,</span> <span class="n">result</span><span class="p">):</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">write_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">Message</span><span class="o">.</span><span class="n">make_hb_req</span><span class="p">(</span><span class="n">request_id</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">block</span><span class="p">:</span>
+                <span class="k">return</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">asynccontextmanager</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">communicate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="nb">set</span><span class="p">[</span><span class="n">asyncio</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="n">NoReturn</span><span class="p">]]]:</span>
+        <span class="sd">&quot;&quot;&quot;Context manager to start and stop reading and writing messages.&quot;&quot;&quot;</span>
+        <span class="n">tasks</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">read_messages</span><span class="p">(),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;dev-read&#39;</span><span class="p">),</span>
+            <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">write_messages</span><span class="p">(),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;dev-write&#39;</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Device opened&#39;</span><span class="p">)</span>
+            <span class="k">yield</span> <span class="n">tasks</span>
+        <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">TimeoutError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;Device type not discovered&#39;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="n">exc</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span>
+            <span class="n">serial</span><span class="o">.</span><span class="n">SerialException</span><span class="p">,</span>
+            <span class="ne">ConnectionResetError</span><span class="p">,</span>
+            <span class="n">asyncio</span><span class="o">.</span><span class="n">IncompleteReadError</span><span class="p">,</span>
+        <span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;Device disconnected&#39;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="n">exc</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">tasks</span><span class="p">:</span>
+                <span class="n">task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Device closed&#39;</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_emit_responses</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">Message</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Message</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="n">message</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">MessageType</span><span class="o">.</span><span class="n">HB_REQ</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">Message</span><span class="o">.</span><span class="n">make_hb_res</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">read_hb_req</span><span class="p">())</span>
+        <span class="k">elif</span> <span class="n">message</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">MessageType</span><span class="o">.</span><span class="n">HB_RES</span><span class="p">:</span>
+            <span class="n">heartbeat_id</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">read_hb_res</span><span class="p">()</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">requests</span><span class="o">.</span><span class="n">register_response</span><span class="p">(</span><span class="n">heartbeat_id</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">DeviceError</span><span class="p">(</span>
+                    <span class="s1">&#39;unknown heartbeat response ID&#39;</span><span class="p">,</span>
+                    <span class="n">heartbeat_id</span><span class="o">=</span><span class="n">heartbeat_id</span><span class="p">,</span>
+                <span class="p">)</span> <span class="kn">from</span> <span class="nn">exc</span>
+        <span class="k">elif</span> <span class="n">message</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">MessageType</span><span class="o">.</span><span class="n">ERROR</span><span class="p">:</span>
+            <span class="n">error</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">read_error</span><span class="p">()</span>
+            <span class="k">raise</span> <span class="n">DeviceError</span><span class="p">(</span>
+                <span class="s1">&#39;error message received&#39;</span><span class="p">,</span>
+                <span class="n">error</span><span class="o">=</span><span class="n">error</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="n">error_code</span><span class="o">=</span><span class="n">error</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">DeviceError</span><span class="p">(</span><span class="s1">&#39;message type not handled&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">handle_messages</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NoReturn</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Handle inbound messages indefinitely.&quot;&quot;&quot;</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">message</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">read_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="o">.</span><span class="n">update</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>
+                <span class="k">async</span> <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_emit_responses</span><span class="p">(</span><span class="n">message</span><span class="p">):</span>
+                    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">write_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+            <span class="k">except</span> <span class="p">(</span><span class="n">DeviceError</span><span class="p">,</span> <span class="n">MessageError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;Message handling error&#39;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="n">exc</span><span class="p">)</span>
+
+    <span class="nd">@abc</span><span class="o">.</span><span class="n">abstractmethod</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">poll_buffer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Poll the buffer for changes.&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="SmartDeviceClient"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceClient">[docs]</a><span class="k">class</span> <span class="nc">SmartDeviceClient</span><span class="p">(</span><span class="n">SmartDevice</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A Smart Device implementation from the upstream end.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="SmartDeviceClient.ping"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceClient.ping">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">ping</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Ping the sensor to receive a subscription response.&quot;&quot;&quot;</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">write_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">Message</span><span class="o">.</span><span class="n">make_ping</span><span class="p">())</span></div>
+
+<div class="viewcode-block" id="SmartDeviceClient.disable"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceClient.disable">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">disable</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Disable the sensor.&quot;&quot;&quot;</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">write_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">Message</span><span class="o">.</span><span class="n">make_dev_disable</span><span class="p">())</span></div>
+
+<div class="viewcode-block" id="SmartDeviceClient.subscribe"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceClient.subscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">subscribe</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">/</span><span class="p">,</span>
+        <span class="n">params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Collection</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">interval</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Receive periodic updates for zero or more parameters.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            params: A list of parameter names.</span>
+<span class="sd">            interval: The duration between subscription updates in seconds.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            OverflowError: If interval cannot fit in an unsigned 16-bit integer.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="o">.</span><span class="n">make_sub_req</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">interval</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">write_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">message</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SmartDeviceClient.unsubscribe"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceClient.unsubscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">unsubscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Stop receiving subscription updates.&quot;&quot;&quot;</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">write_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">Message</span><span class="o">.</span><span class="n">make_unsubscribe</span><span class="p">())</span></div>
+
+<div class="viewcode-block" id="SmartDeviceClient.read"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceClient.read">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Collection</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Read some parameters from the device.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            params: The names of a collection of parameters to read. If not provided,</span>
+<span class="sd">                this client reads all parameters.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="o">.</span><span class="n">read</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_handle_sub_res</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Copy subscription/UID information into the internal buffer.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            MessageError: If the message does not have the :attr:``MessageType.SUB_REQ``</span>
+<span class="sd">                type or this client cannot otherwise read the message.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="o">.</span><span class="n">transaction</span><span class="p">():</span>
+            <span class="n">uid</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="o">.</span><span class="n">uid</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">uid</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">uid</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">sync_bl</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s1">&#39;Received subscription response&#39;</span><span class="p">,</span>
+                <span class="nb">type</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+                <span class="n">subscription</span><span class="o">=</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="o">.</span><span class="n">subscription</span><span class="p">),</span>
+                <span class="n">interval</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="o">.</span><span class="n">interval</span><span class="p">,</span>
+            <span class="p">)</span>
+
+<div class="viewcode-block" id="SmartDeviceClient.discover"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceClient.discover">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">discover</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">buffers</span><span class="p">:</span> <span class="n">BufferStore</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Identify information about a newly connected device.</span>
+
+<span class="sd">        This method periodically pings the device to get a subscription response, which</span>
+<span class="sd">        contains the current subscription and the UID. Once the UID is known, the device</span>
+<span class="sd">        allocates a buffer.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            buffers: The buffer manager that will allocate the buffer.</span>
+<span class="sd">            interval: The delay in seconds between pings.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">ping</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">process</span><span class="o">.</span><span class="n">spin</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ping</span><span class="p">,</span> <span class="n">interval</span><span class="o">=</span><span class="n">interval</span><span class="p">))</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">message</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">read_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">message</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">MessageType</span><span class="o">.</span><span class="n">SUB_RES</span><span class="p">:</span>
+                    <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">uid_parts</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">read_sub_res</span><span class="p">()</span>
+                    <span class="n">uid</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">DeviceUID</span><span class="p">(</span><span class="o">*</span><span class="n">uid_parts</span><span class="p">))</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">buffer</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span><span class="n">buffers</span><span class="o">.</span><span class="n">get_or_open</span><span class="p">,</span> <span class="n">uid</span><span class="p">)</span>
+                    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span><span class="nb">setattr</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="p">,</span> <span class="s1">&#39;valid&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+                    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="o">.</span><span class="n">update</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>
+                    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_handle_sub_res</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="n">uid</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">ping</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span></div>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_emit_responses</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">Message</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Message</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="n">message</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">MessageType</span><span class="o">.</span><span class="n">SUB_RES</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_handle_sub_res</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">message</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">MessageType</span><span class="o">.</span><span class="n">DEV_DATA</span><span class="p">:</span>
+            <span class="k">async</span> <span class="k">for</span> <span class="n">response</span> <span class="ow">in</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_emit_responses</span><span class="p">(</span><span class="n">message</span><span class="p">):</span>
+                <span class="k">yield</span> <span class="n">response</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">poll_buffer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">messages</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="o">.</span><span class="n">emit_dev_rw</span><span class="p">()))</span>
+        <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">messages</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">write_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">message</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SmartDeviceManager"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceManager">[docs]</a><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">SmartDeviceManager</span><span class="p">(</span><span class="n">remote</span><span class="o">.</span><span class="n">Handler</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Manage the lifecycle and operations of Smart Devices.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        observer: An observer for detecting hotplugged Smart Devices.</span>
+<span class="sd">        buffers: A buffer manager for opening/closing shared memory.</span>
+<span class="sd">        devices: Map device UIDs to device instances.</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        Although integer UIDs are used internally, UIDs are transported over the network</span>
+<span class="sd">        as strings because the serialization protocol may not support 96-bit integers.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">buffers</span><span class="p">:</span> <span class="n">BufferStore</span>
+    <span class="n">observer</span><span class="p">:</span> <span class="n">SmartDeviceObserver</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">make_observer</span><span class="p">)</span>
+    <span class="n">devices</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">SmartDeviceClient</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">poll_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.04</span>
+    <span class="n">discovery_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">logger</span><span class="p">:</span> <span class="n">log</span><span class="o">.</span><span class="n">AsyncLogger</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">log</span><span class="o">.</span><span class="n">get_logger</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SmartDeviceManager.list_uids"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceManager.list_uids">[docs]</a>    <span class="nd">@remote</span><span class="o">.</span><span class="n">route</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">list_uids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;List the UIDs of Smart Devices connected currently.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">))</span></div>
+
+    <span class="k">def</span> <span class="nf">_normalize_uids</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="n">uids</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">uids</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">)):</span>
+            <span class="n">uids</span> <span class="o">=</span> <span class="p">[</span><span class="n">uids</span><span class="p">]</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">uids</span><span class="p">))</span>
+
+<div class="viewcode-block" id="SmartDeviceManager.ping"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceManager.ping">[docs]</a>    <span class="nd">@remote</span><span class="o">.</span><span class="n">route</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">ping</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Ping one or more devices.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            uids: The UIDs of devices to ping. If ``None`` is provided, this handler</span>
+<span class="sd">                will ping all devices. A single UID or a list of UIDs may also be</span>
+<span class="sd">                provided.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">uid</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_normalize_uids</span><span class="p">(</span><span class="n">uids</span><span class="p">):</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span><span class="o">.</span><span class="n">ping</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="SmartDeviceManager.disable"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceManager.disable">[docs]</a>    <span class="nd">@remote</span><span class="o">.</span><span class="n">route</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">disable</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Disable one or more devices.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            uids: The UIDs of devices to disable. See :meth:`SmartDeviceManager.ping`</span>
+<span class="sd">                for an explanation of this argument&#39;s type.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">uid</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_normalize_uids</span><span class="p">(</span><span class="n">uids</span><span class="p">):</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span><span class="o">.</span><span class="n">disable</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="SmartDeviceManager.subscribe"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceManager.subscribe">[docs]</a>    <span class="nd">@remote</span><span class="o">.</span><span class="n">route</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">subscribe</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">uid</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">interval</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Send subscription requests to a device.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            uid: The UID of the device to send the request to.</span>
+
+<span class="sd">        The remaining arguments are passed to :meth:`SmartDevice.subscribe`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">uid</span><span class="p">)]</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">interval</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SmartDeviceManager.unsubscribe"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceManager.unsubscribe">[docs]</a>    <span class="nd">@remote</span><span class="o">.</span><span class="n">route</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">unsubscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Unsubscribe from all parameters.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            uids: The UIDs of devices to unsubscribe from. See</span>
+<span class="sd">                :meth:`SmartDeviceManager.ping` for an explanation of this argument&#39;s</span>
+<span class="sd">                type.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">uid</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_normalize_uids</span><span class="p">(</span><span class="n">uids</span><span class="p">):</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span><span class="o">.</span><span class="n">unsubscribe</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="SmartDeviceManager.read"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceManager.read">[docs]</a>    <span class="nd">@remote</span><span class="o">.</span><span class="n">route</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Collection</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Read some parameters.</span>
+
+<span class="sd">        The parameter values are not returned from this method, since the Smart Device</span>
+<span class="sd">        protocol is asynchronous. Instead, the updated parameters will be copied into</span>
+<span class="sd">        the corresponding buffer.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            uid: The UID of the device to read parameters from.</span>
+
+<span class="sd">        The remaining arguments are passed to :meth:`SmartDevice.read`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">uid</span><span class="p">)]</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">params</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SmartDeviceManager.heartbeat"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceManager.heartbeat">[docs]</a>    <span class="nd">@remote</span><span class="o">.</span><span class="n">route</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">heartbeat</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">uid</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">heartbeat_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">block</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Send heartbeat requests to a device.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            uid: The UID of the device to send the request to.</span>
+
+<span class="sd">        The remaining arguments are passed to :meth:`SmartDevice.heartbeat`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">uid</span><span class="p">)]</span><span class="o">.</span><span class="n">heartbeat</span><span class="p">(</span><span class="n">heartbeat_id</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="n">block</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span></div>
+
+<div class="viewcode-block" id="SmartDeviceManager.run_device"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceManager.run_device">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">run_device</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">reader</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">StreamReader</span><span class="p">,</span>
+        <span class="n">writer</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">StreamWriter</span><span class="p">,</span>
+        <span class="n">port</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Create and register a new Smart Device and block until the connection closes.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            reader: Stream reader.</span>
+<span class="sd">            writer: Stream writer.</span>
+<span class="sd">            port: The COM port path, if this is a serial connection. If not provided,</span>
+<span class="sd">                this method assumes this device is virtual.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">port_name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">port</span><span class="p">)</span> <span class="k">if</span> <span class="n">port</span> <span class="k">else</span> <span class="s1">&#39;(virtual)&#39;</span>
+        <span class="n">logger</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="n">port_name</span><span class="p">)</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">SmartDeviceClient</span><span class="p">(</span><span class="n">reader</span><span class="p">,</span> <span class="n">writer</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="n">device</span><span class="o">.</span><span class="n">communicate</span><span class="p">()</span> <span class="k">as</span> <span class="n">tasks</span><span class="p">:</span>
+            <span class="n">discover</span> <span class="o">=</span> <span class="n">device</span><span class="o">.</span><span class="n">discover</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffers</span><span class="p">)</span>
+            <span class="n">uid</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">discover</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">discovery_timeout</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">uid</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">:</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s1">&#39;Device already exists (duplicate UID)&#39;</span><span class="p">)</span>
+                <span class="k">return</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span> <span class="o">=</span> <span class="n">device</span>
+            <span class="k">await</span> <span class="n">device</span><span class="o">.</span><span class="n">subscribe</span><span class="p">()</span>
+            <span class="n">poll</span> <span class="o">=</span> <span class="n">process</span><span class="o">.</span><span class="n">spin</span><span class="p">(</span><span class="n">device</span><span class="o">.</span><span class="n">poll_buffer</span><span class="p">,</span> <span class="n">interval</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">poll_interval</span><span class="p">)</span>
+            <span class="n">tasks</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">device</span><span class="o">.</span><span class="n">handle_messages</span><span class="p">(),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;dev-handle&#39;</span><span class="p">))</span>
+            <span class="n">tasks</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">poll</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;dev-poll&#39;</span><span class="p">))</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="n">tasks</span><span class="p">)</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="n">device</span><span class="o">.</span><span class="n">buffer</span><span class="o">.</span><span class="n">valid</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">devices</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">uid</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SmartDeviceManager.open_serial_devices"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceManager.open_serial_devices">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">open_serial_devices</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NoReturn</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Open serial ports and schedule their execution concurrently.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            **options: Keyword arguments passed to</span>
+<span class="sd">                :func:`serial_asyncio.open_serial_connection`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s1">&#39;Opening serial connections&#39;</span><span class="p">,</span>
+            <span class="n">observer_type</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observer</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">ports</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">observer</span><span class="o">.</span><span class="n">get_ports</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">port</span> <span class="ow">in</span> <span class="n">ports</span><span class="p">:</span>
+                <span class="n">reader</span><span class="p">,</span> <span class="n">writer</span> <span class="o">=</span> <span class="k">await</span> <span class="n">aioserial</span><span class="o">.</span><span class="n">open_serial_connection</span><span class="p">(</span>
+                    <span class="n">url</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">port</span><span class="p">),</span>
+                    <span class="o">**</span><span class="n">options</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">run_device</span><span class="p">(</span><span class="n">reader</span><span class="p">,</span> <span class="n">writer</span><span class="p">,</span> <span class="n">port</span><span class="p">),</span>
+                    <span class="n">name</span><span class="o">=</span><span class="s1">&#39;dev-run&#39;</span><span class="p">,</span>
+                <span class="p">)</span></div>
+
+<div class="viewcode-block" id="SmartDeviceManager.open_virtual_devices"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.SmartDeviceManager.open_virtual_devices">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">open_virtual_devices</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">vsd_addr</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Establish connections to Virtual Smart Devices forever.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            vsd_addr: The address to listen on.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">vsd_addr_parts</span> <span class="o">=</span> <span class="n">urlsplit</span><span class="p">(</span><span class="n">vsd_addr</span><span class="p">)</span>
+        <span class="n">server</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">start_server</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">run_device</span><span class="p">,</span>
+            <span class="n">vsd_addr_parts</span><span class="o">.</span><span class="n">hostname</span><span class="p">,</span>
+            <span class="n">vsd_addr_parts</span><span class="o">.</span><span class="n">port</span><span class="p">,</span>
+            <span class="n">reuse_port</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="n">server</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Opening virtual connections&#39;</span><span class="p">,</span> <span class="n">address</span><span class="o">=</span><span class="n">vsd_addr</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">server</span><span class="o">.</span><span class="n">serve_forever</span><span class="p">()</span></div></div>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">_main</span><span class="p">(</span><span class="o">**</span><span class="n">options</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Async entry point.&quot;&quot;&quot;</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">process</span><span class="o">.</span><span class="n">Application</span><span class="p">(</span><span class="s1">&#39;device&#39;</span><span class="p">,</span> <span class="n">options</span><span class="p">)</span> <span class="k">as</span> <span class="n">app</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">app</span><span class="o">.</span><span class="n">make_log_publisher</span><span class="p">()</span>
+        <span class="n">device_manager</span> <span class="o">=</span> <span class="n">SmartDeviceManager</span><span class="p">(</span>
+            <span class="n">app</span><span class="o">.</span><span class="n">make_buffer_manager</span><span class="p">(),</span>
+            <span class="n">poll_interval</span><span class="o">=</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;dev_poll_interval&#39;</span><span class="p">],</span>
+            <span class="n">logger</span><span class="o">=</span><span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(),</span>
+        <span class="p">)</span>
+        <span class="k">await</span> <span class="n">app</span><span class="o">.</span><span class="n">make_service</span><span class="p">(</span><span class="n">device_manager</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+            <span class="n">app</span><span class="o">.</span><span class="n">report_health</span><span class="p">(),</span>
+            <span class="n">device_manager</span><span class="o">.</span><span class="n">open_serial_devices</span><span class="p">(</span><span class="n">baudrate</span><span class="o">=</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;dev_baud_rate&#39;</span><span class="p">]),</span>
+            <span class="n">device_manager</span><span class="o">.</span><span class="n">open_virtual_devices</span><span class="p">(</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;dev_vsd_addr&#39;</span><span class="p">]),</span>
+        <span class="p">)</span>
+
+
+<div class="viewcode-block" id="target"><a class="viewcode-back" href="../../../api-reference/service.html#runtime.service.device.target">[docs]</a><span class="k">def</span> <span class="nf">target</span><span class="p">(</span><span class="o">**</span><span class="n">options</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Process entry point.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        **options: Command-line options.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">uvloop</span><span class="o">.</span><span class="n">install</span><span class="p">()</span>
+    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">_main</span><span class="p">(</span><span class="o">**</span><span class="n">options</span><span class="p">))</span></div>
+</pre></div>
+
+          </div>
+          <div class="page-nav">
+            <div class="inner"><ul class="page-nav">
+</ul><div class="footer" role="contentinfo">
+      &#169; Copyright 2021, Pioneers in Engineering.
+    <br>
+    Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.2.0 with <a href="https://github.com/schettino72/sphinx_press_theme">Press Theme</a> 0.8.0.
+</div>
+            </div>
+          </div>
+      </page>
+    </div></div>
+    
+    
+  </body>
+</html>

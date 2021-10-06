@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html >
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+      <title>runtime.messaging</title>
+    
+          <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+          <link rel="stylesheet" href="../_static/theme.css " type="text/css" />
+          <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+      
+      <!-- sphinx script_files -->
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+
+      
+      <!-- bundled in js (rollup iife) -->
+      <!-- <script src="../_static/theme-vendors.js"></script> -->
+      <script src="../_static/theme.js" defer></script>
+    
+  <link rel="index" title="Index" href="../genindex.html" />
+  <link rel="search" title="Search" href="../search.html" />
+  <link rel="next" title="runtime.process" href="process.html" />
+  <link rel="prev" title="runtime.log" href="log.html" /> 
+  </head>
+
+  <body>
+    <div id="app">
+    <div class="theme-container" :class="pageClasses"><navbar @toggle-sidebar="toggleSidebar">
+  <router-link to="../index.html" class="home-link">
+    
+      <span class="site-name">Runtime</span>
+    
+  </router-link>
+
+  <div class="links">
+    <navlinks class="can-hide">
+
+
+
+    </navlinks>
+  </div>
+</navbar>
+
+      
+      <div class="sidebar-mask" @click="toggleSidebar(false)">
+      </div>
+        <sidebar @toggle-sidebar="toggleSidebar">
+          
+          <navlinks>
+            
+
+
+
+            
+          </navlinks><div id="searchbox" class="searchbox" role="search">
+  <div class="caption"><span class="caption-text">Quick search</span>
+    <div class="searchformwrapper">
+      <form class="search" action="../search.html" method="get">
+        <input type="text" name="q" />
+        <input type="submit" value="Search" />
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div><div class="sidebar-links" role="navigation" aria-label="main navigation">
+  
+    <div class="sidebar-group">
+      <p class="caption">
+        <span class="caption-text"><a href="../index.html#runtime-documentation">Contents:</a></span>
+      </p>
+      <ul class="">
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../design.html" class="reference internal ">Design Goals</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../architecture.html" class="reference internal ">Architecture</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../ipc.html" class="reference internal ">IPC</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../smart-devices.html" class="reference internal ">Smart Devices</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="index.html" class="reference internal ">API Reference</a>
+            
+
+            
+          </li>
+
+        
+      </ul>
+    </div>
+  
+</div>
+        </sidebar>
+
+      <page>
+          <div class="body-header" role="navigation" aria-label="navigation">
+  
+  <ul class="breadcrumbs">
+    <li><a href="../index.html">Docs</a> &raquo;</li>
+    
+      <li><a href="index.html">API Reference</a> &raquo;</li>
+    
+    <li><code class="docutils literal notranslate"><span class="pre">runtime.messaging</span></code></li>
+  </ul>
+  
+
+  <ul class="page-nav">
+  <li class="prev">
+    <a href="log.html"
+       title="previous chapter">← <code class="docutils literal notranslate"><span class="pre">runtime.log</span></code></a>
+  </li>
+  <li class="next">
+    <a href="process.html"
+       title="next chapter"><code class="docutils literal notranslate"><span class="pre">runtime.process</span></code> →</a>
+  </li>
+</ul>
+  
+</div>
+<hr>
+          <div class="content" role="main" v-pre>
+            
+  <section id="module-runtime.messaging">
+<span id="runtime-messaging"></span><h1><code class="docutils literal notranslate"><span class="pre">runtime.messaging</span></code><a class="headerlink" href="#module-runtime.messaging" title="Permalink to this headline">¶</a></h1>
+<p>Smart Device messaging.</p>
+<p>This library provides low-level bindings for building <a class="reference internal" href="#runtime.messaging.Message" title="runtime.messaging.Message"><code class="xref py py-class docutils literal notranslate"><span class="pre">Message</span></code></a> objects and
+encoding them to or decoding them from a binary format. This module’s API adheres
+closely to that of the underlying native C++ code and manipulates parameters using
+bitmaps and memory. To generate or digest messages at a higher level (for example, using
+parameter names), use <a class="reference internal" href="buffer.html#runtime.buffer.DeviceBuffer" title="runtime.buffer.DeviceBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.buffer.DeviceBuffer</span></code></a>.</p>
+<dl class="py exception">
+<dt class="sig sig-object py" id="runtime.messaging.MessageError">
+<em class="property"><span class="pre">exception</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.messaging.</span></span><span class="sig-name descname"><span class="pre">MessageError</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">context</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.MessageError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="exception.html#runtime.exception.RuntimeBaseException" title="runtime.exception.RuntimeBaseException"><code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.exception.RuntimeBaseException</span></code></a></p>
+<p>General message error.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.messaging.ErrorCode">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.messaging.</span></span><span class="sig-name descname"><span class="pre">ErrorCode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.ErrorCode" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/enum.html#enum.IntEnum" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">enum.IntEnum</span></code></a></p>
+<p>Error codes produced by the Smart Device or during message encoding/decoding.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.ErrorCode.OK">
+<span class="sig-name descname"><span class="pre">OK</span></span><a class="headerlink" href="#runtime.messaging.ErrorCode.OK" title="Permalink to this definition">¶</a></dt>
+<dd><p>No error occurred.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.ErrorCode.BACKOFF">
+<span class="sig-name descname"><span class="pre">BACKOFF</span></span><a class="headerlink" href="#runtime.messaging.ErrorCode.BACKOFF" title="Permalink to this definition">¶</a></dt>
+<dd><p>The receiver is overwhelmed. The peer should transmit less data.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.ErrorCode.INVALID_TYPE">
+<span class="sig-name descname"><span class="pre">INVALID_TYPE</span></span><a class="headerlink" href="#runtime.messaging.ErrorCode.INVALID_TYPE" title="Permalink to this definition">¶</a></dt>
+<dd><p>The receiver received a message type it does not handle.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.ErrorCode.BUFFER_OVERFLOW">
+<span class="sig-name descname"><span class="pre">BUFFER_OVERFLOW</span></span><a class="headerlink" href="#runtime.messaging.ErrorCode.BUFFER_OVERFLOW" title="Permalink to this definition">¶</a></dt>
+<dd><p>Message was too large to encode/decode.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.ErrorCode.UNEXPECTED_DELIMETER">
+<span class="sig-name descname"><span class="pre">UNEXPECTED_DELIMETER</span></span><a class="headerlink" href="#runtime.messaging.ErrorCode.UNEXPECTED_DELIMETER" title="Permalink to this definition">¶</a></dt>
+<dd><p>Message was incomplete or otherwise unable to be
+decoded.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.ErrorCode.BAD_CHECKSUM">
+<span class="sig-name descname"><span class="pre">BAD_CHECKSUM</span></span><a class="headerlink" href="#runtime.messaging.ErrorCode.BAD_CHECKSUM" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checksum computed by the receiver did not match the sender’s
+claim.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.ErrorCode.GENERIC_ERROR">
+<span class="sig-name descname"><span class="pre">GENERIC_ERROR</span></span><a class="headerlink" href="#runtime.messaging.ErrorCode.GENERIC_ERROR" title="Permalink to this definition">¶</a></dt>
+<dd><p>General error.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.messaging.Message">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.messaging.</span></span><span class="sig-name descname"><span class="pre">Message</span></span><a class="headerlink" href="#runtime.messaging.Message" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>A Smart Device message.</p>
+<p>The <a class="reference external" href="https://docs.python.org/3/library/functions.html#len" title="(in Python v3.10)"><code class="xref py py-func docutils literal notranslate"><span class="pre">len()</span></code></a> of a message is the length of its payload in bytes.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.decode">
+<em class="property"><span class="pre">static</span> </em><span class="sig-name descname"><span class="pre">decode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">buf</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.decode" title="Permalink to this definition">¶</a></dt>
+<dd><p>Decode a raw binary buffer, as it is transported on the wire.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>buf</strong> – An object that implements Python’s writeable buffer protocol.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A message containing the parsed data.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#runtime.messaging.Message" title="runtime.messaging.Message">Message</a></p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><a class="reference internal" href="#runtime.messaging.MessageError" title="runtime.messaging.MessageError"><strong>MessageError</strong></a> – If the message was not able to be decoded.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.encode">
+<span class="sig-name descname"><span class="pre">encode</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.encode" title="Permalink to this definition">¶</a></dt>
+<dd><p>Encode this message into a newly allocated buffer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The encoded message, ready to be put on the wire.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytearray" title="(in Python v3.10)">bytearray</a></p>
+</dd>
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#runtime.messaging.MessageError" title="runtime.messaging.MessageError"><strong>MessageError</strong></a> – If the message was not able to be encoded.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.encode_into_buf">
+<span class="sig-name descname"><span class="pre">encode_into_buf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">buf</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.encode_into_buf" title="Permalink to this definition">¶</a></dt>
+<dd><p>Encode this message into an existing buffer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>buf</strong> – A object that implements Python’s writeable buffer protocol.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The number of bytes used, which may be less than the length of <code class="docutils literal notranslate"><span class="pre">buf</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a></p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><a class="reference internal" href="#runtime.messaging.MessageError" title="runtime.messaging.MessageError"><strong>MessageError</strong></a> – If the message was not able to be encoded.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.make_dev_data">
+<em class="property"><span class="pre">static</span> </em><span class="sig-name descname"><span class="pre">make_dev_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_map</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.make_dev_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a <a class="reference internal" href="#runtime.messaging.MessageType.DEV_DATA" title="runtime.messaging.MessageType.DEV_DATA"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.DEV_DATA</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>params</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – A bitmap of parameters to write.</p></li>
+<li><p><strong>param_map</strong> (<a class="reference internal" href="#runtime.messaging.ParameterMap" title="runtime.messaging.ParameterMap"><em>ParameterMap</em></a>) – A parameter map specifying where in memory the
+parameter values should be read from.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A Smart Device message.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#runtime.messaging.Message" title="runtime.messaging.Message">Message</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.make_dev_disable">
+<em class="property"><span class="pre">static</span> </em><span class="sig-name descname"><span class="pre">make_dev_disable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.make_dev_disable" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a <a class="reference internal" href="#runtime.messaging.MessageType.DEV_DISABLE" title="runtime.messaging.MessageType.DEV_DISABLE"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.DEV_DISABLE</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A Smart Device message.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference internal" href="#runtime.messaging.Message" title="runtime.messaging.Message">Message</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.make_dev_read">
+<em class="property"><span class="pre">static</span> </em><span class="sig-name descname"><span class="pre">make_dev_read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.make_dev_read" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a <a class="reference internal" href="#runtime.messaging.MessageType.DEV_READ" title="runtime.messaging.MessageType.DEV_READ"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.DEV_READ</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>params</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – A bitmap of parameters to read.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A Smart Device message.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#runtime.messaging.Message" title="runtime.messaging.Message">Message</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.make_dev_write">
+<em class="property"><span class="pre">static</span> </em><span class="sig-name descname"><span class="pre">make_dev_write</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_map</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.make_dev_write" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a <a class="reference internal" href="#runtime.messaging.MessageType.DEV_WRITE" title="runtime.messaging.MessageType.DEV_WRITE"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.DEV_WRITE</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>params</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – A bitmap of parameters to write.</p></li>
+<li><p><strong>param_map</strong> (<a class="reference internal" href="#runtime.messaging.ParameterMap" title="runtime.messaging.ParameterMap"><em>ParameterMap</em></a>) – A parameter map specifying where in memory the
+parameter values should be read from.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A Smart Device message.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#runtime.messaging.Message" title="runtime.messaging.Message">Message</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.make_error">
+<em class="property"><span class="pre">static</span> </em><span class="sig-name descname"><span class="pre">make_error</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">error</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.make_error" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a <a class="reference internal" href="#runtime.messaging.MessageType.ERROR" title="runtime.messaging.MessageType.ERROR"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.ERROR</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>error</strong> (<a class="reference internal" href="#runtime.messaging.ErrorCode" title="runtime.messaging.ErrorCode"><em>ErrorCode</em></a>) – An error code.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A Smart Device message.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#runtime.messaging.Message" title="runtime.messaging.Message">Message</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.make_hb_req">
+<em class="property"><span class="pre">static</span> </em><span class="sig-name descname"><span class="pre">make_hb_req</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hb_id</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.make_hb_req" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a <a class="reference internal" href="#runtime.messaging.MessageType.HB_REQ" title="runtime.messaging.MessageType.HB_REQ"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.HB_REQ</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>hb_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – A heartbeat identifier.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A Smart Device message.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#runtime.messaging.Message" title="runtime.messaging.Message">Message</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.make_hb_res">
+<em class="property"><span class="pre">static</span> </em><span class="sig-name descname"><span class="pre">make_hb_res</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hb_id</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.make_hb_res" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a <a class="reference internal" href="#runtime.messaging.MessageType.HB_RES" title="runtime.messaging.MessageType.HB_RES"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.HB_RES</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>hb_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – A heartbeat identifier matching that of its corresponding
+heartbeat request.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A Smart Device message.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#runtime.messaging.Message" title="runtime.messaging.Message">Message</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.make_ping">
+<em class="property"><span class="pre">static</span> </em><span class="sig-name descname"><span class="pre">make_ping</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.make_ping" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a <a class="reference internal" href="#runtime.messaging.MessageType.PING" title="runtime.messaging.MessageType.PING"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.PING</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A Smart Device message.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference internal" href="#runtime.messaging.Message" title="runtime.messaging.Message">Message</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.make_sub_req">
+<em class="property"><span class="pre">static</span> </em><span class="sig-name descname"><span class="pre">make_sub_req</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interval</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.make_sub_req" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a <a class="reference internal" href="#runtime.messaging.MessageType.SUB_REQ" title="runtime.messaging.MessageType.SUB_REQ"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.SUB_REQ</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>params</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – A bitmap of parameters to subscribe to.</p></li>
+<li><p><strong>interval</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – The delay between updates in milliseconds.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A Smart Device message.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#runtime.messaging.Message" title="runtime.messaging.Message">Message</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.make_sub_res">
+<em class="property"><span class="pre">static</span> </em><span class="sig-name descname"><span class="pre">make_sub_res</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interval</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">year</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.make_sub_res" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a <a class="reference internal" href="#runtime.messaging.MessageType.SUB_RES" title="runtime.messaging.MessageType.SUB_RES"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.SUB_RES</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>params</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – A bitmap of parameters subscribed to.</p></li>
+<li><p><strong>interval</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – The delay between updates in milliseconds.</p></li>
+<li><p><strong>device_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – The device type identifier.</p></li>
+<li><p><strong>year</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – A number identifier the year the device was manufactured.</p></li>
+<li><p><strong>random</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – Random bits for uniqueness.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A Smart Device message.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#runtime.messaging.Message" title="runtime.messaging.Message">Message</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.make_unsubscribe">
+<em class="property"><span class="pre">classmethod</span> </em><span class="sig-name descname"><span class="pre">make_unsubscribe</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.make_unsubscribe" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a message to unsubscribe from all parameters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A <a class="reference internal" href="#runtime.messaging.MessageType.SUB_REQ" title="runtime.messaging.MessageType.SUB_REQ"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.SUB_REQ</span></code></a> message.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference internal" href="#runtime.messaging.Message" title="runtime.messaging.Message">Message</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.read_dev_data">
+<span class="sig-name descname"><span class="pre">read_dev_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">param_map</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.read_dev_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read the parameter values of a <a class="reference internal" href="#runtime.messaging.MessageType.DEV_DATA" title="runtime.messaging.MessageType.DEV_DATA"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.DEV_DATA</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>param_map</strong> (<a class="reference internal" href="#runtime.messaging.ParameterMap" title="runtime.messaging.ParameterMap"><em>ParameterMap</em></a>) – A parameter map specifying the addresses to write
+the values to.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A bitmap of the parameters read.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.read_dev_read">
+<span class="sig-name descname"><span class="pre">read_dev_read</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.read_dev_read" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read the parameter values of a <a class="reference internal" href="#runtime.messaging.MessageType.DEV_READ" title="runtime.messaging.MessageType.DEV_READ"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.DEV_READ</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A bitmap of the parameters contained.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.read_dev_write">
+<span class="sig-name descname"><span class="pre">read_dev_write</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">param_map</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.read_dev_write" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read the parameter values of a <a class="reference internal" href="#runtime.messaging.MessageType.DEV_WRITE" title="runtime.messaging.MessageType.DEV_WRITE"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.DEV_WRITE</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>param_map</strong> (<a class="reference internal" href="#runtime.messaging.ParameterMap" title="runtime.messaging.ParameterMap"><em>ParameterMap</em></a>) – A parameter map specifying the addresses to write
+the values to.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A bitmap of the parameters read.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.read_error">
+<span class="sig-name descname"><span class="pre">read_error</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.read_error" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read the error code of a <a class="reference internal" href="#runtime.messaging.MessageType.ERROR" title="runtime.messaging.MessageType.ERROR"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.ERROR</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The error code.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference internal" href="#runtime.messaging.ErrorCode" title="runtime.messaging.ErrorCode">ErrorCode</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.read_hb_req">
+<span class="sig-name descname"><span class="pre">read_hb_req</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.read_hb_req" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read the heartbeat identifier of a <a class="reference internal" href="#runtime.messaging.MessageType.HB_REQ" title="runtime.messaging.MessageType.HB_REQ"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.HB_REQ</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The heartbeat ID.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.read_hb_res">
+<span class="sig-name descname"><span class="pre">read_hb_res</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.read_hb_res" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read the heartbeat identifier of a <a class="reference internal" href="#runtime.messaging.MessageType.HB_RES" title="runtime.messaging.MessageType.HB_RES"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.HB_RES</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The heartbeat ID.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.read_sub_req">
+<span class="sig-name descname"><span class="pre">read_sub_req</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.read_sub_req" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read the fields of a <a class="reference internal" href="#runtime.messaging.MessageType.SUB_REQ" title="runtime.messaging.MessageType.SUB_REQ"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.SUB_REQ</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The parameters to subscribe to (as a bitmap) and the
+requested delay in milliseconds.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.10)">tuple</a>[<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.read_sub_res">
+<span class="sig-name descname"><span class="pre">read_sub_res</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.read_sub_res" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read the fields of a <a class="reference internal" href="#runtime.messaging.MessageType.SUB_RES" title="runtime.messaging.MessageType.SUB_RES"><code class="xref py py-attr docutils literal notranslate"><span class="pre">MessageType.SUB_RES</span></code></a> message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The parameters subscribed to as a
+bitmap, the delay in milliseconds, and the device’s UID components (device
+ID, year, random bits).</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.10)">tuple</a>[<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a>, <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.10)">tuple</a>[<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)">int</a>]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.Message.verify_checksum">
+<span class="sig-name descname"><span class="pre">verify_checksum</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.Message.verify_checksum" title="Permalink to this definition">¶</a></dt>
+<dd><p>Determine whether the claimed checksum of the payload is valid.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.10)"><code class="xref py py-data docutils literal notranslate"><span class="pre">True</span></code></a> if the checksum is valid, <a class="reference external" href="https://docs.python.org/3/library/constants.html#False" title="(in Python v3.10)"><code class="xref py py-data docutils literal notranslate"><span class="pre">False</span></code></a> otherwise.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)">bool</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.Message.type">
+<span class="sig-name descname"><span class="pre">type</span></span><a class="headerlink" href="#runtime.messaging.Message.type" title="Permalink to this definition">¶</a></dt>
+<dd><p>The type of this message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#runtime.messaging.MessageType" title="runtime.messaging.MessageType">MessageType</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.messaging.MessageType">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.messaging.</span></span><span class="sig-name descname"><span class="pre">MessageType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.MessageType" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/enum.html#enum.IntEnum" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">enum.IntEnum</span></code></a></p>
+<p>The Smart Device message’s type identifies what kind of payload it contains.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.MessageType.PING">
+<span class="sig-name descname"><span class="pre">PING</span></span><a class="headerlink" href="#runtime.messaging.MessageType.PING" title="Permalink to this definition">¶</a></dt>
+<dd><p>Ping request from Runtime to the Smart Device.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.MessageType.SUB_REQ">
+<span class="sig-name descname"><span class="pre">SUB_REQ</span></span><a class="headerlink" href="#runtime.messaging.MessageType.SUB_REQ" title="Permalink to this definition">¶</a></dt>
+<dd><p>Subscription request.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.MessageType.SUB_RES">
+<span class="sig-name descname"><span class="pre">SUB_RES</span></span><a class="headerlink" href="#runtime.messaging.MessageType.SUB_RES" title="Permalink to this definition">¶</a></dt>
+<dd><p>Subscription response.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.MessageType.DEV_READ">
+<span class="sig-name descname"><span class="pre">DEV_READ</span></span><a class="headerlink" href="#runtime.messaging.MessageType.DEV_READ" title="Permalink to this definition">¶</a></dt>
+<dd><p>Device read.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.MessageType.DEV_WRITE">
+<span class="sig-name descname"><span class="pre">DEV_WRITE</span></span><a class="headerlink" href="#runtime.messaging.MessageType.DEV_WRITE" title="Permalink to this definition">¶</a></dt>
+<dd><p>Device write.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.MessageType.DEV_DATA">
+<span class="sig-name descname"><span class="pre">DEV_DATA</span></span><a class="headerlink" href="#runtime.messaging.MessageType.DEV_DATA" title="Permalink to this definition">¶</a></dt>
+<dd><p>Device data.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.MessageType.DEV_DISABLE">
+<span class="sig-name descname"><span class="pre">DEV_DISABLE</span></span><a class="headerlink" href="#runtime.messaging.MessageType.DEV_DISABLE" title="Permalink to this definition">¶</a></dt>
+<dd><p>Device disable.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.MessageType.HB_REQ">
+<span class="sig-name descname"><span class="pre">HB_REQ</span></span><a class="headerlink" href="#runtime.messaging.MessageType.HB_REQ" title="Permalink to this definition">¶</a></dt>
+<dd><p>Heartbeat request.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.MessageType.HB_RES">
+<span class="sig-name descname"><span class="pre">HB_RES</span></span><a class="headerlink" href="#runtime.messaging.MessageType.HB_RES" title="Permalink to this definition">¶</a></dt>
+<dd><p>Heartbeat response.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.messaging.MessageType.ERROR">
+<span class="sig-name descname"><span class="pre">ERROR</span></span><a class="headerlink" href="#runtime.messaging.MessageType.ERROR" title="Permalink to this definition">¶</a></dt>
+<dd><p>Error.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.messaging.ParameterMap">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.messaging.</span></span><span class="sig-name descname"><span class="pre">ParameterMap</span></span><a class="headerlink" href="#runtime.messaging.ParameterMap" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>A map of parameters in memory.</p>
+<p>This object is used by <a class="reference internal" href="#runtime.messaging.Message" title="runtime.messaging.Message"><code class="xref py py-class docutils literal notranslate"><span class="pre">Message</span></code></a> to determine where and how many bytes should
+be written to or read from for each parameter.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.ParameterMap.clear_param">
+<span class="sig-name descname"><span class="pre">clear_param</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.ParameterMap.clear_param" title="Permalink to this definition">¶</a></dt>
+<dd><p>Clear an existing parameter.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.messaging.ParameterMap.set_param">
+<span class="sig-name descname"><span class="pre">set_param</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#runtime.messaging.ParameterMap.set_param" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the address and size of a parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – The parameter ID between 0 (inclusive) and
+<code class="xref py py-attr docutils literal notranslate"><span class="pre">Message.MAX_PARAMS</span></code> (exclusive).</p></li>
+<li><p><strong>base</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – The address of the parameter in memory.</p></li>
+<li><p><strong>size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – The size of the parameter in bytes.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><a class="reference internal" href="#runtime.messaging.MessageError" title="runtime.messaging.MessageError"><strong>MessageError</strong></a> – If the index is out of bounds.</p>
+</dd>
+</dl>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Since this method accepts addresses that a <a class="reference internal" href="#runtime.messaging.Message" title="runtime.messaging.Message"><code class="xref py py-class docutils literal notranslate"><span class="pre">Message</span></code></a> will eventually
+dereference, a bad address may cause a segfault. Use with caution.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+          </div>
+          <div class="page-nav">
+            <div class="inner"><ul class="page-nav">
+  <li class="prev">
+    <a href="log.html"
+       title="previous chapter">← <code class="docutils literal notranslate"><span class="pre">runtime.log</span></code></a>
+  </li>
+  <li class="next">
+    <a href="process.html"
+       title="next chapter"><code class="docutils literal notranslate"><span class="pre">runtime.process</span></code> →</a>
+  </li>
+</ul><div class="footer" role="contentinfo">
+      &#169; Copyright 2021, Pioneers in Engineering.
+    <br>
+    Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.2.0 with <a href="https://github.com/schettino72/sphinx_press_theme">Press Theme</a> 0.8.0.
+</div>
+            </div>
+          </div>
+      </page>
+    </div></div>
+    
+    
+  </body>
+</html>

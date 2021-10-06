@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html >
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+      <title>runtime.api</title>
+    
+          <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+          <link rel="stylesheet" href="../_static/theme.css " type="text/css" />
+          <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+      
+      <!-- sphinx script_files -->
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+
+      
+      <!-- bundled in js (rollup iife) -->
+      <!-- <script src="../_static/theme-vendors.js"></script> -->
+      <script src="../_static/theme.js" defer></script>
+    
+  <link rel="index" title="Index" href="../genindex.html" />
+  <link rel="search" title="Search" href="../search.html" />
+  <link rel="next" title="runtime.buffer" href="buffer.html" />
+  <link rel="prev" title="API Reference" href="index.html" /> 
+  </head>
+
+  <body>
+    <div id="app">
+    <div class="theme-container" :class="pageClasses"><navbar @toggle-sidebar="toggleSidebar">
+  <router-link to="../index.html" class="home-link">
+    
+      <span class="site-name">Runtime</span>
+    
+  </router-link>
+
+  <div class="links">
+    <navlinks class="can-hide">
+
+
+
+    </navlinks>
+  </div>
+</navbar>
+
+      
+      <div class="sidebar-mask" @click="toggleSidebar(false)">
+      </div>
+        <sidebar @toggle-sidebar="toggleSidebar">
+          
+          <navlinks>
+            
+
+
+
+            
+          </navlinks><div id="searchbox" class="searchbox" role="search">
+  <div class="caption"><span class="caption-text">Quick search</span>
+    <div class="searchformwrapper">
+      <form class="search" action="../search.html" method="get">
+        <input type="text" name="q" />
+        <input type="submit" value="Search" />
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div><div class="sidebar-links" role="navigation" aria-label="main navigation">
+  
+    <div class="sidebar-group">
+      <p class="caption">
+        <span class="caption-text"><a href="../index.html#runtime-documentation">Contents:</a></span>
+      </p>
+      <ul class="">
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../design.html" class="reference internal ">Design Goals</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../architecture.html" class="reference internal ">Architecture</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../ipc.html" class="reference internal ">IPC</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="../smart-devices.html" class="reference internal ">Smart Devices</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="index.html" class="reference internal ">API Reference</a>
+            
+
+            
+          </li>
+
+        
+      </ul>
+    </div>
+  
+</div>
+        </sidebar>
+
+      <page>
+          <div class="body-header" role="navigation" aria-label="navigation">
+  
+  <ul class="breadcrumbs">
+    <li><a href="../index.html">Docs</a> &raquo;</li>
+    
+      <li><a href="index.html">API Reference</a> &raquo;</li>
+    
+    <li><code class="docutils literal notranslate"><span class="pre">runtime.api</span></code></li>
+  </ul>
+  
+
+  <ul class="page-nav">
+  <li class="prev">
+    <a href="index.html"
+       title="previous chapter">← API Reference</a>
+  </li>
+  <li class="next">
+    <a href="buffer.html"
+       title="next chapter"><code class="docutils literal notranslate"><span class="pre">runtime.buffer</span></code> →</a>
+  </li>
+</ul>
+  
+</div>
+<hr>
+          <div class="content" role="main" v-pre>
+            
+  <section id="module-runtime.api">
+<span id="runtime-api"></span><h1><code class="docutils literal notranslate"><span class="pre">runtime.api</span></code><a class="headerlink" href="#module-runtime.api" title="Permalink to this headline">¶</a></h1>
+<p>Student API for controlling the robot.</p>
+<p>The student provides a single Python file containing a minimum of four functions:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">autonomous_setup</span><span class="p">():</span>
+<span class="gp">... </span>    <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">autonomous_main</span><span class="p">():</span>
+<span class="gp">... </span>    <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">teleop_setup</span><span class="p">():</span>
+<span class="gp">... </span>    <span class="o">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">teleop_main</span><span class="p">():</span>
+<span class="gp">... </span>    <span class="o">...</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">*_setup</span></code> functions—<code class="docutils literal notranslate"><span class="pre">autonomous_setup</span></code> and <code class="docutils literal notranslate"><span class="pre">teleop_setup</span></code>—run once at the
+start of the autonomous and teleop phases, respectively. After the setup function runs,
+the corresponding <code class="docutils literal notranslate"><span class="pre">*_main</span></code> functions run periodically until the end of the phase. The
+frequency of <code class="docutils literal notranslate"><span class="pre">main</span></code> calls is configurable, but the default interval is 0.1s.</p>
+<p>These interfaces are largely thin wrappers around <a class="reference internal" href="buffer.html#runtime.buffer.BufferStore" title="runtime.buffer.BufferStore"><code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.buffer.BufferStore</span></code></a>.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.api.Actions">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.api.</span></span><span class="sig-name descname"><span class="pre">Actions</span></span><a class="reference internal" href="../_modules/runtime/api.html#Actions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.Actions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#runtime.api.StudentAPI" title="runtime.api.StudentAPI"><code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.api.StudentAPI</span></code></a></p>
+<p>API for performing asynchronous execution.</p>
+<p>An “action” is a special function defined with the <code class="docutils literal notranslate"><span class="pre">async</span> <span class="pre">def</span></code> keywords, like so:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">async</span> <span class="k">def</span> <span class="nf">wave_hand</span><span class="p">():</span>
+<span class="gp">... </span>    <span class="n">Robot</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">SERVO_UID</span><span class="p">,</span> <span class="s1">&#39;servo0&#39;</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">await</span> <span class="n">Actions</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">Robot</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">SERVO_UID</span><span class="p">,</span> <span class="s1">&#39;servo0&#39;</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>In this example, the robot’s servo rotates 45 degrees counterclockwise from the
+motor’s center, waits one second, and then rotates 90 degrees clockwise. Actions are
+useful for triggering time-sensitive events outside the <code class="docutils literal notranslate"><span class="pre">autonomous_main</span></code> or
+<code class="docutils literal notranslate"><span class="pre">teleop_main</span></code> functions, which fire at a fixed frequency.</p>
+<p>To schedule an action to run, call <a class="reference internal" href="#runtime.api.Actions.run" title="runtime.api.Actions.run"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Actions.run()</span></code></a> on the action’s name from one
+of the regular <code class="docutils literal notranslate"><span class="pre">*_setup</span></code> or <code class="docutils literal notranslate"><span class="pre">*_main</span></code> functions, like so:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">autonomous_setup</span><span class="p">():</span>
+<span class="gp">... </span>    <span class="n">Actions</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">wave_hand</span><span class="p">)</span>  <span class="c1"># Correct</span>
+<span class="gp">... </span>    <span class="n">wave_hand</span><span class="p">()</span>             <span class="c1"># Incorrect: will not run</span>
+</pre></div>
+</div>
+<p>Do not call an action like you would call a regular function.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.api.Actions.is_running">
+<em class="property"><span class="pre">abstract</span> </em><span class="sig-name descname"><span class="pre">is_running</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/api.html#Actions.is_running"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.Actions.is_running" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check whether an action is already running.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>action</strong> (<em>Callable</em><em>[</em><em>[</em><em>...</em><em>]</em><em>, </em><em>Awaitable</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.10)"><em>None</em></a><em>]</em><em>]</em>) – An action (coroutine function).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.api.Actions.run">
+<em class="property"><span class="pre">abstract</span> </em><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">periodic</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/api.html#Actions.run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.Actions.run" title="Permalink to this definition">¶</a></dt>
+<dd><p>Schedule an action to run outside of the <code class="docutils literal notranslate"><span class="pre">*_main</span></code> functions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<em>Callable</em><em>[</em><em>[</em><em>...</em><em>]</em><em>, </em><em>Awaitable</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.10)"><em>None</em></a><em>]</em><em>]</em>) – An action (coroutine function).</p></li>
+<li><p><strong>args</strong> (<em>Any</em>) – Positional arguments to pass to the action.</p></li>
+<li><p><strong>timeout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)"><em>float</em></a>) – Maximum number of seconds the action should be allowed to run for.
+Must be a nonnegative number.</p></li>
+<li><p><strong>periodic</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><em>bool</em></a>) – Whether to run the action repeatedly or not. A periodic action
+that completes before the timeout has elapsed is not rescheduled early.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.api.Actions.sleep">
+<em class="property"><span class="pre">async</span> <span class="pre">static</span> </em><span class="sig-name descname"><span class="pre">sleep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">duration</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/api.html#Actions.sleep"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.Actions.sleep" title="Permalink to this definition">¶</a></dt>
+<dd><p>Pause the current action for some amount of time.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>duration</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)"><em>float</em></a>) – The number of seconds to wait for. Must be a nonnegative number.</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Remember to use the <code class="docutils literal notranslate"><span class="pre">await</span></code> keyword before <a class="reference internal" href="#runtime.api.Actions.sleep" title="runtime.api.Actions.sleep"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Actions.sleep()</span></code></a>.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.api.Alliance">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.api.</span></span><span class="sig-name descname"><span class="pre">Alliance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/api.html#Alliance"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.Alliance" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/enum.html#enum.IntEnum" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">enum.IntEnum</span></code></a></p>
+<p>The alliances that compete in a match.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.api.Alliance.BLUE">
+<span class="sig-name descname"><span class="pre">BLUE</span></span><a class="headerlink" href="#runtime.api.Alliance.BLUE" title="Permalink to this definition">¶</a></dt>
+<dd><p>The blue alliance.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="runtime.api.Alliance.GOLD">
+<span class="sig-name descname"><span class="pre">GOLD</span></span><a class="headerlink" href="#runtime.api.Alliance.GOLD" title="Permalink to this definition">¶</a></dt>
+<dd><p>The gold alliance.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.api.BufferAPI">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.api.</span></span><span class="sig-name descname"><span class="pre">BufferAPI</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">buffers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/api.html#BufferAPI"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.BufferAPI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#runtime.api.StudentAPI" title="runtime.api.StudentAPI"><code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.api.StudentAPI</span></code></a></p>
+<p>Base type for all APIs that access shared memory buffers.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>buffers</strong> (<a class="reference internal" href="buffer.html#runtime.buffer.BufferStore" title="runtime.buffer.BufferStore"><em>runtime.buffer.BufferStore</em></a>) – Buffer store.</p></li>
+<li><p><strong>logger</strong> (<a class="reference external" href="https://structlog.org/en/21.1.0/api.html#structlog.stdlib.BoundLogger" title="(in structlog v21.1.0)"><em>structlog.stdlib.BoundLogger</em></a>) – Synchronous bound logger.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.api.Field">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.api.</span></span><span class="sig-name descname"><span class="pre">Field</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">buffers</span></em>, <em class="sig-param"><span class="pre">logger</span></em>, <em class="sig-param"><span class="pre">start=&lt;factory&gt;</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/api.html#Field"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.Field" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#runtime.api.BufferAPI" title="runtime.api.BufferAPI"><code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.api.BufferAPI</span></code></a></p>
+<p>API for interacting with the field and other robots.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>start</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)"><em>float</em></a>) – The UNIX timestamp (in seconds) of the start of the current
+autonomous/teleop phase.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.api.Field.clock">
+<span class="sig-name descname"><span class="pre">clock</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/api.html#Field.clock"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.Field.clock" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of seconds since autonomus or teleop started.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.api.Field.recv">
+<span class="sig-name descname"><span class="pre">recv</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/api.html#Field.recv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.Field.recv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Receive a message from an allied robot.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.api.Field.send">
+<span class="sig-name descname"><span class="pre">send</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obj</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/api.html#Field.send"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.Field.send" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send a message to an allied robot.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="runtime.api.Field.alliance">
+<em class="property"><span class="pre">property</span> </em><span class="sig-name descname"><span class="pre">alliance</span></span><em class="property"><span class="pre">:</span> <a class="reference internal" href="#runtime.api.Alliance" title="runtime.api.Alliance"><span class="pre">runtime.api.Alliance</span></a></em><a class="headerlink" href="#runtime.api.Field.alliance" title="Permalink to this definition">¶</a></dt>
+<dd><p>The alliance this robot is a member of in this match.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.api.Gamepad">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.api.</span></span><span class="sig-name descname"><span class="pre">Gamepad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">buffers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enabled</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/api.html#Gamepad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.Gamepad" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#runtime.api.BufferAPI" title="runtime.api.BufferAPI"><code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.api.BufferAPI</span></code></a></p>
+<p>API for reading game controller inputs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>enabled</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><em>bool</em></a>) – Whether gamepads are enabled. In autonomous mode, this parameter should
+be set to <a class="reference external" href="https://docs.python.org/3/library/constants.html#False" title="(in Python v3.10)"><code class="xref py py-data docutils literal notranslate"><span class="pre">False</span></code></a>.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.api.Gamepad.get">
+<span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">param</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/api.html#Gamepad.get"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.Gamepad.get" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a gamepad parameter.</p>
+<p>Attempting to access a gamepad while it is disabled will emit a warning but
+will still return a type-safe default value.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>param</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a>) – Parameter name.</p></li>
+<li><p><strong>index</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – Gamepad identifier (a nonnegative integer).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.api.Robot">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.api.</span></span><span class="sig-name descname"><span class="pre">Robot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">buffers</span></em>, <em class="sig-param"><span class="pre">logger</span></em>, <em class="sig-param"><span class="pre">names=&lt;factory&gt;</span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/api.html#Robot"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.Robot" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#runtime.api.BufferAPI" title="runtime.api.BufferAPI"><code class="xref py py-class docutils literal notranslate"><span class="pre">runtime.api.BufferAPI</span></code></a></p>
+<p>API for accessing Smart Devices.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>names</strong> (<em>Mapping</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a><em>]</em>) – A mapping from human-readable device names (aliases) to UIDs that
+students can configure.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.api.Robot.get">
+<span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">uid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/api.html#Robot.get"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.Robot.get" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a Smart Device parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>uid</strong> (<em>Union</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a><em>]</em>) – Either a UID as an integer or a device name to be resolved into a UID.</p></li>
+<li><p><strong>param</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a>) – Parameter name.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The current parameter value. Because written parameters take time to
+propogate to the device and the device must send an acknowledgement, the
+current value may not immediately reflect a written value.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="runtime.api.Robot.write">
+<span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">uid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">/</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/api.html#Robot.write"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.Robot.write" title="Permalink to this definition">¶</a></dt>
+<dd><p>Write a Smart Device parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>uid</strong> (<em>Union</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a><em>]</em>) – Either a UID as an integer or a device name to be resolved into a UID.</p></li>
+<li><p><strong>param</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a>) – Parameter name.</p></li>
+<li><p><strong>value</strong> (<em>Any</em>) – New parameter value.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="runtime.api.StudentAPI">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">runtime.api.</span></span><span class="sig-name descname"><span class="pre">StudentAPI</span></span><a class="reference internal" href="../_modules/runtime/api.html#StudentAPI"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.StudentAPI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">abc.ABC</span></code></a></p>
+<p>Base type for all student-callable interfaces.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="runtime.api.safe">
+<span class="sig-prename descclassname"><span class="pre">runtime.api.</span></span><span class="sig-name descname"><span class="pre">safe</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">method</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/runtime/api.html#safe"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#runtime.api.safe" title="Permalink to this definition">¶</a></dt>
+<dd><p>A decorator that wraps API methods to catch and log any exceptions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>method</strong> (<em>Callable</em><em>[</em><em>[</em><em>...</em><em>]</em><em>, </em><em>runtime.api.RT</em><em>]</em>) – API method to be wrapped.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The method wrapper. If the wrapped method raises an <a class="reference external" href="https://docs.python.org/3/library/exceptions.html#Exception" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Exception</span></code></a>, the
+wrapper’s return value will be <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.10)"><code class="xref py py-data docutils literal notranslate"><span class="pre">None</span></code></a>. <a class="reference external" href="https://docs.python.org/3/library/exceptions.html#BaseException" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseException</span></code></a> is too broad
+to catch.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+          </div>
+          <div class="page-nav">
+            <div class="inner"><ul class="page-nav">
+  <li class="prev">
+    <a href="index.html"
+       title="previous chapter">← API Reference</a>
+  </li>
+  <li class="next">
+    <a href="buffer.html"
+       title="next chapter"><code class="docutils literal notranslate"><span class="pre">runtime.buffer</span></code> →</a>
+  </li>
+</ul><div class="footer" role="contentinfo">
+      &#169; Copyright 2021, Pioneers in Engineering.
+    <br>
+    Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.2.0 with <a href="https://github.com/schettino72/sphinx_press_theme">Press Theme</a> 0.8.0.
+</div>
+            </div>
+          </div>
+      </page>
+    </div></div>
+    
+    
+  </body>
+</html>

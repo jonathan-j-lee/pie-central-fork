@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html >
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+      <title>IPC</title>
+    
+          <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+          <link rel="stylesheet" href="_static/theme.css " type="text/css" />
+          <link rel="stylesheet" href="_static/css/custom.css" type="text/css" />
+      
+      <!-- sphinx script_files -->
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+
+      
+      <!-- bundled in js (rollup iife) -->
+      <!-- <script src="_static/theme-vendors.js"></script> -->
+      <script src="_static/theme.js" defer></script>
+    
+  <link rel="index" title="Index" href="genindex.html" />
+  <link rel="search" title="Search" href="search.html" />
+  <link rel="next" title="Smart Devices" href="smart-devices.html" />
+  <link rel="prev" title="Architecture" href="architecture.html" /> 
+  </head>
+
+  <body>
+    <div id="app">
+    <div class="theme-container" :class="pageClasses"><navbar @toggle-sidebar="toggleSidebar">
+  <router-link to="index.html" class="home-link">
+    
+      <span class="site-name">Runtime</span>
+    
+  </router-link>
+
+  <div class="links">
+    <navlinks class="can-hide">
+
+
+
+    </navlinks>
+  </div>
+</navbar>
+
+      
+      <div class="sidebar-mask" @click="toggleSidebar(false)">
+      </div>
+        <sidebar @toggle-sidebar="toggleSidebar">
+          
+          <navlinks>
+            
+
+
+
+            
+          </navlinks><div id="searchbox" class="searchbox" role="search">
+  <div class="caption"><span class="caption-text">Quick search</span>
+    <div class="searchformwrapper">
+      <form class="search" action="search.html" method="get">
+        <input type="text" name="q" />
+        <input type="submit" value="Search" />
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div><div class="sidebar-links" role="navigation" aria-label="main navigation">
+  
+    <div class="sidebar-group">
+      <p class="caption">
+        <span class="caption-text"><a href="index.html#runtime-documentation">Contents:</a></span>
+      </p>
+      <ul class="current">
+        
+          <li class="toctree-l1 ">
+            
+              <a href="design.html" class="reference internal ">Design Goals</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="architecture.html" class="reference internal ">Architecture</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 current">
+            
+              <a href="#" class="reference internal current">IPC</a>
+            
+
+            
+              <ul>
+                
+                  <li class="toctree-l2"><a href="#socket-messages" class="reference internal">Socket Messages</a></li>
+                
+                  <li class="toctree-l2"><a href="#buffers" class="reference internal">Buffers</a></li>
+                
+              </ul>
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="smart-devices.html" class="reference internal ">Smart Devices</a>
+            
+
+            
+          </li>
+
+        
+          <li class="toctree-l1 ">
+            
+              <a href="api-reference/index.html" class="reference internal ">API Reference</a>
+            
+
+            
+          </li>
+
+        
+      </ul>
+    </div>
+  
+</div>
+        </sidebar>
+
+      <page>
+          <div class="body-header" role="navigation" aria-label="navigation">
+  
+  <ul class="breadcrumbs">
+    <li><a href="index.html">Docs</a> &raquo;</li>
+    
+    <li>IPC</li>
+  </ul>
+  
+
+  <ul class="page-nav">
+  <li class="prev">
+    <a href="architecture.html"
+       title="previous chapter">← Architecture</a>
+  </li>
+  <li class="next">
+    <a href="smart-devices.html"
+       title="next chapter">Smart Devices →</a>
+  </li>
+</ul>
+  
+</div>
+<hr>
+          <div class="content" role="main" v-pre>
+            
+  <section id="ipc">
+<h1>IPC<a class="headerlink" href="#ipc" title="Permalink to this headline">¶</a></h1>
+<section id="socket-messages">
+<h2>Socket Messages<a class="headerlink" href="#socket-messages" title="Permalink to this headline">¶</a></h2>
+<p>Sockets are used for event-driven communication.</p>
+<section id="formats">
+<h3>Formats<a class="headerlink" href="#formats" title="Permalink to this headline">¶</a></h3>
+<p>Except for the VSD socket, all sockets send messages that are <a class="reference external" href="https://msgpack.org/">MessagePack</a>-encoded objects.
+MessagePack is easy to use, flexible like JSON, pretty fast, and doesn’t take up that much space on the wire.
+Most Runtime messages are small and simple, so a serialization framework like <a class="reference external" href="https://developers.google.com/protocol-buffers">Protobuf</a> requiring a strongly-typed schema would be overkill.</p>
+<dl>
+<dt>RPC</dt><dd><p>Follows the <a class="reference external" href="https://github.com/msgpack-rpc/msgpack-rpc/blob/master/spec.md">MessagePack-RPC specification</a>.</p>
+<p>Request object:</p>
+<div class="highlight-js notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="mf">0</span><span class="p">,</span> <span class="o">&lt;</span><span class="nx">request</span> <span class="nx">id</span><span class="o">:</span> <span class="kr">int</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="nx">procedure</span><span class="o">:</span> <span class="nb">String</span><span class="o">&gt;</span><span class="p">,</span> <span class="p">[</span><span class="o">&lt;</span><span class="nx">arg1</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="nx">arg2</span><span class="o">&gt;</span><span class="p">,</span> <span class="p">...]]</span>
+</pre></div>
+</div>
+<p>Response object:</p>
+<div class="highlight-js notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="mf">1</span><span class="p">,</span> <span class="o">&lt;</span><span class="nx">request</span> <span class="nx">id</span><span class="o">:</span> <span class="kr">int</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="nx">error</span><span class="o">:</span> <span class="kc">null</span> <span class="nx">or</span> <span class="nb">Object</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="nx">result</span><span class="o">&gt;</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>See the service documentation for the full list of procedures.</p>
+</dd>
+<dt>Log Message</dt><dd><div class="highlight-js notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+  <span class="s2">&quot;event&quot;</span><span class="o">:</span> <span class="o">&lt;</span><span class="nx">message</span><span class="o">:</span> <span class="nb">String</span><span class="o">&gt;</span><span class="p">,</span>         <span class="cm">/* The message that was logged */</span>
+  <span class="s2">&quot;logger&quot;</span><span class="o">:</span> <span class="o">&lt;</span><span class="nx">module</span><span class="o">:</span> <span class="nb">String</span><span class="o">&gt;</span><span class="p">,</span>         <span class="cm">/* For example: runtime.&lt;submod1&gt;.&lt;submod2&gt; */</span>
+  <span class="s2">&quot;level&quot;</span><span class="o">:</span> <span class="o">&lt;</span><span class="nx">level</span><span class="o">:</span> <span class="nb">String</span><span class="o">&gt;</span><span class="p">,</span>           <span class="cm">/* One of: debug, info, warning, error, critical */</span>
+  <span class="s2">&quot;timestamp&quot;</span><span class="o">:</span> <span class="o">&lt;</span><span class="nx">timestamp</span><span class="o">:</span> <span class="nb">String</span><span class="o">&gt;</span><span class="p">,</span>   <span class="cm">/* ISO format */</span>
+  <span class="s2">&quot;extra&quot;</span><span class="o">:</span> <span class="p">{</span>                          <span class="cm">/* More contextual data. */</span>
+    <span class="p">...</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</dd>
+<dt>Gamepad Input</dt><dd><div class="highlight-js notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+  <span class="s2">&quot;gamepads&quot;</span><span class="o">:</span> <span class="p">{</span>
+    <span class="o">&lt;</span><span class="nx">gamepad</span> <span class="nx">index</span><span class="o">:</span> <span class="nb">String</span><span class="o">&gt;:</span> <span class="p">{</span>
+      <span class="s2">&quot;lx&quot;</span><span class="o">:</span> <span class="o">&lt;</span><span class="kr">float</span><span class="o">&gt;</span><span class="p">,</span>
+      <span class="s2">&quot;ly&quot;</span><span class="o">:</span> <span class="o">&lt;</span><span class="kr">float</span><span class="o">&gt;</span><span class="p">,</span>
+      <span class="s2">&quot;rx&quot;</span><span class="o">:</span> <span class="o">&lt;</span><span class="kr">float</span><span class="o">&gt;</span><span class="p">,</span>
+      <span class="s2">&quot;ry&quot;</span><span class="o">:</span> <span class="o">&lt;</span><span class="kr">float</span><span class="o">&gt;</span><span class="p">,</span>
+      <span class="s2">&quot;btn&quot;</span><span class="o">:</span> <span class="o">&lt;</span><span class="kr">int</span><span class="o">&gt;</span>
+    <span class="p">},</span>
+    <span class="p">...</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">[lr][xy]</span></code> parameters denote joystick positions, where <code class="docutils literal notranslate"><span class="pre">l</span></code> and <code class="docutils literal notranslate"><span class="pre">r</span></code> stand for the left and right joysticks, respectively, and <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code> are Cartesian coordinates.
+The origin (0, 0) corresponds to the joystick in the resting position.
+Each joystick’s positon is constrained within the unit circle.</p>
+<p><code class="docutils literal notranslate"><span class="pre">btn</span></code> is a bitmask where a 1 bit indicates the corresponding button is pressed.
+See the <a class="reference external" href="https://w3c.github.io/gamepad/#dom-gamepad">DOM Gamepad specification</a> for the list of buttons.
+The first button in the <code class="docutils literal notranslate"><span class="pre">Gamepad.buttons</span></code> attribute corresponds to the least-significant bit of the bitmask.</p>
+</dd>
+<dt>Smart Device Update</dt><dd><div class="highlight-js notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+  <span class="s2">&quot;sd&quot;</span><span class="o">:</span> <span class="p">{</span>
+    <span class="o">&lt;</span><span class="nx">uid</span><span class="o">:</span> <span class="nb">String</span><span class="o">&gt;:</span> <span class="p">{</span>
+      <span class="o">&lt;</span><span class="nx">param</span> <span class="nx">name</span><span class="o">:</span> <span class="nb">String</span><span class="o">&gt;:</span> <span class="o">&lt;</span><span class="nx">param</span> <span class="nx">value</span><span class="o">&gt;</span><span class="p">,</span>
+      <span class="p">...</span>
+    <span class="p">},</span>
+    <span class="p">...</span>
+  <span class="p">},</span>
+  <span class="s2">&quot;aliases&quot;</span><span class="o">:</span> <span class="p">{</span>
+    <span class="o">&lt;</span><span class="nx">uid</span><span class="o">:</span> <span class="nb">String</span><span class="o">&gt;:</span> <span class="o">&lt;</span><span class="nx">alias</span><span class="o">:</span> <span class="nb">String</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="p">...</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Each Smart Device UID is formatted as an integer.
+To reduce the message’s size, parameters that have not changed since the last update may not be sent.
+All device UIDs will always be sent.</p>
+<p>Each device UID may have an alias, an alternative human-readable name.</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="buffers">
+<h2>Buffers<a class="headerlink" href="#buffers" title="Permalink to this headline">¶</a></h2>
+<p>Buffers backed by shared memory store and communicate peripheral data between processes.
+In this context, peripherals include not only <a class="reference external" href="smart-devices.html">Smart Devices</a> (SDs), but also gamepads, commodity sensors like cameras, and even queues of messages sent by other robots.
+Each peripheral is allocated a buffer, a shared memory object under <code class="docutils literal notranslate"><span class="pre">/dev/shm</span></code> on Linux, formatted as a <a class="reference external" href="https://docs.python.org/3/library/ctypes.html">C-style structure</a>.</p>
+<p>Every peripheral has an owner: the process responsible for communicating with the peripheral.
+For example, the <code class="docutils literal notranslate"><span class="pre">device</span></code> is the owner of SDs and <code class="docutils literal notranslate"><span class="pre">server</span></code> is the owner of gamepads.
+Consumers are processes that open views of the buffer.</p>
+<p>Buffers do not explicitly notify consumers when an update occurs, as a condition variable can do.
+Instead, consumers should either access the buffer on-demand (as student code does) or poll the buffer at a fixed interval.
+Batching updates in this way is less noisy.</p>
+<section id="catalog">
+<h3>Catalog<a class="headerlink" href="#catalog" title="Permalink to this headline">¶</a></h3>
+<p>The peripheral catalog is a YAML config file detailing all available peripherals and their parameters.
+Some peripherals are Smart Devices with special catalog fields.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="s">&quot;&lt;peripheral-name&gt;&quot;</span><span class="p p-Indicator">:</span>
+  <span class="c1"># Provided if this peripheral is a Smart Device.</span>
+  <span class="nt">device_id</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">&lt;int&gt;</span>
+  <span class="c1"># The delay (in ms) between subscription updates. Omit for no subscription.</span>
+  <span class="c1"># Ignored for non-Smart Device peripherals.</span>
+  <span class="nt">delay</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">&lt;float&gt;</span>
+  <span class="nt">params</span><span class="p">:</span>
+    <span class="p p-Indicator">-</span> <span class="c1"># Required (any legal Python identifier)</span>
+      <span class="nt">name</span><span class="p">:</span> <span class="s">&quot;&lt;name&gt;&quot;</span>
+      <span class="c1"># Type name (legal types are suffixes to ``ctypes.c_*``). You may</span>
+      <span class="c1"># specify a length-n array by adding &quot;[n]&quot; as a suffix.</span>
+      <span class="nt">type</span><span class="p">:</span> <span class="s">&quot;&lt;type&gt;&quot;</span>
+      <span class="c1"># Minimum and maximum limits used for validation. Defaults to -inf to</span>
+      <span class="c1"># inf. If the validation check fails, the value is clamped within the</span>
+      <span class="c1"># range and a warning is emitted. Ignored for non-numeric parameters.</span>
+      <span class="nt">lower</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">&lt;real&gt;</span>
+      <span class="nt">upper</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">&lt;real&gt;</span>
+      <span class="c1"># Whether the parameter is readable or writeable by student code, which</span>
+      <span class="c1"># emits a warning if the access constraint is violated.</span>
+      <span class="nt">readable</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">&lt;bool&gt;</span>
+      <span class="nt">writeable</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">&lt;bool&gt;</span>
+      <span class="c1"># Whether this parameter should be subscribed to. Ignored for non-Smart</span>
+      <span class="c1"># Device peripherals.</span>
+      <span class="nt">subscribed</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">&lt;bool&gt;</span>
+    <span class="l l-Scalar l-Scalar-Plain">...</span>
+<span class="nn">...</span>
+</pre></div>
+</div>
+<p>SDs may have up to 16 parameters, per the specification.
+Non-SD peripherals have no such restriction.</p>
+</section>
+<section id="format">
+<h3>Format<a class="headerlink" href="#format" title="Permalink to this headline">¶</a></h3>
+<div class="figure" id="id1" style="text-align: center"><p><img  src="_images/tikz-56d96d1b4ba0609fd785e20a218db11b5d5098a4.svg" alt="Figure made with TikZ" /></p>
+<p><span class="caption-text">Buffer Format</span></p>
+</div><p>As shown, each buffer consists of up to three substructures: a read block, write block, and possibly a device control block.
+The actual sizes of these blocks may vary, depending on how <code class="docutils literal notranslate"><span class="pre">ctypes</span></code> chooses to align each structure’s fields.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">pthread</span></code> <a class="reference external" href="https://man7.org/linux/man-pages/man3/pthread_mutex_lock.3p.html">mutex</a> protects access to the entire buffer.
+A RW lock is not useful since most <a class="reference external" href="#operations">buffer operations</a> involves both reading and writing.
+The valid bit indicates whether this buffer is active (see notes on the <a class="reference external" href="#lifecycle">buffer lifecycle</a> for details).</p>
+<p>The read and write blocks are where student code reads from and writes into, respectively.
+Read block parameters are currently sensed values while write block parameters are desired values.
+The read block contains a parameter iff that parameter is readable, according to the catalog.
+(Likewise for writeable parameters in the write block.)
+The <code class="docutils literal notranslate"><span class="pre">Timestamp</span></code> field is a double representing the seconds since the epoch, possibly fractional, when any parameter in that block was last written to.</p>
+<p>The device control block contains special SD-only fields.
+The <code class="docutils literal notranslate"><span class="pre">device</span></code> process polls each SD’s buffer at a fixed frequency and may send messages to the SD on each cycle.</p>
+<table class="compact-table docutils align-center" id="id2">
+<caption><span class="caption-text">Device Control Block Fields</span><a class="headerlink" href="#id2" title="Permalink to this table">¶</a></caption>
+<colgroup>
+<col style="width: 31%" />
+<col style="width: 69%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">UID</span></code></p></td>
+<td rowspan="3"><p>Describes the current state of the SD
+subscription.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Subscription</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Delay</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Read</span></code></p></td>
+<td><p>A bitmap identifying parameters the
+<code class="docutils literal notranslate"><span class="pre">device</span></code> process should read on the
+next cycle. If at least one bit is
+set, <code class="docutils literal notranslate"><span class="pre">device</span></code> emits a <code class="docutils literal notranslate"><span class="pre">DEV_READ</span></code>
+message and clears the bitmap.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Write</span></code></p></td>
+<td><p>Similar to <code class="docutils literal notranslate"><span class="pre">Read</span></code>, but <code class="docutils literal notranslate"><span class="pre">device</span></code>
+emits a <code class="docutils literal notranslate"><span class="pre">DEV_WRITE</span></code> message with
+data copied from the write block.
+Essentially, dirty bits.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Update</span></code></p></td>
+<td><p>A bitmap identifying parameters
+changed since the last SD update.
+The bits are set when a <code class="docutils literal notranslate"><span class="pre">DEV_DATA</span></code>
+message arrives and its parameters are
+copied into the read block. <code class="docutils literal notranslate"><span class="pre">server</span></code>
+should clear the bitmap after it sends
+an update.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="operations">
+<h3>Operations<a class="headerlink" href="#operations" title="Permalink to this headline">¶</a></h3>
+<p>A list of atomic buffer operations are listed in the table below.
+All operations must begin by acquiring the mutex, checking the valid bit and, if the bit is not set, aborting the operation.</p>
+<table class="compact-table docutils align-center" id="id3">
+<caption><span class="caption-text">Buffer Operations</span><a class="headerlink" href="#id3" title="Permalink to this table">¶</a></caption>
+<colgroup>
+<col style="width: 8%" />
+<col style="width: 92%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">get_value</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">executor</span></code> gets the value of a single parameter in the read block.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">set_value</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">executor</span></code> sets the value of a single parameter in the write block, sets the corresponding bit in the <code class="docutils literal notranslate"><span class="pre">Write</span></code> bitmap, and updates the write block’s <code class="docutils literal notranslate"><span class="pre">Timestamp</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">get_read</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code> retrieves, then clears, the <code class="docutils literal notranslate"><span class="pre">Read</span></code> bitmap.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">set_read</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code> sets the <code class="docutils literal notranslate"><span class="pre">Read</span></code> bitmap.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">get_write</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code> retrieves the <code class="docutils literal notranslate"><span class="pre">Write</span></code> bitmap and the corresponding values in the write block, then clears the bitmap.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">get_update</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">server</span></code> retrieves the <code class="docutils literal notranslate"><span class="pre">Update</span></code> bitmap and the corresponding values in the read block, then clears the bitmap.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">set_data</span></code></p></td>
+<td><p>The peripheral owner updates parameters in the read block, sets the corresponding bits in the <code class="docutils literal notranslate"><span class="pre">Update</span></code> block, and updates the read block’s <code class="docutils literal notranslate"><span class="pre">Timestamp</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">set_valid</span></code></p></td>
+<td><p>The peripheral owner sets the valid bit.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">set_sub</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">device</span></code> sets the subscription state in the device control block.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="lifecycle">
+<h3>Lifecycle<a class="headerlink" href="#lifecycle" title="Permalink to this headline">¶</a></h3>
+<p>Allocating and freeing shared memory is difficult because all consumers must coordinate to achieve consensus.
+Otherwise, Runtime risks accessing invalid memory or trying to close a buffer that still has outstanding references.</p>
+<p>From the Python <a class="reference external" href="https://docs.python.org/3/library/multiprocessing.shared_memory.html#multiprocessing.shared_memory.SharedMemory.unlink">documentation</a>:</p>
+<blockquote>
+<div><p>Requests that the underlying shared memory block be destroyed.
+In order to ensure proper cleanup of resources, <code class="docutils literal notranslate"><span class="pre">unlink()</span></code> should be called once (and only once) across all processes which have need for the shared memory block.
+After requesting its destruction, a shared memory block may or may not be immediately destroyed and this behavior may differ across platforms.
+Attempts to access data inside the shared memory block after <code class="docutils literal notranslate"><span class="pre">unlink()</span></code> has been called may result in memory access errors.
+Note: the last process relinquishing its hold on a shared memory block may call <code class="docutils literal notranslate"><span class="pre">unlink()</span></code> and <code class="docutils literal notranslate"><span class="pre">close()</span></code> in either order.</p>
+</div></blockquote>
+<p>Runtime takes a lazy approach to shared memory management, meaning consumers do not use a background task to proactively open or close views of shared memory.</p>
+<p>When a peripheral connects for the first time, the peripheral owner creates the shared memory block and sets the buffer’s valid bit.
+Subsequent disconnects and reconnects involve toggling the valid bit, but the underlying buffer remains valid memory.
+In fact, Runtime delays closing shared memory blocks until it exits because delayed cleanup eliminates the need for out-of-band acknowledgements from consumers that they have closed their views of a block about to be unlinked.
+Blocks are allocated on a per-device basis, and there is a bounded number of devices, so running out of shared memory is highly unlikely.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Delayed cleanup also avoids data races when a connection is transient (<em>i.e.</em>, a device rapidly disconnects, then reconnects).
+Poor contact in a loose USB port can cause a transient connection, especially if the robot is colliding with other objects.</p>
+</div>
+<p>Consumers may acquire a list of available buffers from the children of <code class="docutils literal notranslate"><span class="pre">/dev/shm</span></code>.
+Invalid blocks should be treated as if the shared memory does not exist on the filesystem.
+A consumer should never die while holding a buffer’s mutex if the consumer uses Python’s context manager pattern to run an exit handler releasing the mutex.
+<code class="docutils literal notranslate"><span class="pre">pthread</span></code> also has a <a class="reference external" href="https://man7.org/linux/man-pages/man3/pthread_mutexattr_setrobust.3.html">robust mutex</a> option to deal with a dead owner.</p>
+<p>Rejected alternative implementations that proactively clean up shared memory:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">server</span></code> is the sole owner of all shared memory blocks.
+Consumers poll <code class="docutils literal notranslate"><span class="pre">server</span></code> for a list of active blocks and request allocation/deallocation.
+This design is quite noisy and <code class="docutils literal notranslate"><span class="pre">server</span></code> must guess when there are no more outstanding views of a shared memory block before it unlinks the block.</p></li>
+<li><p>Add a reference count to every block and unlink the block when the number of views reaches zero.
+A service can die suddenly and leave the reference count too high.
+This design also suffers from the aforementioned transient connection issue.</p></li>
+<li><p>Use a special shared memory block as a <em>directory</em> of all active blocks, their open/close states, and reference counts.
+This introduces more shared state with a bad single point of failure.</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">inotify</span></code> to alert consumers when a new buffer is available or unavailable.
+When the peripheral disconnects, the peripheral owner unlinks the shared memory immediately, which triggers <code class="docutils literal notranslate"><span class="pre">inotify</span></code> to prompt consumers to close their views.</p>
+<p>Although this is an elegant event-driven solution, it relies on the <code class="docutils literal notranslate"><span class="pre">multiprocessing.shared_memory</span></code> module’s handling of what it calls “memory access errors”.
+It’s unclear whether these errors entail exceptions or segfaults; the latter would be very bad.
+<a class="reference external" href="https://man7.org/linux/man-pages/man3/shm_unlink.3.html">POSIX shared memory</a>, which Python’s <code class="docutils literal notranslate"><span class="pre">multiprocessing.shared_memory</span></code> module wraps, allows <code class="docutils literal notranslate"><span class="pre">unlink()</span></code> to precede all <code class="docutils literal notranslate"><span class="pre">close()</span></code> calls.
+The block remains usable, but invisible on the filesystem, after <code class="docutils literal notranslate"><span class="pre">unlink()</span></code>.
+In any case, relying on platform-specific behavior and an API like <code class="docutils literal notranslate"><span class="pre">inotify</span></code> is not portable.</p>
+</li>
+</ul>
+</section>
+</section>
+</section>
+
+
+          </div>
+          <div class="page-nav">
+            <div class="inner"><ul class="page-nav">
+  <li class="prev">
+    <a href="architecture.html"
+       title="previous chapter">← Architecture</a>
+  </li>
+  <li class="next">
+    <a href="smart-devices.html"
+       title="next chapter">Smart Devices →</a>
+  </li>
+</ul><div class="footer" role="contentinfo">
+      &#169; Copyright 2021, Pioneers in Engineering.
+    <br>
+    Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.2.0 with <a href="https://github.com/schettino72/sphinx_press_theme">Press Theme</a> 0.8.0.
+</div>
+            </div>
+          </div>
+      </page>
+    </div></div>
+    
+    
+  </body>
+</html>
